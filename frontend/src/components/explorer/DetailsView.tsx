@@ -1,27 +1,153 @@
-import { AlertTriangle, FolderOpen, Link2 } from 'lucide-react'
-import type { FileItem } from '@/types/file'
+import { useVirtualizer } from '@tanstack/react-virtual'
+import { AlertTriangle, ArrowDown, ArrowUp, FolderOpen, Link2 } from 'lucide-react'
+import { memo, useCallback, useRef } from 'react'
 import { FileIcon } from '@/components/common/FileIcon'
-import { formatDate, formatSize } from '@/utils/format'
+import { useListKeyboard } from '@/hooks/useListKeyboard'
+import { useMarqueeSelection } from '@/hooks/useMarqueeSelection'
+import { useSelection } from '@/hooks/useSelection'
+import type { SortKey, SortSpec } from '@/services/filesystem/sort'
+import type { FileItem } from '@/types/file'
 import { typeLabel } from '@/utils/fileCategory'
+import { formatDate, formatSize } from '@/utils/format'
+import type { Rect } from '@/utils/selection'
 
 /**
- * Details view — the mockup's `.detail-header` / `.detail-row` layout.
- *
- * M1 renders the full listing directly. Virtualization arrives in M4 alongside
- * the other three view modes; single-selection here is a placeholder for the
- * real multi-selection model.
+ * Details view — the mockup's `.detail-header` / `.detail-row` layout, now
+ * virtualized and with sortable columns.
  */
 
+const ROW_HEIGHT = 34
+const HEADER_HEIGHT = 28
 const COLUMNS = 'grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]'
 
+const HEADERS: { key: SortKey; label: string }[] = [
+  { key: 'name', label: 'Name' },
+  { key: 'size', label: 'Size' },
+  { key: 'type', label: 'Type' },
+  { key: 'modified', label: 'Modified' },
+]
+
 interface DetailsViewProps {
+  paneId: string
   items: FileItem[]
-  selected: ReadonlySet<string>
-  onSelect: (item: FileItem) => void
+  sort: SortSpec
+  onSortChange: (sort: SortSpec) => void
   onActivate: (item: FileItem) => void
+  onFocus: () => void
 }
 
-export function DetailsView({ items, selected, onSelect, onActivate }: DetailsViewProps) {
+/** Memoised so scrolling re-renders only rows entering the window. */
+const Row = memo(function Row({
+  item,
+  selected,
+  onSelect,
+  onActivate,
+}: {
+  item: FileItem
+  selected: boolean
+  onSelect: (item: FileItem, event: React.MouseEvent) => void
+  onActivate: (item: FileItem) => void
+}) {
+  return (
+    <div
+      role="row"
+      data-file-row
+      aria-selected={selected}
+      onMouseDown={(event) => onSelect(item, event)}
+      onDoubleClick={() => onActivate(item)}
+      className={`grid ${COLUMNS} hover:bg-hover h-full cursor-default items-center border-b border-[var(--border-subtle)] px-3 text-[13px] ${
+        selected ? 'bg-[var(--accent-glow)]' : ''
+      }`}
+    >
+      <div role="gridcell" className="flex min-w-0 items-center gap-2">
+        <FileIcon category={item.category} />
+        <span className={`truncate ${item.broken ? 'text-muted italic' : ''}`}>{item.name}</span>
+        {item.symlink && <Link2 size={12} className="text-muted shrink-0" aria-label="Alias" />}
+        {item.broken && (
+          <AlertTriangle
+            size={12}
+            className="shrink-0 text-[var(--danger)]"
+            aria-label="Unavailable"
+          />
+        )}
+      </div>
+      <span role="gridcell" className="text-secondary truncate text-xs">
+        {item.isDirectory ? '—' : formatSize(item.size)}
+      </span>
+      <span role="gridcell" className="text-secondary truncate text-xs">
+        {typeLabel(item.extension, item.isDirectory)}
+      </span>
+      <span role="gridcell" className="text-secondary truncate text-xs">
+        {formatDate(item.modifiedAt)}
+      </span>
+    </div>
+  )
+})
+
+export function DetailsView({
+  paneId,
+  items,
+  sort,
+  onSortChange,
+  onActivate,
+  onFocus,
+}: DetailsViewProps) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  const { selected, lead, handlePointerSelect, select, extendTo, selectAll, clear, setSelection } =
+    useSelection(paneId, items)
+
+  // React Compiler will not auto-memoize a component using useVirtualizer,
+  // because the hook returns fresh functions each render. That is accounted
+  // for: `Row` is memoised by hand above, which is where the win actually is.
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 8,
+  })
+
+  const handleKeyDown = useListKeyboard({
+    items,
+    lead,
+    onSelect: select,
+    onExtendTo: extendTo,
+    onSelectAll: selectAll,
+    onClear: clear,
+    onActivate,
+    onScrollToIndex: (index) => virtualizer.scrollToIndex(index),
+  })
+
+  // Row geometry is arithmetic, not DOM lookup, so a marquee dragged past the
+  // viewport still selects rows that were never rendered.
+  const getItemRect = useCallback(
+    (index: number): Rect => ({
+      left: 0,
+      right: Number.MAX_SAFE_INTEGER,
+      top: index * ROW_HEIGHT,
+      bottom: (index + 1) * ROW_HEIGHT,
+    }),
+    [],
+  )
+
+  const { onMouseDown, marqueeStyle } = useMarqueeSelection({
+    scrollRef,
+    itemCount: items.length,
+    getItemRect,
+    onSelect: (indices) => {
+      setSelection(indices.map((index) => items[index]?.path ?? '').filter(Boolean))
+    },
+  })
+
+  const toggleSort = (key: SortKey) => {
+    onSortChange(
+      sort.key === key
+        ? { ...sort, direction: sort.direction === 'asc' ? 'desc' : 'asc' }
+        : { ...sort, key, direction: 'asc' },
+    )
+  }
+
   if (items.length === 0) {
     return (
       <div className="text-muted flex h-full flex-col items-center justify-center gap-2">
@@ -32,62 +158,83 @@ export function DetailsView({ items, selected, onSelect, onActivate }: DetailsVi
   }
 
   return (
-    <div role="grid" aria-label="Folder contents">
+    <div className="flex h-full flex-col">
       <div
         role="row"
-        className={`grid ${COLUMNS} border-edge bg-surface text-muted sticky top-0 z-10 border-b px-3 py-1.5 text-[11px] font-semibold tracking-[0.5px] uppercase`}
+        className={`grid ${COLUMNS} border-edge bg-surface text-muted shrink-0 border-b px-3 text-[11px] font-semibold tracking-[0.5px] uppercase`}
+        style={{ height: HEADER_HEIGHT }}
       >
-        <span role="columnheader">Name</span>
-        <span role="columnheader">Size</span>
-        <span role="columnheader">Type</span>
-        <span role="columnheader">Modified</span>
+        {HEADERS.map((header) => {
+          const active = sort.key === header.key
+          return (
+            <button
+              key={header.key}
+              type="button"
+              role="columnheader"
+              aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+              onClick={() => toggleSort(header.key)}
+              className={`hover:text-primary flex items-center gap-1 text-left transition-colors ${
+                active ? 'text-accent' : ''
+              }`}
+            >
+              <span>{header.label}</span>
+              {active &&
+                (sort.direction === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />)}
+            </button>
+          )
+        })}
       </div>
 
-      {items.map((item) => {
-        const isSelected = selected.has(item.path)
-        return (
-          <div
-            key={item.id}
-            role="row"
-            aria-selected={isSelected}
-            tabIndex={0}
-            onClick={() => onSelect(item)}
-            onDoubleClick={() => onActivate(item)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') onActivate(item)
-            }}
-            className={`grid ${COLUMNS} hover:bg-hover cursor-default items-center border-b border-[var(--border-subtle)] px-3 py-2 text-[13px] transition-colors ${
-              isSelected ? 'bg-[var(--accent-glow)]' : ''
-            }`}
-          >
-            <div role="gridcell" className="flex min-w-0 items-center gap-2">
-              <FileIcon category={item.category} />
-              <span className={`truncate ${item.broken ? 'text-muted italic' : ''}`}>
-                {item.name}
-              </span>
-              {item.symlink && (
-                <Link2 size={12} className="text-muted shrink-0" aria-label="Alias" />
-              )}
-              {item.broken && (
-                <AlertTriangle
-                  size={12}
-                  className="shrink-0 text-[var(--danger)]"
-                  aria-label="Unavailable"
+      <div
+        ref={scrollRef}
+        role="grid"
+        aria-label="Folder contents"
+        aria-multiselectable
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        onMouseDown={(event) => {
+          onFocus()
+          onMouseDown(event)
+          // A click on empty space clears, matching Finder.
+          if (!(event.target as HTMLElement).closest('[data-file-row]')) clear()
+        }}
+        className="relative flex-1 overflow-auto outline-none"
+      >
+        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+          {virtualizer.getVirtualItems().map((virtualRow) => {
+            const item = items[virtualRow.index]
+            if (!item) return null
+            return (
+              <div
+                key={item.id}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: virtualRow.size,
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+              >
+                <Row
+                  item={item}
+                  selected={selected.has(item.path)}
+                  onSelect={handlePointerSelect}
+                  onActivate={onActivate}
                 />
-              )}
-            </div>
-            <span role="gridcell" className="text-secondary truncate text-xs">
-              {item.isDirectory ? '—' : formatSize(item.size)}
-            </span>
-            <span role="gridcell" className="text-secondary truncate text-xs">
-              {typeLabel(item.extension, item.isDirectory)}
-            </span>
-            <span role="gridcell" className="text-secondary truncate text-xs">
-              {formatDate(item.modifiedAt)}
-            </span>
-          </div>
-        )
-      })}
+              </div>
+            )
+          })}
+        </div>
+
+        {marqueeStyle && (
+          <div
+            data-testid="marquee"
+            className="pointer-events-none absolute border border-[var(--accent)] bg-[var(--accent-glow)]"
+            style={{ position: 'absolute', ...marqueeStyle }}
+          />
+        )}
+      </div>
     </div>
   )
 }

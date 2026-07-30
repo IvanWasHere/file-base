@@ -28,7 +28,9 @@ export function StatusBar({
     <div className="bg-surface border-edge text-muted flex h-7 shrink-0 items-center justify-between border-t px-3.5 text-[11px]">
       <div className="flex gap-4">
         <span>{formatCount(itemCount, 'item')}</span>
-        {selectedCount > 0 && <span>{selectedCount} selected</span>}
+        {/* The single announcement point for selection changes — keyboard and
+            marquee selection are otherwise silent to screen readers. */}
+        <span aria-live="polite">{selectedCount > 0 ? `${selectedCount} selected` : ''}</span>
         <span>Total: {formatSize(totalBytes)}</span>
       </div>
       <div className="flex items-center gap-4">

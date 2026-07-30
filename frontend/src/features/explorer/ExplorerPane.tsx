@@ -26,10 +26,10 @@ interface ExplorerPaneProps {
 
 export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: ExplorerPaneProps) {
   const navigate = useWorkspaceStore((state) => state.navigate)
+  const setSort = useWorkspaceStore((state) => state.setSort)
   const showHiddenFiles = useUiStore((state) => state.showHiddenFiles)
   const setPreviewOpen = useUiStore((state) => state.setPreviewOpen)
   const previewOpen = useUiStore((state) => state.previewOpen)
-  const select = useSelectionStore((state) => state.select)
   const clearSelection = useSelectionStore((state) => state.clear)
   const { selected } = usePaneSelection(pane.id)
 
@@ -46,12 +46,12 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
     clearSelection(pane.id)
   }, [pane.path, pane.id, clearSelection])
 
-  const handleSelect = (item: FileItem) => {
-    onFocus()
-    select(pane.id, item.path)
-    // Matches the mockup: selecting reveals the preview if it was closed.
-    if (!previewOpen) setPreviewOpen(true)
-  }
+  // Selecting reveals the preview if it was closed, as in the mockup. Driven by
+  // the selection itself rather than the click handler, so keyboard and marquee
+  // selection behave the same as a click.
+  useEffect(() => {
+    if (selected.size > 0 && !previewOpen) setPreviewOpen(true)
+  }, [selected.size, previewOpen, setPreviewOpen])
 
   const handleActivate = (item: FileItem) => {
     if (item.broken) return
@@ -94,7 +94,7 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
       </div>
 
       <div
-        className="flex-1 overflow-auto"
+        className="min-h-0 flex-1"
         style={{
           backgroundImage: 'radial-gradient(circle at 1px 1px, var(--grid-dot) 1px, transparent 0)',
           backgroundSize: '24px 24px',
@@ -109,18 +109,20 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
           <DirectoryError error={error} onRetry={refetch} />
         ) : pane.viewMode === 'details' ? (
           <DetailsView
+            paneId={pane.id}
             items={items}
-            selected={selected}
-            onSelect={handleSelect}
+            sort={pane.sort}
+            onSortChange={(sort) => setSort(pane.id, sort)}
             onActivate={handleActivate}
+            onFocus={onFocus}
           />
         ) : (
           <IconsView
+            paneId={pane.id}
             mode={pane.viewMode}
             items={items}
-            selected={selected}
-            onSelect={handleSelect}
             onActivate={handleActivate}
+            onFocus={onFocus}
           />
         )}
       </div>

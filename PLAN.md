@@ -196,8 +196,19 @@ Notes from the build:
 - **Toolbar carries only working controls.** New Folder (M6), Search (M8) and Settings arrive with their milestones — a toolbar of dead buttons is worse than a short one.
 - **Known browser-automation quirk (not an app bug):** the first click after a page load is swallowed by the dev server tab until it takes focus. Only affects driving the app in a browser.
 
-### M4 — Views, sorting, selection
-All four view modes; `@tanstack/react-virtual` for lists and grids; sorting (name/date/size/type, asc/desc, folders-first); selection: click, Cmd-click, Shift-range, Cmd+A, marquee drag, Escape; arrow/Home/End/type-ahead keyboard navigation; memoized rows.
+### M4 — Views, sorting, selection ✅ complete
+Virtualization via `@tanstack/react-virtual` in all four views; sortable column headers (name/size/type/modified, asc/desc, folders-first); full selection model — click, Cmd-click, Shift-range, Cmd+A, marquee drag, Escape; arrow/Home/End/type-ahead keyboard navigation; memoized rows and tiles.
+
+(The four view *layouts* shipped early, in M2/M3 — see above.)
+
+Notes from the build:
+
+- **Marquee selection uses geometry, not DOM rects.** With virtualization, dragging past the bottom of the viewport must select rows that were never rendered; asking the DOM would silently miss them. `getItemRect(index)` computes position arithmetically instead.
+- **Selection logic lives in one place.** `useSelection` maps modifier keys to actions and `useListKeyboard` handles navigation, both shared by the list and the grids, so the two cannot drift. The range/step/type-ahead maths sits in `utils/selection.ts` as pure functions with direct unit tests.
+- **Grids compute their own column count.** The mockup used CSS `auto-fill minmax()` and let the browser decide; virtualization needs the number up front, so a `ResizeObserver` measures the pane (not the window — a split divider changes pane width without the window changing).
+- **jsdom needed stubbing for virtualization** (`src/test/setup.ts`): jsdom reports every element as 0×0 and has no `ResizeObserver`, so the virtualizer would render zero rows and every view test would fail for reasons unrelated to the app.
+- **`aria-live` for selection moved to the status bar** — it had been duplicated in an off-screen region, so the count was announced twice.
+- **Verified in the running app:** 26 rows mounted for a 50-item directory, the window moving correctly on scroll (`translateY(510→1666)` at `scrollTop` 800), and `End` scrolling to and selecting the last item.
 
 ### M5 — SQLite
 `backend/db` with **`modernc.org/sqlite`** (pure Go, no cgo). Migration runner, repositories, then wire up: favorites, recents, per-folder view prefs, settings, and session restore of tabs + splits.
