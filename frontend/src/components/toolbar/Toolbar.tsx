@@ -8,6 +8,8 @@ import {
   Grid2x2,
   RefreshCw,
   Square,
+  Star,
+  StarOff,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Breadcrumb } from './Breadcrumb'
@@ -20,6 +22,7 @@ import {
   useActiveTab,
   useWorkspaceStore,
 } from '@/stores/workspaceStore'
+import { useFavorites } from '@/hooks/useFavorites'
 import { useUiStore } from '@/stores/uiStore'
 import { fsKeys } from '@/services/filesystem/queries'
 import type { SplitMode } from '@/types/workspace'
@@ -85,6 +88,9 @@ export function Toolbar() {
   const previewOpen = useUiStore((state) => state.previewOpen)
   const togglePreview = useUiStore((state) => state.togglePreview)
 
+  const { isPinned, pin, unpin } = useFavorites()
+  const pinned = pane ? isPinned(pane.path) : false
+
   if (!tab || !pane) return null
 
   return (
@@ -117,6 +123,13 @@ export function Toolbar() {
       />
 
       <Breadcrumb path={pane.path} onNavigate={(path) => navigate(pane.id, path)} />
+
+      <ToolbarButton
+        label={pinned ? 'Remove from Favorites' : 'Add to Favorites'}
+        icon={pinned ? Star : StarOff}
+        active={pinned}
+        onClick={() => (pinned ? unpin(pane.path) : pin(pane.path))}
+      />
 
       <div
         role="group"

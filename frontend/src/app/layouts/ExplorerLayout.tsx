@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { PaneGroup } from '@/features/explorer/PaneGroup'
 import { PreviewPanel } from '@/features/preview/PreviewPanel'
 import { Sidebar } from '@/components/sidebar/Sidebar'
@@ -9,6 +9,7 @@ import { TabBar } from '@/components/toolbar/TabBar'
 import { Toolbar } from '@/components/toolbar/Toolbar'
 import { DirectoryError } from '@/components/common/DirectoryError'
 import { useDirectory } from '@/hooks/useDirectory'
+import { hydrate, startPersistence } from '@/services/db/persistence'
 import { standardPathsQuery } from '@/services/filesystem/queries'
 import { usePaneSelection } from '@/stores/selectionStore'
 import { useUiStore } from '@/stores/uiStore'
@@ -28,11 +29,34 @@ export function ExplorerLayout() {
   const sidebarOpen = useUiStore((state) => state.sidebarOpen)
   const previewOpen = useUiStore((state) => state.previewOpen)
 
+  // Guards against React StrictMode's double-invoke, which would otherwise run
+  // migrations and attach a second set of store subscriptions.
+  const started = useRef(false)
+
   useEffect(() => {
-    if (paths) initialize(paths.home)
+    if (!paths || started.current) return
+    started.current = true
+
+    let stopPersistence: (() => void) | undefined
+
+    void hydrate(paths.home)
+      .catch((error: unknown) => {
+        // A database problem must not stop the user browsing files; they lose
+        // session restore and favorites, not the application.
+        console.warn('[db] hydration failed, continuing without persistence:', error)
+        initialize(paths.home)
+      })
+      .finally(() => {
+        stopPersistence = startPersistence()
+      })
+
+    return () => stopPersistence?.()
   }, [paths, initialize])
 
-  if (isLoading) {
+  // `!tab` covers hydration too: since M5, startup waits on migrations and the
+  // session query, and rendering the chrome around an empty workspace would
+  // flash a toolbar with nothing behind it.
+  if (isLoading || (!tab && !error)) {
     return (
       <div className="text-muted flex h-screen items-center justify-center gap-2 text-[13px]">
         <Loader2 size={16} className="animate-spin" />

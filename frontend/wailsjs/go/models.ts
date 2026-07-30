@@ -1,3 +1,36 @@
+export namespace db {
+	
+	export class ExecResult {
+	    rowsAffected: number;
+	    lastInsertId: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExecResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.rowsAffected = source["rowsAffected"];
+	        this.lastInsertId = source["lastInsertId"];
+	    }
+	}
+	export class Statement {
+	    sql: string;
+	    args: any[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Statement(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sql = source["sql"];
+	        this.args = source["args"];
+	    }
+	}
+
+}
+
 export namespace filesystem {
 	
 	export class FileItem {

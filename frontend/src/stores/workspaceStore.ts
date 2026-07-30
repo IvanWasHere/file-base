@@ -24,6 +24,20 @@ export function __resetIdCounter(): void {
   counter = 0
 }
 
+/**
+ * Moves the counter past every id in a restored session.
+ *
+ * Without this, a relaunch starts counting from 1 again and the next new tab
+ * would collide with a restored one — React keys would clash and the wrong pane
+ * would receive navigation.
+ */
+function adoptIds(ids: string[]): void {
+  for (const id of ids) {
+    const suffix = Number(id.slice(id.lastIndexOf('-') + 1))
+    if (Number.isFinite(suffix) && suffix > counter) counter = suffix
+  }
+}
+
 function createPane(path: string): Pane {
   return {
     id: nextId('pane'),
@@ -47,6 +61,12 @@ interface WorkspaceState {
 
   /** Creates the first tab. Idempotent, so React StrictMode double-invoke is safe. */
   initialize: (homePath: string) => void
+  /** Installs a session restored from SQLite (M5). */
+  restore: (snapshot: {
+    tabs: Tab[]
+    panes: Record<string, Pane>
+    activeTabId: string | null
+  }) => void
 
   openTab: (path: string) => string
   closeTab: (tabId: string) => void
@@ -73,6 +93,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   initialize: (homePath) => {
     if (get().tabs.length > 0) return
     get().openTab(homePath)
+  },
+
+  restore: (snapshot) => {
+    // Advance the counter past restored ids before anything can mint a new one.
+    adoptIds([...Object.keys(snapshot.panes), ...snapshot.tabs.map((tab) => tab.id)])
+    set({
+      tabs: snapshot.tabs,
+      panes: snapshot.panes,
+      activeTabId: snapshot.activeTabId ?? snapshot.tabs[0]?.id ?? null,
+    })
   },
 
   openTab: (path) => {

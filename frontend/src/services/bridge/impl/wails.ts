@@ -20,6 +20,7 @@ import {
   StandardPaths,
 } from '../../../../wailsjs/go/filesystem/FS'
 import { OpenFile, OpenWith, RevealInFinder } from '../../../../wailsjs/go/shell/Shell'
+import { Exec, Query, Tx } from '../../../../wailsjs/go/db/DB'
 
 function notImplemented(method: string, milestone: string): never {
   throw new Error(
@@ -71,9 +72,14 @@ export const bridge: Bridge = {
     message: () => notImplemented('dialogs.message', 'M6'),
   },
   db: {
-    query: () => notImplemented('db.query', 'M5'),
-    exec: () => notImplemented('db.exec', 'M5'),
-    transaction: () => notImplemented('db.transaction', 'M5'),
+    // Go owns the driver; every query, migration and table lives in
+    // services/db on this side of the bridge (PLAN.md §0).
+    query: <T>(sql: string, args: unknown[] = []) => guard(() => Query(sql, args) as Promise<T[]>),
+    exec: (sql, args = []) => guard(() => Exec(sql, args)),
+    transaction: (statements) =>
+      guard(() =>
+        Tx(statements.map((statement) => ({ sql: statement.sql, args: statement.args }))),
+      ),
   },
   thumbs: {
     generate: () => notImplemented('thumbs.generate', 'M10'),

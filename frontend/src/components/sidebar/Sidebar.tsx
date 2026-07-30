@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import {
   Clapperboard,
+  Clock,
   Download,
   FileText,
   HardDrive,
@@ -9,13 +10,16 @@ import {
   LayoutGrid,
   Monitor,
   Music,
+  Star,
   Trash2,
   type LucideIcon,
 } from 'lucide-react'
+import { useFavorites, useRecents } from '@/hooks/useFavorites'
 import { standardPathsQuery, volumesQuery } from '@/services/filesystem/queries'
 import { useActivePane, useActiveTab, useWorkspaceStore } from '@/stores/workspaceStore'
 import type { StandardPaths } from '@/types/file'
 import { formatSize } from '@/utils/format'
+import { basename } from '@/utils/path'
 
 /**
  * The mockup's `.sidebar`, ported — Quick Access, Drives, and the storage
@@ -97,6 +101,8 @@ export function Sidebar() {
 
   const { data: paths } = useQuery(standardPathsQuery())
   const { data: volumes = [] } = useQuery(volumesQuery())
+  const { favorites } = useFavorites()
+  const { recents } = useRecents()
 
   const go = (path: string) => {
     if (pane) navigate(pane.id, path)
@@ -129,6 +135,37 @@ export function Sidebar() {
             />
           ))}
       </div>
+
+      {favorites.length > 0 && (
+        <div className="px-3">
+          <SectionTitle>Favorites</SectionTitle>
+          {favorites.map((favorite) => (
+            <SidebarItem
+              key={favorite.path}
+              label={favorite.label}
+              icon={Star}
+              colorVar="var(--accent)"
+              active={isActive(favorite.path)}
+              onClick={() => go(favorite.path)}
+            />
+          ))}
+        </div>
+      )}
+
+      {recents.length > 0 && (
+        <div className="px-3">
+          <SectionTitle>Recent</SectionTitle>
+          {recents.map((recent) => (
+            <SidebarItem
+              key={recent.path}
+              label={basename(recent.path)}
+              icon={Clock}
+              active={isActive(recent.path)}
+              onClick={() => go(recent.path)}
+            />
+          ))}
+        </div>
+      )}
 
       {volumes.length > 0 && (
         <div className="px-3">

@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
 import { afterEach, beforeEach } from 'vitest'
+import { resetMockDatabase } from '@/services/bridge/impl/mockDb'
+import { __resetFolderPrefsCache } from '@/services/db/persistence'
 
 /**
  * jsdom reports every element as 0×0 and has no ResizeObserver. Virtualized
@@ -37,6 +39,11 @@ class ResizeObserverStub implements ResizeObserver {
 }
 
 beforeEach(() => {
+  // The mock SQLite database is module-level state, so without this a session
+  // saved by one test would be restored by the next.
+  resetMockDatabase()
+  __resetFolderPrefsCache()
+
   globalThis.ResizeObserver = ResizeObserverStub
 
   Element.prototype.getBoundingClientRect = function getBoundingClientRect(this: Element): DOMRect {

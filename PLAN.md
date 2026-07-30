@@ -210,9 +210,22 @@ Notes from the build:
 - **`aria-live` for selection moved to the status bar** — it had been duplicated in an off-screen region, so the count was announced twice.
 - **Verified in the running app:** 26 rows mounted for a 50-item directory, the window moving correctly on scroll (`translateY(510→1666)` at `scrollTop` 800), and `End` scrolling to and selecting the last item.
 
-### M5 — SQLite
-`backend/db` with **`modernc.org/sqlite`** (pure Go, no cgo). Migration runner, repositories, then wire up: favorites, recents, per-folder view prefs, settings, and session restore of tabs + splits.
-⚠️ First task: verify FTS5 is available in the modernc build. Fallback is `mattn/go-sqlite3` with the `sqlite_fts5` tag (adds cgo), or a LIKE-based index.
+### M5 — SQLite ✅ complete
+`backend/db` with **`modernc.org/sqlite`** (pure Go, no cgo). Migration runner, repositories, and wiring for favorites, recents, per-folder view prefs, settings, and session restore of tabs + splits.
+
+**✅ FTS5 risk cleared.** modernc.org/sqlite v1.55.0 ships SQLite 3.53.3 with FTS5 working under `CGO_ENABLED=0`, prefix queries included. No cgo, no fallback driver needed. Pinned by `TestFTS5IsAvailable` so a dependency bump cannot silently remove it.
+
+Notes from the build:
+
+- **Go exposes only `Query` / `Exec` / `Tx`.** Every table, migration and query is TypeScript. Connection lifecycle (`Open`/`Close`) is package-level *functions* rather than methods, because Wails binds every exported method — as methods they would have become frontend-callable API.
+- **Integral floats are converted back to integers at the bridge.** Every JS number crosses as `float64`; binding one to an INTEGER column as a REAL silently breaks equality lookups and primary-key matches. Pinned by a test.
+- **The FTS5 table is deliberately *not* in migration 001.** It belongs to M8's search index; creating schema for a feature that does not exist yet only invites drift.
+- **Session state is stored as JSON, not normalised.** It is opaque state restored wholesale and never queried by field, so normalising would buy nothing and would couple the schema to the workspace store's shape. It is validated hard on read — a malformed snapshot returns null and the app opens a fresh tab rather than failing to start.
+- **Restored ids advance the id counter** (`adoptIds`). Without it a relaunch starts counting from 1 again and the next new tab collides with a restored one.
+- **Tests run against real SQL.** The mock bridge uses sql.js, so migrations and repositories are exercised by an actual engine rather than a fake that would accept invalid SQL. Caveat: stock sql.js has no FTS5, so M8's index is covered by Go tests instead — which is where it has to work anyway.
+- **Vitest can no longer reach the Wails bindings by accident.** Running `vitest` without `VITE_BRIDGE=mock` used to fail deep inside generated code with an unhelpful error; the config now forces the mock whenever `VITEST` is set.
+- **Verified against a real database:** WAL mode, all 9 tables, `user_version: 1`; pinning a folder, changing its view mode, then reloading restored the favorite, the recents list, the open preview panel, and — on returning to that folder — its Medium Icons view.
+- **Dev-only artifact:** `wails dev` opens a native window *and* serves the browser dev server against one backend, so two frontends contend over the single session row. Production has one window.
 
 ### M6 — File operations
 Create folder/file, rename (inline edit), duplicate, copy/cut/paste, move, trash, permanent delete; conflict detection and resolution computed in TS (`keep both` / `replace` / `skip`); optimistic updates with rollback on failure; undo stack; progress reporting for long operations; toast-based error surfacing.

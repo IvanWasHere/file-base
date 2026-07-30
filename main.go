@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"embed"
 
+	"file-base/backend/db"
 	"file-base/backend/filesystem"
 	"file-base/backend/shell"
 
@@ -17,6 +19,8 @@ var assets embed.FS
 
 func main() {
 	app := NewApp()
+	database := db.New()
+	defer func() { _ = db.Close(database) }()
 
 	err := wails.Run(&options.App{
 		Title:     "Files",
@@ -53,14 +57,23 @@ func main() {
 			},
 		},
 
-		OnStartup: app.startup,
+		OnStartup: func(ctx context.Context) {
+			app.startup(ctx)
+			// Opening eagerly surfaces a bad database file in the log at launch
+			// rather than on the first query. Failure is not fatal: the explorer
+			// still browses, it just loses favorites and session restore.
+			if err := db.Open(database); err != nil {
+				println("database unavailable:", err.Error())
+			}
+		},
 		// Each package binds separately so the generated TypeScript bindings stay
-		// namespaced (wailsjs/go/filesystem/FS, wailsjs/go/shell/Shell).
-		// dialogs binds in M6, db in M5, watcher in M7, thumbs in M10.
+		// namespaced (wailsjs/go/filesystem/FS, wailsjs/go/db/DB).
+		// dialogs binds in M6, watcher in M7, thumbs in M10.
 		Bind: []interface{}{
 			app,
 			filesystem.New(),
 			shell.New(),
+			database,
 		},
 	})
 

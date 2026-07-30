@@ -7,7 +7,12 @@ const src = fileURLToPath(new URL('./src', import.meta.url))
 
 // The bridge alias is the seam described in PLAN.md §1: set VITE_BRIDGE=mock to
 // run the whole UI in a plain browser (tests, Playwright) with no Go process.
-const bridgeImpl = process.env.VITE_BRIDGE === 'mock' ? 'mock' : 'wails'
+//
+// Vitest always gets the mock. Running the suite against the Wails bindings
+// fails deep inside generated code with an unhelpful error, so the test runner
+// is never allowed to reach them by accident.
+const underTest = process.env.VITEST !== undefined
+const bridgeImpl = underTest || process.env.VITE_BRIDGE === 'mock' ? 'mock' : 'wails'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],

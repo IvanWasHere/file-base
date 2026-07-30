@@ -10,6 +10,7 @@
  */
 
 import type { Bridge } from '../types'
+import { mockDb } from './mockDb'
 import type { ConflictPolicy, FileItem, FileSystemEvent, OperationResult } from '@/types/file'
 import { FsError } from '@/types/errors'
 import { categorize } from '@/utils/fileCategory'
@@ -394,12 +395,9 @@ export const bridge: Bridge = {
     save: (_title, defaultName) => Promise.resolve(join(HOME, defaultName ?? 'Untitled')),
     message: (options) => Promise.resolve(options.defaultButton ?? options.buttons[0] ?? 'OK'),
   },
-  db: {
-    // M5 swaps this for sql.js so repository tests run against real SQL.
-    query: () => Promise.reject(new Error('mock db.query is stubbed until M5')),
-    exec: () => Promise.reject(new Error('mock db.exec is stubbed until M5')),
-    transaction: () => Promise.reject(new Error('mock db.transaction is stubbed until M5')),
-  },
+  // Real SQLite (sql.js), so migrations and repositories are exercised against
+  // an actual SQL engine rather than a fake that would accept invalid SQL.
+  db: mockDb,
   thumbs: {
     generate: () => Promise.resolve(new Uint8Array()),
   },
