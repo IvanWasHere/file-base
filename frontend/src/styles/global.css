@@ -41,57 +41,69 @@
   --color-info: var(--info);
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+/*
+ * These MUST stay inside `@layer base`.
+ *
+ * Tailwind emits its utilities into `@layer utilities`, and in the CSS cascade
+ * an unlayered rule beats every layered one regardless of specificity. An
+ * unlayered `* { padding: 0; margin: 0 }` therefore silently cancels every
+ * `p-*`, `px-*` and `m-*` utility in the application — the rules still load,
+ * they just never win. Keeping the reset in `base` puts it before `utilities`
+ * in the layer order, so utilities apply as intended.
+ */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-html,
-body,
-#root {
-  height: 100vh;
-}
+  html,
+  body,
+  #root {
+    height: 100vh;
+  }
 
-body {
-  font-family: var(--font-body);
-  font-size: 13px;
-  background: var(--bg-deep);
-  color: var(--text-primary);
-  overflow: hidden;
-  /* A file manager is a pointer-driven surface: text selection would fight
-     marquee selection and drag. Re-enabled locally on inline rename inputs. */
-  user-select: none;
-  -webkit-font-smoothing: antialiased;
-}
+  body {
+    font-family: var(--font-body);
+    font-size: 13px;
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    overflow: hidden;
+    /* A file manager is a pointer-driven surface: text selection would fight
+       marquee selection and drag. Re-enabled locally on inline rename inputs. */
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+  }
 
-input,
-textarea,
-[contenteditable] {
-  user-select: text;
-  font-family: inherit;
-}
+  input,
+  textarea,
+  [contenteditable] {
+    user-select: text;
+    font-family: inherit;
+  }
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+  }
 
-:focus-visible {
-  outline: 2px solid var(--border-focus);
-  outline-offset: -2px;
+  :focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: -2px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

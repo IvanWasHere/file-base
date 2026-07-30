@@ -5,10 +5,9 @@ import { basename, ROOT } from '@/utils/path'
 /**
  * The mockup's `.tab-bar`, ported.
  *
- * The window uses a hidden-inset title bar, so this strip sits in the title
- * area and needs to clear the traffic lights — hence the left padding. The
- * whole bar is also the window's drag region, with the interactive parts opted
- * back out via `--wails-draggable: no-drag`.
+ * Sits in its own full-width row below the menu bar, so tab titles get the
+ * whole window width instead of sharing the title strip with the traffic
+ * lights — the menu bar above now carries that inset.
  */
 export function TabBar() {
   const tabs = useWorkspaceStore((state) => state.tabs)
@@ -34,8 +33,7 @@ export function TabBar() {
     <div
       role="tablist"
       aria-label="Open tabs"
-      className="bg-deep border-edge flex h-10 shrink-0 items-end gap-0.5 border-b pr-2"
-      style={{ paddingLeft: 78, '--wails-draggable': 'drag' } as React.CSSProperties}
+      className="bg-deep border-edge flex h-9 shrink-0 items-end gap-0.5 border-b px-2"
     >
       {tabs.map((tab) => {
         const active = tab.id === activeTabId
@@ -53,8 +51,7 @@ export function TabBar() {
               }
             }}
             title={labelFor(tab.id)}
-            style={{ '--wails-draggable': 'no-drag' } as React.CSSProperties}
-            className={`group relative top-px flex max-w-[180px] min-w-[80px] cursor-default items-center gap-1.5 rounded-t-lg border border-b-0 px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`group relative top-px flex max-w-[180px] min-w-[80px] cursor-default items-center gap-1.5 border border-b-0 px-3 py-1.5 text-xs font-medium transition-colors ${
               active
                 ? 'border-accent text-accent bg-surface z-10'
                 : 'border-edge bg-surface text-secondary hover:bg-elevated hover:text-primary'
@@ -81,7 +78,6 @@ export function TabBar() {
         type="button"
         aria-label="New tab"
         onClick={() => openTab(activePath)}
-        style={{ '--wails-draggable': 'no-drag' } as React.CSSProperties}
         className="text-muted hover:bg-elevated hover:text-primary mb-1 ml-1 flex size-7 shrink-0 items-center justify-center rounded-md transition-colors"
       >
         <Plus size={14} />

@@ -5,6 +5,7 @@ import { PaneGroup } from '@/features/explorer/PaneGroup'
 import { PreviewPanel } from '@/features/preview/PreviewPanel'
 import { Sidebar } from '@/components/sidebar/Sidebar'
 import { StatusBar } from '@/components/common/StatusBar'
+import { MenuBar } from '@/components/toolbar/MenuBar'
 import { TabBar } from '@/components/toolbar/TabBar'
 import { Toolbar } from '@/components/toolbar/Toolbar'
 import { DirectoryError } from '@/components/common/DirectoryError'
@@ -79,6 +80,7 @@ export function ExplorerLayout() {
 
   return (
     <div className="bg-deep text-primary flex h-screen flex-col">
+      <MenuBar />
       <TabBar />
       <Toolbar />
 

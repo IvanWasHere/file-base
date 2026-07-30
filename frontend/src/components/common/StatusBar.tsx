@@ -25,7 +25,10 @@ export function StatusBar({
   viewMode: ViewMode
 }) {
   return (
-    <div className="bg-surface border-edge text-muted flex h-7 shrink-0 items-center justify-between border-t px-3.5 text-[11px]">
+    <div
+      className="bg-surface border-edge text-muted flex h-7 shrink-0 items-center justify-between border-t text-[11px]"
+      style={{ paddingLeft: 15, paddingRight: 15 }}
+    >
       <div className="flex gap-4">
         <span>{formatCount(itemCount, 'item')}</span>
         {/* The single announcement point for selection changes — keyboard and

@@ -119,9 +119,9 @@ export function Sidebar() {
     // active pane between locations.
     <nav
       aria-label="Places"
-      className="bg-base border-edge flex w-[220px] shrink-0 flex-col gap-2 overflow-y-auto border-r py-3"
+      className="bg-base border-edge flex w-[220px] shrink-0 flex-col gap-2 overflow-y-auto border-r p-[5px]"
     >
-      <div className="px-3">
+      <div>
         <SectionTitle>Quick Access</SectionTitle>
         {paths &&
           FAVORITES.map((favorite) => (
@@ -137,7 +137,7 @@ export function Sidebar() {
       </div>
 
       {favorites.length > 0 && (
-        <div className="px-3">
+        <div>
           <SectionTitle>Favorites</SectionTitle>
           {favorites.map((favorite) => (
             <SidebarItem
@@ -153,7 +153,7 @@ export function Sidebar() {
       )}
 
       {recents.length > 0 && (
-        <div className="px-3">
+        <div>
           <SectionTitle>Recent</SectionTitle>
           {recents.map((recent) => (
             <SidebarItem
@@ -168,7 +168,7 @@ export function Sidebar() {
       )}
 
       {volumes.length > 0 && (
-        <div className="px-3">
+        <div>
           <SectionTitle>Drives</SectionTitle>
           {volumes.map((volume) => (
             <SidebarItem
@@ -184,7 +184,7 @@ export function Sidebar() {
       )}
 
       {volumes.length > 0 && (
-        <div className="border-edge mt-auto px-3 pt-3">
+        <div className="border-edge mt-auto pt-3">
           <SectionTitle>Storage</SectionTitle>
           {volumes
             .filter((volume) => volume.totalBytes > 0)
