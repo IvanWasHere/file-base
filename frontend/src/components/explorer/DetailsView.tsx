@@ -16,12 +16,12 @@ const COLUMNS = 'grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1
 
 interface DetailsViewProps {
   items: FileItem[]
-  selectedPath: string | null
+  selected: ReadonlySet<string>
   onSelect: (item: FileItem) => void
   onActivate: (item: FileItem) => void
 }
 
-export function DetailsView({ items, selectedPath, onSelect, onActivate }: DetailsViewProps) {
+export function DetailsView({ items, selected, onSelect, onActivate }: DetailsViewProps) {
   if (items.length === 0) {
     return (
       <div className="text-muted flex h-full flex-col items-center justify-center gap-2">
@@ -44,12 +44,12 @@ export function DetailsView({ items, selectedPath, onSelect, onActivate }: Detai
       </div>
 
       {items.map((item) => {
-        const selected = item.path === selectedPath
+        const isSelected = selected.has(item.path)
         return (
           <div
             key={item.id}
             role="row"
-            aria-selected={selected}
+            aria-selected={isSelected}
             tabIndex={0}
             onClick={() => onSelect(item)}
             onDoubleClick={() => onActivate(item)}
@@ -57,7 +57,7 @@ export function DetailsView({ items, selectedPath, onSelect, onActivate }: Detai
               if (event.key === 'Enter') onActivate(item)
             }}
             className={`grid ${COLUMNS} hover:bg-hover cursor-default items-center border-b border-[var(--border-subtle)] px-3 py-2 text-[13px] transition-colors ${
-              selected ? 'bg-[var(--accent-glow)]' : ''
+              isSelected ? 'bg-[var(--accent-glow)]' : ''
             }`}
           >
             <div role="gridcell" className="flex min-w-0 items-center gap-2">

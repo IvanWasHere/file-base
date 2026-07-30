@@ -323,6 +323,34 @@ func TestListVolumes(t *testing.T) {
 			t.Errorf("volume %q listed %d times", path, count)
 		}
 	}
+
+	// nobrowse mounts (/System/Volumes/VM, Preboot, …) are machinery, not
+	// places, and must never reach the sidebar.
+	for _, volume := range volumes {
+		if strings.HasPrefix(volume.Path, "/System/Volumes/") {
+			t.Errorf("system volume %q leaked into the listing", volume.Path)
+		}
+	}
+}
+
+func TestStatVolumeFlags(t *testing.T) {
+	stat, err := statVolume("/")
+	if err != nil {
+		t.Fatalf("statVolume(/): %v", err)
+	}
+	if !stat.Browsable {
+		t.Error("boot volume reported as nobrowse")
+	}
+	if stat.Removable {
+		t.Error("boot volume reported as removable")
+	}
+	if stat.Free > stat.Total {
+		t.Errorf("free (%d) exceeds total (%d)", stat.Free, stat.Total)
+	}
+
+	if _, err := statVolume("/nonexistent-mount-point"); err == nil {
+		t.Error("expected an error for a missing mount point")
+	}
 }
 
 func TestMimeTypeFor(t *testing.T) {

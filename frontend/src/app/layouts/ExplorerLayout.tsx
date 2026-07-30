@@ -1,0 +1,122 @@
+import { useQuery } from '@tanstack/react-query'
+import { Loader2 } from 'lucide-react'
+import { useEffect, useMemo } from 'react'
+import { PaneGroup } from '@/features/explorer/PaneGroup'
+import { PreviewPanel } from '@/features/preview/PreviewPanel'
+import { Sidebar } from '@/components/sidebar/Sidebar'
+import { StatusBar } from '@/components/common/StatusBar'
+import { TabBar } from '@/components/toolbar/TabBar'
+import { Toolbar } from '@/components/toolbar/Toolbar'
+import { DirectoryError } from '@/components/common/DirectoryError'
+import { useDirectory } from '@/hooks/useDirectory'
+import { standardPathsQuery } from '@/services/filesystem/queries'
+import { usePaneSelection } from '@/stores/selectionStore'
+import { useUiStore } from '@/stores/uiStore'
+import { useActivePane, useActiveTab, useWorkspaceStore } from '@/stores/workspaceStore'
+import { isFsError } from '@/types/errors'
+
+/**
+ * The full chrome from the mockup: tab bar → toolbar → sidebar / panes /
+ * preview → status bar.
+ */
+export function ExplorerLayout() {
+  const { data: paths, isLoading, error, refetch } = useQuery(standardPathsQuery())
+
+  const initialize = useWorkspaceStore((state) => state.initialize)
+  const tab = useActiveTab()
+  const pane = useActivePane()
+  const sidebarOpen = useUiStore((state) => state.sidebarOpen)
+  const previewOpen = useUiStore((state) => state.previewOpen)
+
+  useEffect(() => {
+    if (paths) initialize(paths.home)
+  }, [paths, initialize])
+
+  if (isLoading) {
+    return (
+      <div className="text-muted flex h-screen items-center justify-center gap-2 text-[13px]">
+        <Loader2 size={16} className="animate-spin" />
+        Starting…
+      </div>
+    )
+  }
+
+  if (error || !paths) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        {isFsError(error) ? (
+          <DirectoryError error={error} onRetry={() => void refetch()} />
+        ) : (
+          <span className="text-muted text-[13px]">Could not resolve the home directory.</span>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-deep text-primary flex h-screen flex-col">
+      <TabBar />
+      <Toolbar />
+
+      <div className="flex min-h-0 flex-1">
+        {sidebarOpen && <Sidebar />}
+        {tab && <PaneGroup tab={tab} />}
+        {previewOpen && <ActivePreview />}
+      </div>
+
+      {tab && pane && <ActiveStatusBar />}
+    </div>
+  )
+}
+
+/**
+ * Split out so a selection change re-renders the preview alone rather than the
+ * whole layout — the pane group is the expensive subtree.
+ */
+function ActivePreview() {
+  const pane = useActivePane()
+  const { selected } = usePaneSelection(pane?.id ?? '')
+  const showHiddenFiles = useUiStore((state) => state.showHiddenFiles)
+
+  const { items } = useDirectory(pane?.path ?? '', {
+    includeHidden: showHiddenFiles,
+    ...(pane ? { sort: pane.sort } : {}),
+  })
+
+  const item = useMemo(() => {
+    if (selected.size !== 1) return null
+    const [path] = [...selected]
+    return items.find((candidate) => candidate.path === path) ?? null
+  }, [selected, items])
+
+  return <PreviewPanel item={item} />
+}
+
+function ActiveStatusBar() {
+  const tab = useActiveTab()
+  const pane = useActivePane()
+  const { selected } = usePaneSelection(pane?.id ?? '')
+  const showHiddenFiles = useUiStore((state) => state.showHiddenFiles)
+
+  const { items } = useDirectory(pane?.path ?? '', {
+    includeHidden: showHiddenFiles,
+    ...(pane ? { sort: pane.sort } : {}),
+  })
+
+  const totalBytes = useMemo(
+    () => items.reduce((sum, item) => sum + (item.isDirectory ? 0 : item.size), 0),
+    [items],
+  )
+
+  if (!tab || !pane) return null
+
+  return (
+    <StatusBar
+      itemCount={items.length}
+      selectedCount={selected.size}
+      totalBytes={totalBytes}
+      splitMode={tab.splitMode}
+      viewMode={pane.viewMode}
+    />
+  )
+}

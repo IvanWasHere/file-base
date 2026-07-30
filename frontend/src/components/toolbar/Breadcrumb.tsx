@@ -31,9 +31,7 @@ export function Breadcrumb({
         const last = index === segments.length - 1
         return (
           <span key={segment.path} className="flex min-w-0 items-center gap-0.5">
-            {index > 0 && (
-              <ChevronRight size={compact ? 10 : 11} className="text-muted shrink-0" />
-            )}
+            {index > 0 && <ChevronRight size={compact ? 10 : 11} className="text-muted shrink-0" />}
             <button
               type="button"
               onClick={() => onNavigate(segment.path)}

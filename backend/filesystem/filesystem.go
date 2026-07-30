@@ -140,15 +140,14 @@ func (f *FS) StandardPaths() (StandardPaths, error) {
 func (f *FS) ListVolumes() ([]Volume, error) {
 	volumes := make([]Volume, 0, 4)
 
-	rootName := "Macintosh HD"
-	if total, free, err := diskUsage("/"); err == nil {
-		volumes = append(volumes, Volume{
-			Name: rootName, Path: "/", TotalBytes: int64(total), FreeBytes: int64(free),
-			Removable: false, Root: true,
-		})
-	} else {
-		volumes = append(volumes, Volume{Name: rootName, Path: "/", Root: true})
+	// The boot volume's display name comes from its /Volumes symlink, so it
+	// reads as the user named it rather than a hardcoded "Macintosh HD".
+	root := Volume{Name: bootVolumeName(), Path: "/", Root: true}
+	if stat, err := statVolume("/"); err == nil {
+		root.TotalBytes = int64(stat.Total)
+		root.FreeBytes = int64(stat.Free)
 	}
+	volumes = append(volumes, root)
 
 	entries, err := os.ReadDir("/Volumes")
 	if err != nil {
@@ -164,15 +163,43 @@ func (f *FS) ListVolumes() ([]Volume, error) {
 			continue
 		}
 
-		volume := Volume{Name: entry.Name(), Path: mount, Removable: true}
-		if total, free, err := diskUsage(mount); err == nil {
-			volume.TotalBytes = int64(total)
-			volume.FreeBytes = int64(free)
+		volume := Volume{Name: entry.Name(), Path: mount}
+		stat, err := statVolume(mount)
+		if err != nil {
+			// Unreachable mount (ejected mid-read): list it with no capacity so
+			// the UI can show it as unavailable rather than dropping it.
+			volumes = append(volumes, volume)
+			continue
 		}
+
+		// nobrowse mounts are machinery — Finder hides them, so do we.
+		if !stat.Browsable {
+			continue
+		}
+
+		volume.TotalBytes = int64(stat.Total)
+		volume.FreeBytes = int64(stat.Free)
+		volume.Removable = stat.Removable
 		volumes = append(volumes, volume)
 	}
 
 	return volumes, nil
+}
+
+// bootVolumeName reads the user-visible name of "/" from its /Volumes symlink,
+// falling back to the macOS default.
+func bootVolumeName() string {
+	entries, err := os.ReadDir("/Volumes")
+	if err != nil {
+		return "Macintosh HD"
+	}
+	for _, entry := range entries {
+		mount := filepath.Join("/Volumes", entry.Name())
+		if resolved, err := filepath.EvalSymlinks(mount); err == nil && resolved == "/" {
+			return entry.Name()
+		}
+	}
+	return "Macintosh HD"
 }
 
 // describe builds a FileItem, degrading to a Broken entry when stat fails.

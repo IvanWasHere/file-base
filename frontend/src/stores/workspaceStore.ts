@@ -249,9 +249,7 @@ export const canGoUp = (pane: Pane | undefined): boolean =>
   !!pane && dirname(pane.path) !== pane.path
 
 export function useActiveTab(): Tab | undefined {
-  return useWorkspaceStore((state) =>
-    state.tabs.find((tab) => tab.id === state.activeTabId),
-  )
+  return useWorkspaceStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId))
 }
 
 export function useActivePane(): Pane | undefined {

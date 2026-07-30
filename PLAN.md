@@ -182,11 +182,19 @@ Notes from the build:
 - **Deferred to M3 on purpose:** `ExplorerPane` holds its path in local `useState`. History, tabs and splits arrive with `workspaceStore`; building half of it now would only be undone.
 - **Known cosmetic issue:** an exception from Wails' own `wails/ipc.js` appears when the dev server is opened in a plain browser. It does not appear to affect the packaged app, which runs clean. Recheck when wiring the watcher in M7.
 
-### M2 — Shell chrome
-Tab bar, toolbar, sidebar, status bar, breadcrumbs, preview panel — the mockup's layout rebuilt as React components with Lucide icons. Static/wired-to-one-pane; no persistence yet.
+### M2 + M3 — Shell chrome, navigation, tabs, splits ✅ complete
+Built together: the tab bar and split controls are inert without `workspaceStore`, so shipping a decorative M2 first would have meant rewriting it immediately.
 
-### M3 — Navigation, tabs, splits
-`workspaceStore`; per-pane history with back/forward/up; breadcrumb navigation; tab open/close/switch; 1/2/3/4-way splits; draggable resize handles (ported from the mockup's `startResize`, rewritten as a `useSplitResize` hook); active-pane focus tracking.
+Delivered: tab bar, toolbar, sidebar, status bar, breadcrumbs, preview panel; `workspaceStore` (tabs → panes → history) plus `selectionStore` and `uiStore`; per-pane back/forward/up; tab open/close/switch; 1/2/3/4-way splits; draggable and keyboard-operable dividers.
+
+Notes from the build:
+
+- **Scope call — the three icon views shipped here, not in M4.** They are pure layout, which makes them chrome; leaving them out would have meant a view switcher with three dead options. M4 keeps virtualization, multi-selection, marquee drag and sort-by-column-header.
+- **`useSplitResize` stores fractions, not pixels.** The mockup wrote pixel widths straight onto DOM nodes, so a window resize stranded the panes at stale widths. Fractions applied as `flexGrow` redistribute on their own, and the drag listens on `window` so it keeps tracking when the pointer outruns the 4px divider.
+- **Bug found by looking at the running app:** the status bar read "1 selected" after navigating away, while the preview showed its empty state — selection outlived the directory it belonged to. Panes now clear selection on path change, with a regression test.
+- **Two more fixes from real-app inspection:** `ListVolumes` was marking every `/Volumes` entry removable (wrong for internal APFS volumes) and ignoring the `nobrowse` flag that keeps system volumes out of Finder; both now read from `statfs`. The view menu was left-aligned and overflowed the window edge.
+- **Toolbar carries only working controls.** New Folder (M6), Search (M8) and Settings arrive with their milestones — a toolbar of dead buttons is worse than a short one.
+- **Known browser-automation quirk (not an app bug):** the first click after a page load is swallowed by the dev server tab until it takes focus. Only affects driving the app in a browser.
 
 ### M4 — Views, sorting, selection
 All four view modes; `@tanstack/react-virtual` for lists and grids; sorting (name/date/size/type, asc/desc, folders-first); selection: click, Cmd-click, Shift-range, Cmd+A, marquee drag, Escape; arrow/Home/End/type-ahead keyboard navigation; memoized rows.
