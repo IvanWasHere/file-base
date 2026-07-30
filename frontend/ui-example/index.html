@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vault - File Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/mithril@2.2.2/mithril.js"></script>
+    <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        display: ['"Space Grotesk"', 'sans-serif'],
+                        body: ['"IBM Plex Sans"', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --bg-deep: #0e0e12;
+            --bg-base: #141419;
+            --bg-surface: #1a1a22;
+            --bg-elevated: #22222e;
+            --bg-hover: #2a2a38;
+            --bg-active: #32324a;
+            --border: #2c2c3c;
+            --border-focus: #e8a830;
+            --text-primary: #e2e2ea;
+            --text-secondary: #8a8a9e;
+            --text-muted: #5a5a72;
+            --accent: #e8a830;
+            --accent-dim: #c48820;
+            --accent-glow: rgba(232, 168, 48, 0.12);
+            --danger: #e84848;
+            --success: #38c868;
+            --info: #48a8e8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'IBM Plex Sans', sans-serif;
+            background: var(--bg-deep); color: var(--text-primary);
+            overflow: hidden; height: 100vh; user-select: none;
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        .tab-bar {
+            display: flex; align-items: flex-end; background: var(--bg-deep);
+            border-bottom: 1px solid var(--border); padding: 0 8px; height: 40px; gap: 2px;
+        }
+        .tab-item {
+            display: flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 12px;
+            font-weight: 500; color: var(--text-secondary); background: var(--bg-surface);
+            border: 1px solid var(--border); border-bottom: none; border-radius: 8px 8px 0 0;
+            cursor: pointer; max-width: 180px; min-width: 80px; transition: all 0.15s ease;
+            position: relative; top: 1px;
+        }
+        .tab-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
+        .tab-item.active { background: var(--bg-surface); color: var(--accent); border-color: var(--accent); border-bottom: 1px solid var(--bg-surface); z-index: 2; }
+        .tab-item .tab-close {
+            display: flex; align-items: center; justify-content: center; width: 16px; height: 16px;
+            border-radius: 4px; font-size: 10px; opacity: 0; transition: all 0.1s; margin-left: auto; flex-shrink: 0;
+        }
+        .tab-item:hover .tab-close { opacity: 0.6; }
+        .tab-item .tab-close:hover { opacity: 1; background: var(--bg-hover); }
+        .tab-item .tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tab-new {
+            display: flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+            border-radius: 6px; color: var(--text-muted); cursor: pointer; margin-left: 4px;
+            margin-bottom: 4px; transition: all 0.15s; font-size: 14px;
+        }
+        .tab-new:hover { background: var(--bg-elevated); color: var(--text-primary); }
+
+        .toolbar {
+            display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+            background: var(--bg-surface); border-bottom: 1px solid var(--border);
+        }
+        .toolbar-btn {
+            display: flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+            border-radius: 6px; color: var(--text-secondary); cursor: pointer; transition: all 0.15s;
+            border: none; background: none; font-size: 14px;
+        }
+        .toolbar-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+        .toolbar-btn:disabled { opacity: 0.3; cursor: default; }
+        .toolbar-btn.active { background: var(--accent-glow); color: var(--accent); }
+
+        .split-group {
+            display: flex; gap: 2px; background: var(--bg-base);
+            border: 1px solid var(--border); border-radius: 6px; padding: 2px;
+        }
+        .split-btn {
+            display: flex; align-items: center; justify-content: center; width: 30px; height: 26px;
+            border-radius: 4px; color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+            border: none; background: none; font-size: 14px;
+        }
+        .split-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+        .split-btn.active { color: var(--accent); background: var(--accent-glow); }
+
+        .view-dropdown { position: relative; }
+        .view-dropdown-btn {
+            display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px;
+            background: var(--bg-base); border: 1px solid var(--border); color: var(--text-primary);
+            font-size: 12px; font-family: inherit; cursor: pointer; transition: border-color 0.15s;
+        }
+        .view-dropdown-btn:hover { border-color: var(--text-muted); }
+        .view-dropdown-btn i.fa-chevron-down { font-size: 10px; color: var(--text-muted); }
+        .view-dropdown-btn.active-view { border-color: var(--accent); }
+
+        .view-menu {
+            position: absolute; top: 100%; left: 0; margin-top: 4px; background: var(--bg-elevated);
+            border: 1px solid var(--border); border-radius: 8px; padding: 4px; min-width: 180px;
+            z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.4); display: none;
+        }
+        .view-menu.open { display: block; }
+        .view-menu-item {
+            display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 6px;
+            font-size: 13px; color: var(--text-secondary); cursor: pointer; transition: all 0.12s;
+        }
+        .view-menu-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .view-menu-item.active { color: var(--accent); background: var(--accent-glow); }
+        .view-menu-item i { width: 18px; text-align: center; font-size: 14px; }
+
+        .breadcrumb {
+            display: flex; align-items: center; gap: 2px; padding: 4px 10px; background: var(--bg-base);
+            border: 1px solid var(--border); border-radius: 6px; flex: 1; min-width: 0;
+            overflow: hidden; font-size: 13px;
+        }
+        .breadcrumb-segment {
+            color: var(--text-secondary); cursor: pointer; padding: 2px 4px; border-radius: 3px;
+            white-space: nowrap; transition: all 0.1s;
+        }
+        .breadcrumb-segment:hover { color: var(--accent); background: var(--accent-glow); }
+        .breadcrumb-segment:last-child { color: var(--text-primary); font-weight: 500; }
+        .breadcrumb-sep { color: var(--text-muted); font-size: 10px; }
+
+        .main-layout { display: flex; height: calc(100vh - 40px - 49px - 28px); }
+
+        .sidebar {
+            width: 220px; min-width: 220px; background: var(--bg-base);
+            border-right: 1px solid var(--border); overflow-y: auto; padding: 12px 0;
+            display: flex; flex-direction: column; gap: 4px;
+        }
+        .sidebar-section { padding: 0 12px; margin-bottom: 8px; }
+        .sidebar-title {
+            font-family: 'Space Grotesk', sans-serif; font-size: 10px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-muted); padding: 4px 0 8px;
+        }
+        .sidebar-item {
+            display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px;
+            cursor: pointer; font-size: 13px; color: var(--text-secondary); transition: all 0.12s;
+        }
+        .sidebar-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .sidebar-item.active { background: var(--accent-glow); color: var(--accent); }
+        .sidebar-item .sidebar-icon { width: 18px; text-align: center; font-size: 13px; }
+        .sidebar-item .sidebar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sidebar-item .sidebar-size { margin-left: auto; font-size: 10px; color: var(--text-muted); }
+
+        .file-panels-container { flex: 1; display: flex; overflow: hidden; }
+        .file-panel {
+            flex: 1; display: flex; flex-direction: column; overflow: hidden;
+            border-right: 1px solid var(--border); position: relative;
+        }
+        .file-panel:last-child { border-right: none; }
+        .file-panel-header {
+            display: flex; align-items: center; padding: 4px 10px; background: var(--bg-elevated);
+            border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text-muted); gap: 8px;
+        }
+        .panel-letter {
+            font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 12px; color: var(--accent);
+            width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+            background: var(--accent-glow); border-radius: 4px;
+        }
+        .panel-breadcrumb { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; overflow: hidden; }
+        .panel-breadcrumb span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary); cursor: pointer; }
+        .panel-breadcrumb span:hover { color: var(--accent); }
+        .panel-breadcrumb .sep { color: var(--text-muted); cursor: default; }
+
+        .file-grid-area {
+            flex: 1; overflow: auto; padding: 8px;
+            background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.015) 1px, transparent 0);
+            background-size: 24px 24px;
+        }
+
+        .detail-header {
+            display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 0; padding: 6px 12px;
+            font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;
+            letter-spacing: 0.5px; border-bottom: 1px solid var(--border); position: sticky; top: 0;
+            background: var(--bg-surface); z-index: 1;
+        }
+        .detail-row {
+            display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 0; padding: 8px 12px;
+            font-size: 13px; cursor: pointer; border-bottom: 1px solid rgba(44,44,60,0.4);
+            transition: all 0.1s; align-items: center;
+        }
+        .detail-row:hover { background: var(--bg-hover); }
+        .detail-row.selected { background: var(--accent-glow); }
+        .detail-row .name-cell { display: flex; align-items: center; gap: 8px; overflow: hidden; }
+        .detail-row .name-cell span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .detail-row .size-cell, .detail-row .date-cell, .detail-row .type-cell { color: var(--text-secondary); font-size: 12px; }
+
+        .icons-large-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; padding: 8px; }
+        .icon-large-item {
+            display: flex; flex-direction: column; align-items: center; padding: 12px 8px 8px;
+            border-radius: 8px; cursor: pointer; transition: all 0.12s; gap: 6px;
+        }
+        .icon-large-item:hover { background: var(--bg-hover); }
+        .icon-large-item.selected { background: var(--accent-glow); }
+        .icon-large-item .icon-img { width: 56px; height: 56px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+        .icon-large-item .icon-label { font-size: 11px; text-align: center; word-break: break-word; line-height: 1.3; max-width: 90px; color: var(--text-secondary); }
+        .icon-large-item.selected .icon-label { color: var(--accent); }
+
+        .icons-medium-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 6px; padding: 8px; }
+        .icon-medium-item {
+            display: flex; flex-direction: column; align-items: center; padding: 8px 6px 6px;
+            border-radius: 6px; cursor: pointer; transition: all 0.12s; gap: 4px;
+        }
+        .icon-medium-item:hover { background: var(--bg-hover); }
+        .icon-medium-item.selected { background: var(--accent-glow); }
+        .icon-medium-item .icon-img { width: 40px; height: 40px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .icon-medium-item .icon-label { font-size: 10px; text-align: center; word-break: break-word; line-height: 1.2; max-width: 72px; color: var(--text-secondary); }
+        .icon-medium-item.selected .icon-label { color: var(--accent); }
+
+        .icons-small-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 2px; padding: 4px; }
+        .icon-small-item {
+            display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 4px;
+            cursor: pointer; transition: all 0.1s;
+        }
+        .icon-small-item:hover { background: var(--bg-hover); }
+        .icon-small-item.selected { background: var(--accent-glow); }
+        .icon-small-item .icon-img { width: 22px; height: 22px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+        .icon-small-item .icon-label { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+        .icon-small-item.selected .icon-label { color: var(--accent); }
+
+        .preview-panel {
+            width: 0; min-width: 0; background: var(--bg-base); border-left: 1px solid var(--border);
+            overflow: hidden; transition: width 0.25s ease, min-width 0.25s ease; display: flex; flex-direction: column;
+        }
+        .preview-panel.open { width: 280px; min-width: 280px; }
+        .preview-header {
+            display: flex; align-items: center; justify-content: space-between; padding: 10px 12px;
+            border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-secondary);
+        }
+        .preview-close {
+            width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+            border-radius: 4px; cursor: pointer; color: var(--text-muted); transition: all 0.1s;
+        }
+        .preview-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .preview-body { flex: 1; overflow-y: auto; padding: 16px; }
+        .preview-icon-area { display: flex; align-items: center; justify-content: center; height: 120px; margin-bottom: 16px; border-radius: 8px; background: var(--bg-surface); }
+        .preview-icon-area i { font-size: 48px; }
+        .preview-info-row {
+            display: flex; justify-content: space-between; padding: 6px 0;
+            border-bottom: 1px solid rgba(44,44,60,0.3); font-size: 12px;
+        }
+        .preview-info-row .label { color: var(--text-muted); }
+        .preview-info-row .value { color: var(--text-primary); font-weight: 500; }
+        .preview-content-area {
+            margin-top: 12px; padding: 10px; background: var(--bg-surface); border-radius: 6px;
+            font-size: 12px; color: var(--text-secondary); line-height: 1.6; max-height: 200px;
+            overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+        }
+
+        .status-bar {
+            display: flex; align-items: center; justify-content: space-between; padding: 0 14px;
+            height: 28px; background: var(--bg-surface); border-top: 1px solid var(--border);
+            font-size: 11px; color: var(--text-muted);
+        }
+        .status-bar .status-left { display: flex; gap: 16px; }
+        .status-bar .status-right { display: flex; gap: 16px; align-items: center; }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); display: inline-block; margin-right: 4px; }
+
+        .ft-folder { color: #e8a830; } .ft-image { color: #e86898; } .ft-document { color: #4898e8; }
+        .ft-code { color: #38c868; } .ft-music { color: #c848e8; } .ft-video { color: #e85848; }
+        .ft-archive { color: #e89848; } .ft-data { color: #48c8c8; } .ft-default { color: var(--text-muted); }
+
+        .ft-bg-folder { background: rgba(232,168,48,0.12); } .ft-bg-image { background: rgba(232,104,152,0.12); }
+        .ft-bg-document { background: rgba(72,152,232,0.12); } .ft-bg-code { background: rgba(56,200,104,0.12); }
+        .ft-bg-music { background: rgba(200,72,232,0.12); } .ft-bg-video { background: rgba(232,88,72,0.12); }
+        .ft-bg-archive { background: rgba(232,152,72,0.12); } .ft-bg-data { background: rgba(72,200,200,0.12); }
+        .ft-bg-default { background: rgba(90,90,114,0.12); }
+
+        .split-handle { width: 4px; cursor: col-resize; background: var(--border); transition: background 0.15s; flex-shrink: 0; }
+        .split-handle:hover { background: var(--accent); }
+
+        .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); gap: 8px; }
+        .empty-state i { font-size: 36px; opacity: 0.4; }
+        .empty-state span { font-size: 13px; }
+
+        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    <script>
+    const db = new Dexie('VaultExplorer');
+    db.version(1).stores({ files: '++id, name, parentId, type, size, modified, *tags' });
+
+    async function seedDatabase() {
+        const count = await db.files.count();
+        if (count > 0) return;
+        const files = [
+            { id: 1, name: 'Documents', parentId: 0, type: 'folder', size: 0, modified: '2024-12-15', tags: [] },
+            { id: 2, name: 'Downloads', parentId: 0, type: 'folder', size: 0, modified: '2025-01-20', tags: [] },
+            { id: 3, name: 'Music', parentId: 0, type: 'folder', size: 0, modified: '2024-11-08', tags: [] },
+            { id: 4, name: 'Pictures', parentId: 0, type: 'folder', size: 0, modified: '2025-01-10', tags: [] },
+            { id: 5, name: 'Videos', parentId: 0, type: 'folder', size: 0, modified: '2024-10-30', tags: [] },
+            { id: 6, name: 'Projects', parentId: 0, type: 'folder', size: 0, modified: '2025-01-22', tags: [] },
+            { id: 10, name: 'Work', parentId: 1, type: 'folder', size: 0, modified: '2025-01-12', tags: [] },
+            { id: 11, name: 'Personal', parentId: 1, type: 'folder', size: 0, modified: '2024-12-01', tags: [] },
+            { id: 12, name: 'Annual Report 2024.pdf', parentId: 1, type: 'pdf', size: 2457600, modified: '2025-01-05', tags: ['work','report'] },
+            { id: 13, name: 'Meeting Notes.docx', parentId: 1, type: 'docx', size: 156800, modified: '2025-01-18', tags: ['work'] },
+            { id: 14, name: 'Budget Template.xlsx', parentId: 1, type: 'xlsx', size: 89200, modified: '2024-11-20', tags: ['finance'] },
+            { id: 15, name: 'Project Roadmap.pptx', parentId: 1, type: 'pptx', size: 5120000, modified: '2025-01-15', tags: ['work','planning'] },
+            { id: 16, name: 'Resume.pdf', parentId: 1, type: 'pdf', size: 324000, modified: '2024-09-15', tags: ['personal'] },
+            { id: 20, name: 'Client Proposals', parentId: 10, type: 'folder', size: 0, modified: '2025-01-10', tags: [] },
+            { id: 21, name: 'Contract Draft.pdf', parentId: 10, type: 'pdf', size: 890000, modified: '2025-01-08', tags: ['legal'] },
+            { id: 22, name: 'Team Structure.xlsx', parentId: 10, type: 'xlsx', size: 67200, modified: '2024-12-18', tags: ['hr'] },
+            { id: 23, name: 'Sprint Planning.docx', parentId: 10, type: 'docx', size: 234000, modified: '2025-01-20', tags: ['agile'] },
+            { id: 24, name: 'Acme Corp Proposal.pdf', parentId: 20, type: 'pdf', size: 3450000, modified: '2025-01-06', tags: ['client'] },
+            { id: 25, name: 'Globex Draft v2.pdf', parentId: 20, type: 'pdf', size: 2100000, modified: '2025-01-09', tags: ['client'] },
+            { id: 30, name: 'Travel Plans.docx', parentId: 11, type: 'docx', size: 45600, modified: '2024-12-22', tags: ['travel'] },
+            { id: 31, name: 'Tax Returns', parentId: 11, type: 'folder', size: 0, modified: '2024-04-10', tags: [] },
+            { id: 32, name: 'Tax 2023.pdf', parentId: 31, type: 'pdf', size: 567000, modified: '2024-04-10', tags: ['tax'] },
+            { id: 40, name: 'node-v20.11.0-x64.msi', parentId: 2, type: 'exe', size: 32400000, modified: '2025-01-02', tags: ['dev'] },
+            { id: 41, name: 'VSCode-Setup-1.86.exe', parentId: 2, type: 'exe', size: 98700000, modified: '2025-01-14', tags: ['dev'] },
+            { id: 42, name: 'Figma-Desktop-Setup.dmg', parentId: 2, type: 'exe', size: 145000000, modified: '2024-12-28', tags: ['design'] },
+            { id: 43, name: 'project-backup-jan.zip', parentId: 2, type: 'zip', size: 67800000, modified: '2025-01-19', tags: ['backup'] },
+            { id: 44, name: 'wallpaper-collection.zip', parentId: 2, type: 'zip', size: 234000000, modified: '2024-11-15', tags: ['media'] },
+            { id: 45, name: 'docker-desktop-installer.exe', parentId: 2, type: 'exe', size: 567000000, modified: '2024-12-05', tags: ['dev'] },
+            { id: 50, name: 'Playlists', parentId: 3, type: 'folder', size: 0, modified: '2024-10-20', tags: [] },
+            { id: 51, name: 'Midnight Drive.mp3', parentId: 3, type: 'mp3', size: 8450000, modified: '2024-08-15', tags: ['electronic'] },
+            { id: 52, name: 'Ocean Waves.flac', parentId: 3, type: 'mp3', size: 45000000, modified: '2024-06-20', tags: ['ambient'] },
+            { id: 53, name: 'City Lights.mp3', parentId: 3, type: 'mp3', size: 9200000, modified: '2024-09-10', tags: ['synthwave'] },
+            { id: 54, name: 'Morning Coffee.mp3', parentId: 3, type: 'mp3', size: 7800000, modified: '2024-07-05', tags: ['jazz'] },
+            { id: 55, name: 'Workout Mix', parentId: 50, type: 'folder', size: 0, modified: '2024-10-20', tags: [] },
+            { id: 56, name: 'Chill Vibes.m3u', parentId: 50, type: 'data', size: 2400, modified: '2024-10-15', tags: [] },
+            { id: 57, name: 'Focus Flow.m3u', parentId: 50, type: 'data', size: 1800, modified: '2024-10-20', tags: [] },
+            { id: 60, name: 'Screenshots', parentId: 4, type: 'folder', size: 0, modified: '2025-01-21', tags: [] },
+            { id: 61, name: 'Camera Roll', parentId: 4, type: 'folder', size: 0, modified: '2025-01-10', tags: [] },
+            { id: 62, name: 'Wallpapers', parentId: 4, type: 'folder', size: 0, modified: '2024-12-05', tags: [] },
+            { id: 63, name: 'vacation-sunset.jpg', parentId: 4, type: 'image', size: 4500000, modified: '2024-08-20', tags: ['travel'] },
+            { id: 64, name: 'portrait-mode-test.png', parentId: 4, type: 'image', size: 6800000, modified: '2024-07-15', tags: ['photo'] },
+            { id: 70, name: 'bug-report-01.png', parentId: 60, type: 'image', size: 890000, modified: '2025-01-21', tags: ['work'] },
+            { id: 71, name: 'design-review.png', parentId: 60, type: 'image', size: 1200000, modified: '2025-01-18', tags: ['design'] },
+            { id: 72, name: 'api-response.png', parentId: 60, type: 'image', size: 340000, modified: '2025-01-15', tags: ['dev'] },
+            { id: 80, name: 'IMG_20250101_001.jpg', parentId: 61, type: 'image', size: 3400000, modified: '2025-01-01', tags: [] },
+            { id: 81, name: 'IMG_20250105_002.jpg', parentId: 61, type: 'image', size: 4100000, modified: '2025-01-05', tags: [] },
+            { id: 82, name: 'IMG_20250110_003.jpg', parentId: 61, type: 'image', size: 3800000, modified: '2025-01-10', tags: [] },
+            { id: 85, name: 'mountain-lake-4k.jpg', parentId: 62, type: 'image', size: 8900000, modified: '2024-12-05', tags: ['nature'] },
+            { id: 86, name: 'neon-city.jpg', parentId: 62, type: 'image', size: 5600000, modified: '2024-11-20', tags: ['urban'] },
+            { id: 87, name: 'abstract-fractal.png', parentId: 62, type: 'image', size: 3200000, modified: '2024-10-10', tags: ['abstract'] },
+            { id: 90, name: 'tutorial-react-hooks.mp4', parentId: 5, type: 'video', size: 256000000, modified: '2024-12-10', tags: ['dev','tutorial'] },
+            { id: 91, name: 'conference-talk-2024.mkv', parentId: 5, type: 'video', size: 890000000, modified: '2024-11-25', tags: ['conference'] },
+            { id: 92, name: 'screen-recording-jan.mp4', parentId: 5, type: 'video', size: 45000000, modified: '2025-01-20', tags: ['work'] },
+            { id: 93, name: 'vacation-highlight-reel.mp4', parentId: 5, type: 'video', size: 780000000, modified: '2024-08-25', tags: ['personal'] },
+            { id: 100, name: 'vault-explorer', parentId: 6, type: 'folder', size: 0, modified: '2025-01-22', tags: [] },
+            { id: 101, name: 'data-pipeline', parentId: 6, type: 'folder', size: 0, modified: '2025-01-18', tags: [] },
+            { id: 102, name: 'design-system', parentId: 6, type: 'folder', size: 0, modified: '2025-01-12', tags: [] },
+            { id: 110, name: 'src', parentId: 100, type: 'folder', size: 0, modified: '2025-01-22', tags: [] },
+            { id: 111, name: 'README.md', parentId: 100, type: 'code', size: 8900, modified: '2025-01-22', tags: [] },
+            { id: 112, name: 'package.json', parentId: 100, type: 'code', size: 2400, modified: '2025-01-22', tags: [] },
+            { id: 113, name: '.gitignore', parentId: 100, type: 'code', size: 380, modified: '2025-01-15', tags: [] },
+            { id: 120, name: 'index.js', parentId: 110, type: 'code', size: 1200, modified: '2025-01-22', tags: [] },
+            { id: 121, name: 'app.js', parentId: 110, type: 'code', size: 15600, modified: '2025-01-22', tags: [] },
+            { id: 122, name: 'styles.css', parentId: 110, type: 'code', size: 8900, modified: '2025-01-21', tags: [] },
+            { id: 123, name: 'utils.js', parentId: 110, type: 'code', size: 4500, modified: '2025-01-20', tags: [] },
+            { id: 130, name: 'pipeline.py', parentId: 101, type: 'code', size: 23400, modified: '2025-01-18', tags: [] },
+            { id: 131, name: 'config.yaml', parentId: 101, type: 'code', size: 1800, modified: '2025-01-17', tags: [] },
+            { id: 132, name: 'requirements.txt', parentId: 101, type: 'code', size: 680, modified: '2025-01-15', tags: [] },
+            { id: 133, name: 'tests', parentId: 101, type: 'folder', size: 0, modified: '2025-01-18', tags: [] },
+            { id: 134, name: 'test_pipeline.py', parentId: 133, type: 'code', size: 8900, modified: '2025-01-18', tags: [] },
+            { id: 135, name: 'test_utils.py', parentId: 133, type: 'code', size: 3400, modified: '2025-01-17', tags: [] },
+            { id: 140, name: 'tokens.json', parentId: 102, type: 'data', size: 12400, modified: '2025-01-12', tags: [] },
+            { id: 141, name: 'components', parentId: 102, type: 'folder', size: 0, modified: '2025-01-12', tags: [] },
+            { id: 142, name: 'docs', parentId: 102, type: 'folder', size: 0, modified: '2025-01-10', tags: [] },
+            { id: 143, name: 'Button.tsx', parentId: 141, type: 'code', size: 5600, modified: '2025-01-12', tags: [] },
+            { id: 144, name: 'Input.tsx', parentId: 141, type: 'code', size: 4200, modified: '2025-01-11', tags: [] },
+            { id: 145, name: 'Modal.tsx', parentId: 141, type: 'code', size: 7800, modified: '2025-01-12', tags: [] },
+            { id: 146, name: 'getting-started.md', parentId: 142, type: 'code', size: 3400, modified: '2025-01-10', tags: [] },
+            { id: 147, name: 'api-reference.md', parentId: 142, type: 'code', size: 8900, modified: '2025-01-10', tags: [] },
+        ];
+        await db.files.bulkPut(files);
+    }
+
+    function getFileCategory(type) {
+        if (type === 'folder') return 'folder'; if (['image'].includes(type)) return 'image';
+        if (['pdf','docx','xlsx','pptx'].includes(type)) return 'document'; if (['code'].includes(type)) return 'code';
+        if (['mp3','flac','wav','aac'].includes(type)) return 'music'; if (['video','mp4','mkv','avi'].includes(type)) return 'video';
+        if (['zip','rar','7z','tar','gz'].includes(type)) return 'archive'; if (['exe','msi','dmg'].includes(type)) return 'archive';
+        if (['data','json','yaml','xml','csv'].includes(type)) return 'data'; return 'default';
+    }
+    function getFileIcon(type) {
+        const cat = getFileCategory(type);
+        const icons = { folder: 'fa-solid fa-folder', image: 'fa-solid fa-image', document: 'fa-solid fa-file-lines', code: 'fa-solid fa-file-code', music: 'fa-solid fa-music', video: 'fa-solid fa-film', archive: 'fa-solid fa-file-zipper', data: 'fa-solid fa-database', default: 'fa-solid fa-file' };
+        return icons[cat] || icons.default;
+    }
+    function formatSize(bytes) { if (!bytes || bytes === 0) return '—'; if (bytes < 1024) return bytes + ' B'; if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'; if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB'; return (bytes / 1073741824).toFixed(2) + ' GB'; }
+    function formatDate(dateStr) { if (!dateStr) return '—'; return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); }
+    function getTypeLabel(file) { if (file.type === 'folder') return 'Folder'; return file.name.includes('.') ? file.name.split('.').pop().toUpperCase() : file.type.toUpperCase(); }
+    function getPreviewContent(file) {
+        if (file.type === 'code') {
+            if (file.name === 'index.js') return 'import { App } from "./app.js";\nimport "./styles.css";\n\nconst app = new App({ target: document.getElementById("root") });\napp.init();';
+            if (file.name === 'app.js') return 'export class App {\n  constructor(options) {\n    this.target = options.target;\n    this.state = {};\n  }\n  init() { this.render(); this.bindEvents(); }\n}';
+            if (file.name === 'package.json') return '{\n  "name": "vault-explorer",\n  "version": "1.0.0",\n  "description": "A modern file explorer",\n  "main": "src/index.js"\n}';
+            if (file.name === 'pipeline.py') return 'import pandas as pd\nfrom sqlalchemy import create_engine\n\ndef run_pipeline(config):\n    engine = create_engine(config.db_url)';
+            if (file.name === 'README.md') return '# Vault Explorer\n\nA modern, fast file explorer built with\nMithril.js and Dexie.js.';
+            return '// source code\nfunction main() { console.log("Hello, World!"); }';
+        }
+        if (file.type === 'data') { if (file.name === 'tokens.json') return '{\n  "colors": {\n    "primary": "#e8a830",\n    "secondary": "#1a1a22"\n  }\n}'; return '{ "key": "value" }'; }
+        if (file.type === 'docx') { if (file.name === 'Meeting Notes.docx') return 'Quarterly Planning Meeting\nDate: January 18, 2025\nAttendees: Team Alpha'; return 'Document content preview...'; }
+        return null;
+    }
+
+    const state = {
+        tabs: [], activeTabId: null, splitMode: 1, viewMode: 'detail', viewMenuOpen: false,
+        previewFile: null, dataReady: false,
+        sidebarFavorites: [
+            { name: 'Documents', icon: 'fa-solid fa-folder', parentId: 1, color: 'ft-document' },
+            { name: 'Downloads', icon: 'fa-solid fa-download', parentId: 2, color: 'ft-archive' },
+            { name: 'Music', icon: 'fa-solid fa-music', parentId: 3, color: 'ft-music' },
+            { name: 'Pictures', icon: 'fa-solid fa-image', parentId: 4, color: 'ft-image' },
+            { name: 'Videos', icon: 'fa-solid fa-film', parentId: 5, color: 'ft-video' },
+            { name: 'Projects', icon: 'fa-solid fa-code', parentId: 6, color: 'ft-code' },
+        ],
+        drives: [
+            { name: 'Local Disk (C:)', letter: 'C', used: 186, total: 256, parentId: 0 },
+            { name: 'Data Drive (D:)', letter: 'D', used: 420, total: 1000, parentId: 0 },
+            { name: 'External (E:)', letter: 'E', used: 78, total: 512, parentId: 0 },
+        ],
+    };
+
+    const splitConfigs = {
+        1: { label: 'Single', icon: 'fa-solid fa-square', panels: 1 },
+        2: { label: 'Split', icon: 'fa-solid fa-columns', panels: 2 },
+        3: { label: '3-Column', icon: 'fa-solid fa-grip-lines-vertical', panels: 3 },
+        4: { label: '4-Way', icon: 'fa-solid fa-table-cells', panels: 4 },
+    };
+    const viewConfigs = {
+        'detail': { label: 'Details', icon: 'fa-solid fa-list' },
+        'large-icons': { label: 'Large Icons', icon: 'fa-solid fa-th-large' },
+        'medium-icons': { label: 'Medium Icons', icon: 'fa-solid fa-th' },
+        'small-icons': { label: 'Small Icons', icon: 'fa-solid fa-grip' },
+    };
+
+    let tabIdCounter = 0;
+    function nextTabId() { return ++tabIdCounter; }
+    function createTab(parentId) { const id = nextTabId(); const tab = { id, panels: [{ parentId: parentId || 0, currentPath: [], history: [parentId || 0], historyIndex: 0, files: [], selectedId: null }] }; state.tabs.push(tab); state.activeTabId = id; return tab; }
+    function getActiveTab() { return state.tabs.find(t => t.id === state.activeTabId); }
+    function getActivePanel(tab) { if (!tab) return null; return tab.panels[tab._activePanelIdx || 0] || tab.panels[0]; }
+
+    async function loadFilesForPanel(panel) { try { const files = await db.files.where('parentId').equals(panel.parentId).toArray(); files.sort((a, b) => { if (a.type === 'folder' && b.type !== 'folder') return -1; if (a.type !== 'folder' && b.type === 'folder') return 1; return a.name.localeCompare(b.name); }); panel.files = files; } catch (e) { panel.files = []; } }
+    async function buildPath(parentId) { const path = []; let current = parentId; while (current !== 0) { const file = await db.files.get(current); if (!file) break; path.unshift({ id: file.id, name: file.name }); current = file.parentId; } path.unshift({ id: 0, name: 'Home' }); return path; }
+
+    async function navigateTo(panel, parentId) { panel.parentId = parentId; panel.selectedId = null; panel.history = panel.history.slice(0, panel.historyIndex + 1); panel.history.push(parentId); panel.historyIndex = panel.history.length - 1; panel.currentPath = await buildPath(parentId); await loadFilesForPanel(panel); m.redraw(); }
+    async function goBack(panel) { if (panel.historyIndex > 0) { panel.historyIndex--; panel.parentId = panel.history[panel.historyIndex]; panel.selectedId = null; panel.currentPath = await buildPath(panel.parentId); await loadFilesForPanel(panel); m.redraw(); } }
+    async function goForward(panel) { if (panel.historyIndex < panel.history.length - 1) { panel.historyIndex++; panel.parentId = panel.history[panel.historyIndex]; panel.selectedId = null; panel.currentPath = await buildPath(panel.parentId); await loadFilesForPanel(panel); m.redraw(); } }
+    async function goUp(panel) { if (panel.parentId === 0) return; const current = await db.files.get(panel.parentId); if (current) await navigateTo(panel, current.parentId); }
+
+    async function updateSplitPanels(tab, newCount) { const currentCount = tab.panels.length; if (newCount > currentCount) { for (let i = currentCount; i < newCount; i++) { const newPanel = { parentId: 0, currentPath: [], history: [0], historyIndex: 0, files: [], selectedId: null }; tab.panels.push(newPanel); newPanel.currentPath = await buildPath(0); await loadFilesForPanel(newPanel); } } else if (newCount < currentCount) { tab.panels = tab.panels.slice(0, newCount); if (tab._activePanelIdx >= newCount) tab._activePanelIdx = 0; } m.redraw(); }
+
+    const TabBar = {
+        view() {
+            return m('.tab-bar', { role: 'tablist' }, [
+                state.tabs.map(tab => m('.tab-item' + (tab.id === state.activeTabId ? '.active' : ''), { key: tab.id, onclick: () => { state.activeTabId = tab.id; } }, [
+                    m('i', { class: 'fa-solid fa-folder', style: 'font-size:11px;' }),
+                    m('span.tab-label', tab.panels[0].currentPath && tab.panels[0].currentPath.length > 0 ? tab.panels[0].currentPath[tab.panels[0].currentPath.length - 1].name : 'Home'),
+                    m('.tab-close', { onclick: (e) => { e.stopPropagation(); closeTab(tab.id); } }, m('i', { class: 'fa-solid fa-xmark' })),
+                ])),
+                m('.tab-new', { onclick: () => { createTab(0); initActiveTab(); } }, m('i', { class: 'fa-solid fa-plus' })),
+            ]);
+        }
+    };
+
+    function closeTab(tabId) { const idx = state.tabs.findIndex(t => t.id === tabId); if (idx === -1) return; state.tabs.splice(idx, 1); if (state.tabs.length === 0) { createTab(0); initActiveTab(); } else if (state.activeTabId === tabId) state.activeTabId = state.tabs[Math.min(idx, state.tabs.length - 1)].id; }
+    async function initActiveTab() { const tab = getActiveTab(); if (!tab) return; for (const panel of tab.panels) { panel.currentPath = await buildPath(panel.parentId); await loadFilesForPanel(panel); } m.redraw(); }
+
+    const Toolbar = {
+        view() {
+            const tab = getActiveTab(); const panel = tab ? getActivePanel(tab) : null;
+            const canGoBack = panel && panel.historyIndex > 0; const canGoForward = panel && panel.historyIndex < panel.history.length - 1; const canGoUp = panel && panel.parentId !== 0;
+            const breadcrumbVnodes = [];
+            if (panel && panel.currentPath) { panel.currentPath.forEach((seg, i) => { if (i > 0) breadcrumbVnodes.push(m('span.breadcrumb-sep', { key: 'sep-' + i }, m('i', { class: 'fa-solid fa-chevron-right' }))); breadcrumbVnodes.push(m('span.breadcrumb-segment', { key: 'seg-' + seg.id, onclick: () => navigateTo(panel, seg.id) }, seg.name)); }); } else { breadcrumbVnodes.push(m('span.breadcrumb-segment', { key: 'home' }, 'Home')); }
+            const currentView = viewConfigs[state.viewMode];
+
+            return m('.toolbar', [
+                m('button.toolbar-btn', { disabled: !canGoBack, onclick: () => { if (panel) goBack(panel); }, title: 'Back' }, m('i', { class: 'fa-solid fa-arrow-left' })),
+                m('button.toolbar-btn', { disabled: !canGoForward, onclick: () => { if (panel) goForward(panel); }, title: 'Forward' }, m('i', { class: 'fa-solid fa-arrow-right' })),
+                m('button.toolbar-btn', { disabled: !canGoUp, onclick: () => { if (panel) goUp(panel); }, title: 'Up' }, m('i', { class: 'fa-solid fa-arrow-up' })),
+                m('.breadcrumb', breadcrumbVnodes),
+                m('.split-group', Object.entries(splitConfigs).map(([key, cfg]) => m('.split-btn' + (state.splitMode === parseInt(key) ? '.active' : ''), { key: 'split-' + key, onclick: () => { state.splitMode = parseInt(key); const tab = getActiveTab(); if (tab) updateSplitPanels(tab, cfg.panels); }, title: cfg.label }, m('i', { class: cfg.icon })))),
+                m('.view-dropdown', [
+                    m('.view-dropdown-btn' + (state.viewMenuOpen ? '.active-view' : ''), { onclick: (e) => { e.stopPropagation(); state.viewMenuOpen = !state.viewMenuOpen; } }, [
+                        m('i', { class: currentView.icon, style: 'font-size:13px;' }), m('span', currentView.label), m('i', { class: 'fa-solid fa-chevron-down' }),
+                    ]),
+                    m('.view-menu' + (state.viewMenuOpen ? '.open' : ''), Object.entries(viewConfigs).map(([key, cfg]) => m('.view-menu-item' + (state.viewMode === key ? '.active' : ''), { key: 'view-' + key, onclick: () => { state.viewMode = key; state.viewMenuOpen = false; } }, [ m('i', { class: cfg.icon }), m('span', cfg.label) ]))),
+                ]),
+                m('button.toolbar-btn' + (state.previewFile ? '.active' : ''), { onclick: () => { const pp = document.querySelector('.preview-panel'); if (pp) pp.classList.toggle('open'); }, title: 'Toggle preview' }, m('i', { class: 'fa-solid fa-eye' })),
+            ]);
+        }
+    };
+
+    const Sidebar = {
+        view() {
+            /* Wrap storage items in a single div containing properly keyed children, not nested arrays */
+            const storageItems = state.drives.map(drive =>
+                m('div', { key: 'drive-' + drive.letter, style: 'margin-bottom:8px;' }, [
+                    m('div', { style: 'font-size:11px; color: var(--text-secondary); margin-bottom:4px;' }, drive.name),
+                    m('div', { style: 'height: 4px; background: var(--bg-hover); border-radius: 2px; overflow: hidden;' },
+                        m('div', { style: 'height:100%; width:' + (drive.used/drive.total*100) + '%; background:' + (drive.used/drive.total>0.8?'var(--danger)':'var(--accent)') + '; border-radius:2px; transition:width 0.3s;' })
+                    ),
+                ])
+            );
+
+            return m('.sidebar', { role: 'navigation' }, [
+                m('.sidebar-section', { key: 'quick-access' }, [ m('.sidebar-title', 'Quick Access'), state.sidebarFavorites.map(fav => m('.sidebar-item' + (isActiveSidebarItem(fav.parentId) ? '.active' : ''), { key: fav.name, onclick: () => { const tab = getActiveTab(); if (tab) { const panel = getActivePanel(tab); if (panel) navigateTo(panel, fav.parentId); } } }, [ m('span.sidebar-icon', m('i', { class: fav.icon + ' ' + fav.color })), m('span.sidebar-label', fav.name) ])) ]),
+                m('.sidebar-section', { key: 'drives' }, [ m('.sidebar-title', 'Drives'), state.drives.map(drive => m('.sidebar-item', { key: drive.letter, onclick: () => { const tab = getActiveTab(); if (tab) { const panel = getActivePanel(tab); if (panel) navigateTo(panel, drive.parentId); } } }, [ m('span.sidebar-icon', m('i', { class: 'fa-solid fa-hard-drive' })), m('span.sidebar-label', drive.name), m('span.sidebar-size', drive.used + '/' + drive.total + ' GB') ])) ]),
+                m('.sidebar-section', { key: 'storage', style: 'margin-top:auto; padding-top:12px; border-top: 1px solid var(--border);' }, [ m('.sidebar-title', 'Storage'), m('div', { style: 'padding: 0 2px;' }, storageItems) ]),
+            ]);
+        }
+    };
+
+    function isActiveSidebarItem(parentId) { const tab = getActiveTab(); if (!tab) return false; return tab.panels.some(p => p.parentId === parentId); }
+
+    const FilePanel = {
+        view({ attrs }) {
+            const panel = attrs.panel; const panelIdx = attrs.panelIdx || 0;
+            const letters = ['A', 'B', 'C', 'D']; const letter = letters[panelIdx] || letters[0];
+            const panelBreadVnodes = [];
+            if (panel.currentPath) { panel.currentPath.forEach((seg, i) => { if (i > 0) panelBreadVnodes.push(m('span.sep', { key: 'sep-' + i }, '/')); panelBreadVnodes.push(m('span', { key: 'seg-' + seg.id, onclick: () => navigateTo(panel, seg.id) }, seg.name)); }); }
+
+            return m('.file-panel', { onclick: () => { const tab = getActiveTab(); if (tab) tab._activePanelIdx = panelIdx; } }, [
+                m('.file-panel-header', [ m('.panel-letter', letter), m('.panel-breadcrumb', panelBreadVnodes), m('span', { style: 'font-size:10px; color: var(--text-muted);' }, panel.files.length + ' items') ]),
+                m('.file-grid-area', { key: panel.parentId + '-' + state.viewMode }, renderFileView(panel, state.viewMode)),
+            ]);
+        }
+    };
+
+    function renderFileView(panel, viewMode) { if (!panel.files || panel.files.length === 0) return m('.empty-state', [ m('i', { class: 'fa-solid fa-folder-open' }), m('span', 'This folder is empty') ]); if (viewMode === 'detail') return renderDetailView(panel); if (viewMode === 'large-icons') return renderLargeIconsView(panel); if (viewMode === 'medium-icons') return renderMediumIconsView(panel); if (viewMode === 'small-icons') return renderSmallIconsView(panel); return renderDetailView(panel); }
+
+    function renderDetailView(panel) {
+        return [ m('.detail-header', [ m('span', 'Name'), m('span', 'Size'), m('span', 'Type'), m('span', 'Modified') ]),
+            panel.files.map(file => { const cat = getFileCategory(file.type); const isSelected = panel.selectedId === file.id; return m('.detail-row' + (isSelected ? '.selected' : ''), { key: file.id, onclick: (e) => { e.stopPropagation(); panel.selectedId = file.id; state.previewFile = file; openPreview(); }, ondblclick: (e) => { e.stopPropagation(); if (file.type === 'folder') navigateTo(panel, file.id); } }, [ m('.name-cell', [ m('i', { class: getFileIcon(file.type) + ' ft-' + cat, style: 'font-size:14px; width:18px; text-align:center;' }), m('span', file.name) ]), m('.size-cell', formatSize(file.size)), m('.type-cell', getTypeLabel(file)), m('.date-cell', formatDate(file.modified)) ]); }) ];
+    }
+    function renderLargeIconsView(panel) { return m('.icons-large-grid', panel.files.map(file => { const cat = getFileCategory(file.type); const isSelected = panel.selectedId === file.id; return m('.icon-large-item' + (isSelected ? '.selected' : ''), { key: file.id, onclick: (e) => { e.stopPropagation(); panel.selectedId = file.id; state.previewFile = file; openPreview(); }, ondblclick: (e) => { e.stopPropagation(); if (file.type === 'folder') navigateTo(panel, file.id); } }, [ m('.icon-img.ft-bg-' + cat, [ m('i', { class: getFileIcon(file.type) + ' ft-' + cat }) ]), m('.icon-label', file.name) ]); })); }
+    function renderMediumIconsView(panel) { return m('.icons-medium-grid', panel.files.map(file => { const cat = getFileCategory(file.type); const isSelected = panel.selectedId === file.id; return m('.icon-medium-item' + (isSelected ? '.selected' : ''), { key: file.id, onclick: (e) => { e.stopPropagation(); panel.selectedId = file.id; state.previewFile = file; openPreview(); }, ondblclick: (e) => { e.stopPropagation(); if (file.type === 'folder') navigateTo(panel, file.id); } }, [ m('.icon-img.ft-bg-' + cat, [ m('i', { class: getFileIcon(file.type) + ' ft-' + cat }) ]), m('.icon-label', file.name) ]); })); }
+    function renderSmallIconsView(panel) { return m('.icons-small-grid', panel.files.map(file => { const cat = getFileCategory(file.type); const isSelected = panel.selectedId === file.id; return m('.icon-small-item' + (isSelected ? '.selected' : ''), { key: file.id, onclick: (e) => { e.stopPropagation(); panel.selectedId = file.id; state.previewFile = file; openPreview(); }, ondblclick: (e) => { e.stopPropagation(); if (file.type === 'folder') navigateTo(panel, file.id); } }, [ m('.icon-img.ft-bg-' + cat, [ m('i', { class: getFileIcon(file.type) + ' ft-' + cat }) ]), m('.icon-label', file.name) ]); })); }
+
+    function openPreview() { const pp = document.querySelector('.preview-panel'); if (pp && !pp.classList.contains('open')) pp.classList.add('open'); }
+
+    const PreviewPanel = {
+        view() {
+            const file = state.previewFile; if (!file) return m('.preview-panel');
+            const cat = getFileCategory(file.type); const content = getPreviewContent(file);
+            const infoRows = [ m('.preview-info-row', { key: 'type' }, [ m('span.label', 'Type'), m('span.value', getTypeLabel(file)) ]), m('.preview-info-row', { key: 'size' }, [ m('span.label', 'Size'), m('span.value', formatSize(file.size)) ]), m('.preview-info-row', { key: 'modified' }, [ m('span.label', 'Modified'), m('span.value', formatDate(file.modified)) ]) ];
+            if (file.tags && file.tags.length > 0) infoRows.push(m('.preview-info-row', { key: 'tags' }, [ m('span.label', 'Tags'), m('span.value', file.tags.join(', ')) ]));
+            return m('.preview-panel.open', [
+                m('.preview-header', [ m('span', 'Preview'), m('.preview-close', { onclick: () => { state.previewFile = null; const pp = document.querySelector('.preview-panel'); if (pp) pp.classList.remove('open'); } }, m('i', { class: 'fa-solid fa-xmark' })) ]),
+                m('.preview-body', [
+                    m('.preview-icon-area', { key: 'icon' }, [ m('i', { class: getFileIcon(file.type) + ' ft-' + cat }) ]),
+                    m('div', { key: 'name', style: 'font-weight:600; font-size:14px; margin-bottom:12px; word-break:break-word; line-height:1.4;' }, file.name),
+                    infoRows,
+                    content ? m('div', { key: 'content-preview' }, [ m('div', { style: 'font-size: 11px; font-weight: 600; color: var(--text-muted); margin-top: 12px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;' }, 'Content Preview'), m('.preview-content-area', content) ]) : null,
+                    file.type === 'folder' ? m('div', { key: 'folder-hint', style: 'margin-top:12px; padding:10px; background:var(--bg-surface); border-radius:6px; font-size:12px; color:var(--text-secondary); text-align:center;' }, 'Double-click to open folder') : null,
+                ]),
+            ]);
+        }
+    };
+
+    const StatusBar = {
+        view() {
+            const tab = getActiveTab(); const panel = tab ? getActivePanel(tab) : null;
+            const fileCount = panel ? panel.files.length : 0; const selectedCount = panel && panel.selectedId ? 1 : 0;
+            const totalSize = panel ? panel.files.reduce((s, f) => s + (f.size || 0), 0) : 0;
+            const currentView = viewConfigs[state.viewMode]; const currentSplit = splitConfigs[state.splitMode];
+            return m('.status-bar', [
+                m('.status-left', [ m('span', { key: 'count' }, fileCount + ' items'), selectedCount > 0 ? m('span', { key: 'selected' }, selectedCount + ' selected') : null, m('span', { key: 'size' }, 'Total: ' + formatSize(totalSize)) ]),
+                m('.status-right', [ m('span', { key: 'db' }, [ m('span.status-dot'), 'Dexie.js Active' ]), m('span', { key: 'mode' }, currentSplit.label + ' / ' + currentView.label) ]),
+            ]);
+        }
+    };
+
+    /* FIX: Build panel children as a flat array where EVERY element has a key, no nested arrays */
+    const MainLayout = {
+        view() {
+            const tab = getActiveTab();
+            if (!tab || !state.dataReady) return m('.main-layout', { style: 'display:flex; align-items:center; justify-content:center;' }, m('.empty-state', [ m('i', { class: 'fa-solid fa-spinner fa-spin', style: 'font-size:24px;' }), m('span', 'Loading files...') ]));
+
+            const panelChildren = [];
+            tab.panels.forEach((panel, idx) => {
+                if (idx > 0) panelChildren.push(m('.split-handle', { key: 'handle-' + idx, onmousedown: startResize }));
+                panelChildren.push(m(FilePanel, { key: 'panel-' + idx, panel: panel, panelIdx: idx, isActive: (tab._activePanelIdx || 0) === idx }));
+            });
+
+            return m('.main-layout', [
+                m(Sidebar, { key: 'sidebar' }),
+                m('.file-panels-container', { key: 'panels-container' }, panelChildren),
+                m(PreviewPanel, { key: 'preview' }),
+            ]);
+        }
+    };
+
+    let resizing = false, resizeStartX = 0, resizeStartWidths = [], resizePanelIndices = [];
+    function startResize(e) { resizing = true; resizeStartX = e.clientX; const handle = e.target.closest('.split-handle'); if (!handle) return; const container = handle.parentElement; const allPanels = Array.from(container.querySelectorAll('.file-panel')); const allHandles = Array.from(container.querySelectorAll('.split-handle')); const handleIdx = allHandles.indexOf(handle); resizePanelIndices = [handleIdx, handleIdx + 1]; resizeStartWidths = resizePanelIndices.map(i => allPanels[i].offsetWidth); document.addEventListener('mousemove', onResize); document.addEventListener('mouseup', stopResize); document.body.style.cursor = 'col-resize'; e.preventDefault(); }
+    function onResize(e) { if (!resizing) return; const dx = e.clientX - resizeStartX; const container = document.querySelector('.file-panels-container'); const allPanels = Array.from(container.querySelectorAll('.file-panel')); const allHandles = Array.from(container.querySelectorAll('.split-handle')); const totalHandleWidth = allHandles.reduce((s, h) => s + h.offsetWidth, 0); const totalPanelWidth = container.offsetWidth - totalHandleWidth; if (resizePanelIndices.length === 2) { const leftIdx = resizePanelIndices[0]; const rightIdx = resizePanelIndices[1]; const minW = 150; const newLeft = Math.max(minW, Math.min(totalPanelWidth - minW, resizeStartWidths[0] + dx)); const newRight = totalPanelWidth - newLeft; allPanels[leftIdx].style.flex = 'none'; allPanels[leftIdx].style.width = newLeft + 'px'; allPanels[rightIdx].style.flex = 'none'; allPanels[rightIdx].style.width = newRight + 'px'; } }
+    function stopResize() { resizing = false; document.removeEventListener('mousemove', onResize); document.removeEventListener('mouseup', stopResize); document.body.style.cursor = ''; }
+
+    document.addEventListener('click', () => { if (state.viewMenuOpen) { state.viewMenuOpen = false; m.redraw(); } });
+
+    const App = {
+        oninit() { seedDatabase().then(() => { createTab(0); return initActiveTab(); }).then(() => { state.dataReady = true; m.redraw(); }); },
+        view() { return m('div', { style: 'height:100vh; display:flex; flex-direction:column;' }, [ m(TabBar, { key: 'tabbar' }), m(Toolbar, { key: 'toolbar' }), m(MainLayout, { key: 'mainlayout' }), m(StatusBar, { key: 'statusbar' }) ]); }
+    };
+
+    m.mount(document.getElementById('app'), App);
+    </script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+dist
+wailsjs
+node_modules
+coverage
+ui-example

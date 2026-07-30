@@ -1,0 +1,142 @@
+/*
+ * Vault theme — ported from frontend/ui-example/index.html :root block.
+ *
+ * Every colour the UI uses is declared here in both themes. Components must
+ * reference these variables (or the Tailwind tokens mapped from them in
+ * global.css) and never hard-code a hex value, so the light theme stays real.
+ *
+ * Theme selection: [data-theme="dark"|"light"] on <html>. The settings store
+ * writes that attribute; "system" resolves via prefers-color-scheme below.
+ */
+
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Surfaces, from deepest to most elevated */
+  --bg-deep: #0e0e12;
+  --bg-base: #141419;
+  --bg-surface: #1a1a22;
+  --bg-elevated: #22222e;
+  --bg-hover: #2a2a38;
+  --bg-active: #32324a;
+
+  --border: #2c2c3c;
+  --border-subtle: rgba(44, 44, 60, 0.4);
+  --border-focus: #e8a830;
+
+  --text-primary: #e2e2ea;
+  --text-secondary: #8a8a9e;
+  --text-muted: #5a5a72;
+
+  --accent: #e8a830;
+  --accent-dim: #c48820;
+  --accent-glow: rgba(232, 168, 48, 0.12);
+
+  --danger: #e84848;
+  --success: #38c868;
+  --info: #48a8e8;
+
+  /* File-type categories — see utils/fileCategory.ts */
+  --ft-folder: #e8a830;
+  --ft-image: #e86898;
+  --ft-document: #4898e8;
+  --ft-code: #38c868;
+  --ft-music: #c848e8;
+  --ft-video: #e85848;
+  --ft-archive: #e89848;
+  --ft-data: #48c8c8;
+  --ft-default: var(--text-muted);
+
+  --ft-bg-folder: rgba(232, 168, 48, 0.12);
+  --ft-bg-image: rgba(232, 104, 152, 0.12);
+  --ft-bg-document: rgba(72, 152, 232, 0.12);
+  --ft-bg-code: rgba(56, 200, 104, 0.12);
+  --ft-bg-music: rgba(200, 72, 232, 0.12);
+  --ft-bg-video: rgba(232, 88, 72, 0.12);
+  --ft-bg-archive: rgba(232, 152, 72, 0.12);
+  --ft-bg-data: rgba(72, 200, 200, 0.12);
+  --ft-bg-default: rgba(90, 90, 114, 0.12);
+
+  --shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --grid-dot: rgba(255, 255, 255, 0.015);
+}
+
+/*
+ * Light theme — stubbed in M0 so no component can hard-code a dark value.
+ * Tuned properly in M12; the accent stays amber for brand continuity.
+ */
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-deep: #e8e8ec;
+  --bg-base: #f4f4f6;
+  --bg-surface: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-hover: #eaeaef;
+  --bg-active: #dcdce6;
+
+  --border: #d8d8e0;
+  --border-subtle: rgba(216, 216, 224, 0.6);
+  --border-focus: #c48820;
+
+  --text-primary: #1a1a22;
+  --text-secondary: #5a5a72;
+  --text-muted: #8a8a9e;
+
+  --accent: #b8781c;
+  --accent-dim: #9a6415;
+  --accent-glow: rgba(184, 120, 28, 0.14);
+
+  --danger: #c62828;
+  --success: #1f8a48;
+  --info: #1a72b8;
+
+  --ft-folder: #b8781c;
+  --ft-image: #c2447a;
+  --ft-document: #1a72b8;
+  --ft-code: #1f8a48;
+  --ft-music: #9a2fb8;
+  --ft-video: #c23a2c;
+  --ft-archive: #b8701c;
+  --ft-data: #1f9a9a;
+  --ft-default: var(--text-muted);
+
+  --ft-bg-folder: rgba(184, 120, 28, 0.12);
+  --ft-bg-image: rgba(194, 68, 122, 0.12);
+  --ft-bg-document: rgba(26, 114, 184, 0.12);
+  --ft-bg-code: rgba(31, 138, 72, 0.12);
+  --ft-bg-music: rgba(154, 47, 184, 0.12);
+  --ft-bg-video: rgba(194, 58, 44, 0.12);
+  --ft-bg-archive: rgba(184, 112, 28, 0.12);
+  --ft-bg-data: rgba(31, 154, 154, 0.12);
+  --ft-bg-default: rgba(138, 138, 158, 0.14);
+
+  --shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.14);
+  --grid-dot: rgba(0, 0, 0, 0.03);
+}
+
+/* "System" setting: no explicit data-theme attribute set by the user. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+
+    --bg-deep: #e8e8ec;
+    --bg-base: #f4f4f6;
+    --bg-surface: #ffffff;
+    --bg-elevated: #ffffff;
+    --bg-hover: #eaeaef;
+    --bg-active: #dcdce6;
+    --border: #d8d8e0;
+    --border-subtle: rgba(216, 216, 224, 0.6);
+    --border-focus: #c48820;
+    --text-primary: #1a1a22;
+    --text-secondary: #5a5a72;
+    --text-muted: #8a8a9e;
+    --accent: #b8781c;
+    --accent-dim: #9a6415;
+    --accent-glow: rgba(184, 120, 28, 0.14);
+    --shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.14);
+    --grid-dot: rgba(0, 0, 0, 0.03);
+  }
+}
