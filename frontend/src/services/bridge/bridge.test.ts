@@ -47,11 +47,22 @@ describe('fs.readDirectory', () => {
   })
 
   it('raises a typed error for a missing path', async () => {
-    const items = await bridge.fs.readDirectory('/nope/nowhere')
-    expect(items).toEqual([])
+    // Not an empty listing: a folder that is gone and a folder with nothing in
+    // it are different, and only the first should put a pane into its error
+    // state. The Go backend reports not-found here too.
+    await expect(bridge.fs.readDirectory('/nope/nowhere')).rejects.toSatisfy(
+      (error: unknown) => isFsError(error) && error.code === 'not-found',
+    )
 
     await expect(bridge.fs.readFileInfo('/nope/nowhere')).rejects.toSatisfy(
       (error: unknown) => isFsError(error) && error.code === 'not-found',
+    )
+  })
+
+  it('refuses to list a file as though it were a folder', async () => {
+    const file = await bridge.fs.createFile(scratch, 'notes.txt')
+    await expect(bridge.fs.readDirectory(file.path)).rejects.toSatisfy(
+      (error: unknown) => isFsError(error) && error.code === 'not-a-directory',
     )
   })
 })
@@ -152,17 +163,33 @@ describe('watcher', () => {
   it('notifies subscribers about changes in watched directories only', async () => {
     const events: string[] = []
     const unsubscribe = bridge.watcher.subscribe((event) =>
-      events.push(`${event.type}:${event.path}`),
+      events.push(`${event.kinds.join('+')}:${event.dir}:${event.paths.join(',')}`),
     )
 
     await bridge.watcher.watch(scratch)
     const created = await bridge.fs.createFile(scratch, 'watched.txt')
-    expect(events).toContain(`create:${created.path}`)
+    expect(events).toContain(`create:${scratch}:${created.path}`)
 
     await bridge.watcher.unwatch(scratch)
     await bridge.fs.createFile(scratch, 'unwatched.txt')
-    expect(events).not.toContain(`create:${scratch}/unwatched.txt`)
+    expect(events.some((entry) => entry.includes('unwatched.txt'))).toBe(false)
 
+    unsubscribe()
+  })
+
+  // A pane showing a folder that disappears needs to know it disappeared, not
+  // merely that "something changed" in it.
+  it('reports the watched directory itself going away', async () => {
+    const doomed = await bridge.fs.createFolder(scratch, 'Doomed')
+    const events: { dir: string; gone: boolean }[] = []
+    const unsubscribe = bridge.watcher.subscribe((event) =>
+      events.push({ dir: event.dir, gone: event.gone }),
+    )
+
+    await bridge.watcher.watch(doomed.path)
+    await bridge.fs.delete([doomed.path])
+
+    expect(events).toContainEqual({ dir: doomed.path, gone: true })
     unsubscribe()
   })
 })

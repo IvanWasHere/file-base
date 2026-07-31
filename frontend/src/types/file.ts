@@ -98,10 +98,24 @@ export interface TrashedItem {
   trashPath: string
 }
 
-/** Emitted by the Go watcher; consumed by the React Query invalidator (M7). */
+export type FileChangeKind = 'create' | 'write' | 'remove' | 'rename' | 'chmod'
+
+/**
+ * A coalesced batch of changes in one directory, emitted by the Go watcher and
+ * consumed by the React Query invalidator.
+ *
+ * Directory-level rather than per-file on purpose: the backend collapses a burst
+ * — an archive extracting, a build writing output — into a single batch per
+ * quiet window, because the frontend invalidates by directory and one event per
+ * syscall would be thousands of refetches for one user action.
+ */
 export interface FileSystemEvent {
-  type: 'create' | 'write' | 'remove' | 'rename' | 'chmod'
-  path: string
-  /** Directory the change occurred in — the React Query key to invalidate. */
+  /** The directory whose contents changed — the query key to invalidate. */
   dir: string
+  /** The distinct operations seen in this window. */
+  kinds: FileChangeKind[]
+  /** Entries seen changing. Capped by the backend; diagnostic, not exhaustive. */
+  paths: string[]
+  /** `dir` itself was removed or renamed away. */
+  gone: boolean
 }

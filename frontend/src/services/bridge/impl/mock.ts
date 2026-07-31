@@ -13,6 +13,7 @@ import type { Bridge } from '../types'
 import { mockDb } from './mockDb'
 import type {
   ConflictPolicy,
+  FileChangeKind,
   FileItem,
   FileSystemEvent,
   OperationResult,
@@ -174,10 +175,25 @@ export function __resetMockFilesystem(): void {
   watched.clear()
 }
 
-function emit(type: FileSystemEvent['type'], path: string): void {
+/**
+ * Mirrors the backend: an event is reported for the watched *directory*, and
+ * removing a watched directory itself is reported as `gone`.
+ *
+ * Not coalesced — batching is a backend concern, and a mock that delayed events
+ * would make every test that asserts on one wait for a timer.
+ */
+function emit(kind: FileChangeKind, path: string): void {
+  if (watched.has(path) && kind === 'remove') {
+    deliver({ dir: path, kinds: [kind], paths: [path], gone: true })
+    return
+  }
   const dir = dirname(path)
   if (!watched.has(dir)) return
-  for (const listener of listeners) listener({ type, path, dir })
+  deliver({ dir, kinds: [kind], paths: [path], gone: false })
+}
+
+function deliver(event: FileSystemEvent): void {
+  for (const listener of listeners) listener(event)
 }
 
 function toFileItem(node: Node): FileItem {
@@ -370,12 +386,19 @@ function remove(paths: string[]): void {
 
 export const bridge: Bridge = {
   fs: {
-    readDirectory: (path, options) =>
-      Promise.resolve(
-        childrenOf(path)
-          .map(toFileItem)
-          .filter((item) => options?.includeHidden || !item.hidden),
-      ),
+    // Async so the not-found throw becomes a rejection. Reading a missing
+    // directory is an error, not an empty folder — the backend reports
+    // not-found, and a mock that returned [] made a deleted folder look merely
+    // empty, hiding the whole error path from tests and browser dev.
+    readDirectory: async (path, options) => {
+      const node = requireNode(path)
+      if (!node.isDirectory) {
+        throw new FsError('not-a-directory', `${basename(node.path)} is not a folder`, node.path)
+      }
+      return childrenOf(node.path)
+        .map(toFileItem)
+        .filter((item) => options?.includeHidden || !item.hidden)
+    },
     // `async` throughout below: these can fail, and an async method turns a
     // throw into a rejection. A synchronous throw from a Promise-returning API
     // would bypass every `.catch()` in the app.

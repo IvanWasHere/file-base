@@ -248,8 +248,23 @@ Notes from the build:
 
 Verified in the running app: New Folder → inline rename → Cmd+D duplicate (`alpha copy.txt`) → Backspace to trash → Cmd+Z restore; a colliding rename raising the error toast with both files intact; and the conflict dialog resolving keep-both to `alpha copy 2.txt`.
 
-### M7 — File watching
-`fsnotify` in Go with per-path debounce, emitting `fs:change`; TS subscriber invalidates the matching React Query keys; watch lifecycle tied to visible pane paths (watch on mount, unwatch on last consumer).
+### M7 — File watching ✅ complete
+`backend/watcher` on `fsnotify`, coalescing per directory and emitting `fs:change`; a reference-counted watch registry and the invalidating subscriber in `services/filesystem/watch.ts`; the watch hangs off `useDirectory`, so every consumer is counted automatically.
+
+Notes from the build:
+
+- **Coalescing is per directory, not per event, and that reshaped the contract.** `FileSystemEvent` was `{type, path, dir}`; it is now `{dir, kinds[], paths[], gone}`. The frontend invalidates by directory, so a batch is the honest unit — 500 files created in a watched folder produced **3** invalidations in the running app, and 200 writes coalesce to 1 in the Go tests.
+- **Debounce alone would starve.** A pure quiet-window never fires for a directory being written continuously, so a batch also flushes at `maxWait` (750ms). That is why a sustained burst yields a few batches rather than one.
+- **The path list is capped at 64.** It is diagnostic — invalidation keys off `dir` — and an unbounded list would let a 100k-file extraction build a 100k-element payload for nothing.
+- **`gone` is separate from "something changed".** fsnotify reports removal of the watched directory itself; the pane showing it needs to enter its error state, not refetch an empty listing.
+- **kqueue costs a file descriptor per entry in a watched directory.** That is fsnotify's macOS backend, so watching `/usr/lib` would exhaust the process and start failing unrelated syscalls. The soft descriptor limit is raised toward the hard one at startup, and directories over 4096 entries are declined outright — they simply have no live updates, and Refresh still works. Watch failures are logged, never surfaced: watching is an optimisation, and a folder the backend won't watch must still be browsable.
+- **Reference counting lives in TS, not Go.** One pane already reads its directory three times (listing, preview, status bar) and two split panes on one folder make six; the backend takes idempotent `Watch`/`Unwatch` primitives and knows nothing about panes. The release guard matters — React invokes cleanups twice under StrictMode, and a double decrement would drop a watch another pane still needs.
+- **M6's manual invalidation stays.** The watcher only covers directories currently on screen, and a watch can be declined; a copy into an unwatched destination would otherwise never refresh. The cost is a second read of an on-screen directory after an operation the app performed itself.
+- **`Start`/`Stop` are package-level functions**, following `backend/db`: Wails binds every exported method, and lifecycle control has no business being callable from JavaScript.
+- **Bug found by the acceptance test: the mock reported a missing directory as empty.** Real Go returns `not-found`; the mock's `readDirectory` returned `[]`. A deleted folder therefore looked merely empty, which hid the entire error path from tests and from browser dev. The mock now mirrors the backend, including `not-a-directory` for a file.
+- **Bug found in the running app: stale counts beside an error.** Deleting a watched folder left the pane header and status bar reading "803 items" next to "This item no longer exists" — React Query keeps the last successful data alongside the error. `useDirectory` now reports no items when the read failed, which is what the pane already renders.
+
+Verified in the running app with changes made entirely from the shell: files and folders appearing and disappearing with no user action, 500 creations coalescing to 3 invalidations, and the watched directory being deleted putting the pane into its error state.
 
 ### M8 — Search
 Current-directory filter (debounced, instant); recursive search via a streaming Go walk with cancellation; FTS5-backed instant search for indexed roots; filename/extension/size/date filters; hidden-files toggle; results rendered in the pane with a "searching in…" header.

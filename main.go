@@ -7,6 +7,7 @@ import (
 	"file-base/backend/db"
 	"file-base/backend/filesystem"
 	"file-base/backend/shell"
+	"file-base/backend/watcher"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -21,6 +22,9 @@ func main() {
 	app := NewApp()
 	database := db.New()
 	defer func() { _ = db.Close(database) }()
+
+	watch := watcher.New()
+	defer func() { _ = watcher.Stop(watch) }()
 
 	err := wails.Run(&options.App{
 		Title:     "Files",
@@ -65,15 +69,22 @@ func main() {
 			if err := db.Open(database); err != nil {
 				println("database unavailable:", err.Error())
 			}
+			// The watcher needs the runtime context to emit events. Failing to
+			// start costs live updates, not the application: Refresh and every
+			// operation still re-read the disk.
+			if err := watcher.Start(watch, ctx); err != nil {
+				println("watcher unavailable:", err.Error())
+			}
 		},
 		// Each package binds separately so the generated TypeScript bindings stay
 		// namespaced (wailsjs/go/filesystem/FS, wailsjs/go/db/DB).
-		// dialogs binds in M6, watcher in M7, thumbs in M10.
+		// dialogs binds with its first consumer, thumbs in M10.
 		Bind: []interface{}{
 			app,
 			filesystem.New(),
 			shell.New(),
 			database,
+			watch,
 		},
 	})
 

@@ -4,6 +4,7 @@ import { afterEach, beforeEach } from 'vitest'
 import { __resetMockFilesystem } from '@/services/bridge/impl/mock'
 import { resetMockDatabase } from '@/services/bridge/impl/mockDb'
 import { __resetFolderPrefsCache } from '@/services/db/persistence'
+import { __resetWatchCounts } from '@/services/filesystem/watch'
 
 /**
  * jsdom reports every element as 0×0 and has no ResizeObserver. Virtualized
@@ -46,6 +47,9 @@ beforeEach(() => {
   resetMockDatabase()
   __resetMockFilesystem()
   __resetFolderPrefsCache()
+  // Watch reference counts are module state too: a count left behind by an
+  // unmounted pane would stop the next test's first acquire from watching.
+  __resetWatchCounts()
 
   globalThis.ResizeObserver = ResizeObserverStub
 

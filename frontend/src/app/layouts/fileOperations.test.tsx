@@ -7,10 +7,11 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ExplorerLayout } from './ExplorerLayout'
 import { createQueryClient } from '@/app/providers/queryClient'
 import { bridge } from '@/services/bridge'
+import { __watchCount } from '@/services/filesystem/watch'
 import { useClipboardStore } from '@/stores/clipboardStore'
 import { useHistoryStore } from '@/stores/historyStore'
 import { useSelectionStore } from '@/stores/selectionStore'
@@ -330,6 +331,75 @@ describe('trash, delete and undo', () => {
     await waitFor(async () =>
       expect(await bridge.fs.exists(`${DOCUMENTS}/Work/Contract Draft.pdf`)).toBe(true),
     )
+  })
+})
+
+// M7 acceptance: the pane reacts to changes it did not initiate.
+describe('live updates', () => {
+  it('shows a file created behind the app’s back', async () => {
+    const { user } = renderApp()
+    await goToDocuments(user)
+    expect(screen.queryByRole('row', { name: /^appeared/ })).toBeNull()
+
+    // Nothing in the UI did this — it is the watcher that has to notice.
+    await bridge.fs.createFile(DOCUMENTS, 'appeared.txt')
+
+    expect(await rowFor('appeared\\.txt')).toBeInTheDocument()
+  })
+
+  it('drops a row for a file removed behind the app’s back', async () => {
+    const { user } = renderApp()
+    await goToDocuments(user)
+    await rowFor('Resume\\.pdf')
+
+    await bridge.fs.delete([`${DOCUMENTS}/Resume.pdf`])
+
+    await waitFor(() => expect(screen.queryByRole('row', { name: /^Resume/ })).toBeNull())
+  })
+
+  // Two panes on one folder share a single watch and a single refetch; both
+  // must still see the change.
+  it('updates every pane showing the changed folder', async () => {
+    const { user } = renderApp()
+    await goToDocuments(user)
+    await user.click(screen.getByRole('button', { name: 'Two panes' }))
+
+    // A new pane opens on the active pane's folder, so both are on Documents.
+    const paneA = await screen.findByRole('region', { name: 'Pane A' })
+    const paneB = await screen.findByRole('region', { name: 'Pane B' })
+    await within(paneA).findByRole('row', { name: /^Resume/ })
+    await within(paneB).findByRole('row', { name: /^Resume/ })
+
+    await bridge.fs.createFile(DOCUMENTS, 'appeared.txt')
+
+    expect(await within(paneA).findByRole('row', { name: /^appeared/ })).toBeInTheDocument()
+    expect(await within(paneB).findByRole('row', { name: /^appeared/ })).toBeInTheDocument()
+  })
+
+  it('shows an error, and stops counting rows, when the folder itself is deleted', async () => {
+    const { user } = renderApp()
+    await goToDocuments(user)
+    await rowFor('Resume\\.pdf')
+
+    await bridge.fs.delete([DOCUMENTS])
+
+    expect(await screen.findByText('This item no longer exists.')).toBeInTheDocument()
+    // The stale listing is still in the query cache; reporting its length beside
+    // "no longer exists" would be counting rows nobody can see.
+    await waitFor(() => expect(screen.getAllByText('0 items').length).toBeGreaterThan(0))
+  })
+
+  it('stops watching a folder once no pane is showing it', async () => {
+    const unwatch = vi.spyOn(bridge.watcher, 'unwatch')
+    const { user } = renderApp()
+    await goToDocuments(user)
+    expect(__watchCount(DOCUMENTS)).toBeGreaterThan(0)
+
+    await user.click(screen.getByRole('button', { name: 'Up' }))
+    await rowFor('Downloads')
+
+    await waitFor(() => expect(__watchCount(DOCUMENTS)).toBe(0))
+    expect(unwatch).toHaveBeenCalledWith(DOCUMENTS)
   })
 })
 

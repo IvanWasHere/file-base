@@ -13,7 +13,7 @@
  *     decisions in Go).
  */
 
-import type { FileItem, OperationResult } from '@/types/file'
+import type { FileChangeKind, FileItem, FileSystemEvent, OperationResult } from '@/types/file'
 import type { FsErrorCode } from '@/types/errors'
 import { FsError } from '@/types/errors'
 import { categorize } from '@/utils/fileCategory'
@@ -100,6 +100,36 @@ export function toFileItem(wire: filesystem.FileItem): FileItem {
     category: categorize(extension, wire.isDirectory),
     broken: wire.broken,
   }
+}
+
+/** The Wails event name the watcher emits on; must match backend/watcher. */
+export const watcherEvent = 'fs:change'
+
+const CHANGE_KINDS = new Set<string>(['create', 'write', 'remove', 'rename', 'chmod'])
+
+/**
+ * Validates a watcher payload.
+ *
+ * Unlike a bound method call, an event arrives untyped — Wails hands the
+ * callback whatever was emitted. A malformed payload returns null and is
+ * dropped rather than invalidating `undefined` and refetching the whole cache.
+ */
+export function toFileSystemEvent(payload: unknown): FileSystemEvent | null {
+  if (typeof payload !== 'object' || payload === null) return null
+  const wire = payload as Record<string, unknown>
+
+  if (typeof wire.dir !== 'string' || !wire.dir) return null
+
+  const kinds = Array.isArray(wire.kinds)
+    ? wire.kinds.filter((kind): kind is FileChangeKind =>
+        typeof kind === 'string' && CHANGE_KINDS.has(kind),
+      )
+    : []
+  const paths = Array.isArray(wire.paths)
+    ? wire.paths.filter((path): path is string => typeof path === 'string')
+    : []
+
+  return { dir: wire.dir, kinds, paths, gone: wire.gone === true }
 }
 
 /**

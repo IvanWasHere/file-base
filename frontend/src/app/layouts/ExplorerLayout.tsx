@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { PaneGroup } from '@/features/explorer/PaneGroup'
@@ -14,6 +14,7 @@ import { DirectoryError } from '@/components/common/DirectoryError'
 import { useDirectory } from '@/hooks/useDirectory'
 import { hydrate, startPersistence } from '@/services/db/persistence'
 import { standardPathsQuery } from '@/services/filesystem/queries'
+import { startWatchInvalidation } from '@/services/filesystem/watch'
 import { usePaneSelection } from '@/stores/selectionStore'
 import { useUiStore } from '@/stores/uiStore'
 import { useActivePane, useActiveTab, useWorkspaceStore } from '@/stores/workspaceStore'
@@ -27,6 +28,7 @@ export function ExplorerLayout() {
   const { data: paths, isLoading, error, refetch } = useQuery(standardPathsQuery())
 
   const initialize = useWorkspaceStore((state) => state.initialize)
+  const queryClient = useQueryClient()
   const tab = useActiveTab()
   const pane = useActivePane()
   const sidebarOpen = useUiStore((state) => state.sidebarOpen)
@@ -55,6 +57,11 @@ export function ExplorerLayout() {
 
     return () => stopPersistence?.()
   }, [paths, initialize])
+
+  // Change events are subscribed to once for the whole app, not per pane: the
+  // watcher reports directories, and which panes care is the query cache's
+  // business (PLAN.md §1, rule 2).
+  useEffect(() => startWatchInvalidation(queryClient), [queryClient])
 
   // `!tab` covers hydration too: since M5, startup waits on migrations and the
   // session query, and rendering the chrome around an empty workspace would

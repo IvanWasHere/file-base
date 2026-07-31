@@ -12,7 +12,7 @@
  */
 
 import type { Bridge } from '../types'
-import { guard, toFileItem, toOperationResult } from './decode'
+import { guard, toFileItem, toFileSystemEvent, toOperationResult, watcherEvent } from './decode'
 import {
   Copy,
   CreateFile,
@@ -29,6 +29,8 @@ import {
 } from '../../../../wailsjs/go/filesystem/FS'
 import { OpenFile, OpenWith, RevealInFinder } from '../../../../wailsjs/go/shell/Shell'
 import { Exec, Query, Tx } from '../../../../wailsjs/go/db/DB'
+import { Unwatch, Watch } from '../../../../wailsjs/go/watcher/Watcher'
+import { EventsOn } from '../../../../wailsjs/runtime/runtime'
 
 function notImplemented(method: string, milestone: string): never {
   throw new Error(
@@ -77,9 +79,15 @@ export const bridge: Bridge = {
     delete: (paths) => guard(() => Delete(paths)),
   },
   watcher: {
-    watch: () => notImplemented('watcher.watch', 'M7'),
-    unwatch: () => notImplemented('watcher.unwatch', 'M7'),
-    subscribe: () => notImplemented('watcher.subscribe', 'M7'),
+    watch: (path) => guard(() => Watch(path)),
+    unwatch: (path) => guard(() => Unwatch(path)),
+    // EventsOn already returns its own unsubscribe, which is exactly the
+    // contract the bridge asks for.
+    subscribe: (handler) =>
+      EventsOn(watcherEvent, (payload: unknown) => {
+        const event = toFileSystemEvent(payload)
+        if (event) handler(event)
+      }),
   },
   shell: {
     openFile: (path) => guard(() => OpenFile(path)),
