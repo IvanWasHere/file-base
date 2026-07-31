@@ -1,8 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useQuery } from '@tanstack/react-query'
 import type { MenuCommandId } from '@/constants/menus'
+import { useFileOperations } from '@/hooks/useFileOperations'
 import { bridge } from '@/services/bridge'
 import { fsKeys, standardPathsQuery } from '@/services/filesystem/queries'
+import { useClipboardStore } from '@/stores/clipboardStore'
+import { useHistoryStore } from '@/stores/historyStore'
 import { usePaneSelection, useSelectionStore } from '@/stores/selectionStore'
 import { useUiStore } from '@/stores/uiStore'
 import {
@@ -46,7 +49,13 @@ export function useMenuCommands(): MenuCommandState {
   const ui = useUiStore()
   const selectAll = useSelectionStore((state) => state.selectAll)
   const clearSelection = useSelectionStore((state) => state.clear)
-  const { selected } = usePaneSelection(pane?.id ?? '')
+  const { selected, lead } = usePaneSelection(pane?.id ?? '')
+  const operations = useFileOperations()
+  const clipboardCount = useClipboardStore((state) => state.paths.length)
+  const undoDepth = useHistoryStore((state) => state.entries.length)
+
+  /** The selection as an array — what every file operation acts on. */
+  const targets = [...selected]
 
   const viewModes: Partial<Record<MenuCommandId, ViewMode>> = {
     'view.details': 'details',
@@ -76,18 +85,52 @@ export function useMenuCommands(): MenuCommandState {
     }
 
     switch (id) {
+      case 'file.newFolder':
+        if (pane) void operations.createFolder(pane.path, pane.id)
+        return
+      case 'file.newFile':
+        if (pane) void operations.createFile(pane.path, pane.id)
+        return
       case 'file.newTab':
         openTab(pane?.path ?? paths?.home ?? '/')
         return
       case 'file.closeTab':
         if (tab) closeTab(tab.id)
         return
+      case 'file.rename': {
+        // The lead is the item the keyboard cursor is on, so a multi-selection
+        // renames the one the user was last pointing at.
+        const target = lead ?? targets[0]
+        if (pane && target) ui.beginRename(pane.id, target)
+        return
+      }
+      case 'file.duplicate':
+        void operations.duplicate(targets)
+        return
+      case 'file.moveToTrash':
+        void operations.moveToTrash(targets)
+        return
+      case 'file.delete':
+        void operations.deletePermanently(targets)
+        return
       case 'file.revealInFinder': {
-        const [target] = [...selected]
-        const path = target ?? pane?.path
+        const path = targets[0] ?? pane?.path
         if (path) void bridge.shell.revealInFinder(path).catch(() => undefined)
         return
       }
+
+      case 'edit.undo':
+        void operations.undo()
+        return
+      case 'edit.copy':
+        if (pane) operations.copy(targets, pane.path)
+        return
+      case 'edit.cut':
+        if (pane) operations.cut(targets, pane.path)
+        return
+      case 'edit.paste':
+        if (pane) void operations.paste(pane.path)
+        return
 
       case 'edit.selectAll':
         // The menu has no view of the current listing, so selection falls back
@@ -154,8 +197,24 @@ export function useMenuCommands(): MenuCommandState {
         return canGoForward(pane)
       case 'go.up':
         return canGoUp(pane)
+
+      // Every command that acts on the selection is greyed out without one,
+      // rather than being clickable and silently doing nothing.
       case 'edit.deselectAll':
+      case 'edit.copy':
+      case 'edit.cut':
+      case 'file.rename':
+      case 'file.duplicate':
+      case 'file.moveToTrash':
+      case 'file.delete':
         return selected.size > 0
+      case 'edit.paste':
+        return clipboardCount > 0
+      case 'edit.undo':
+        return undoDepth > 0
+      case 'file.newFolder':
+      case 'file.newFile':
+        return pane !== undefined
       case 'go.home':
       case 'go.documents':
       case 'go.downloads':

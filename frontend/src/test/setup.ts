@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
 import { afterEach, beforeEach } from 'vitest'
+import { __resetMockFilesystem } from '@/services/bridge/impl/mock'
 import { resetMockDatabase } from '@/services/bridge/impl/mockDb'
 import { __resetFolderPrefsCache } from '@/services/db/persistence'
 
@@ -39,9 +40,11 @@ class ResizeObserverStub implements ResizeObserver {
 }
 
 beforeEach(() => {
-  // The mock SQLite database is module-level state, so without this a session
-  // saved by one test would be restored by the next.
+  // The mock SQLite database and filesystem are module-level state, so without
+  // this a session saved — or a folder trashed — by one test would carry into
+  // the next.
   resetMockDatabase()
+  __resetMockFilesystem()
   __resetFolderPrefsCache()
 
   globalThis.ResizeObserver = ResizeObserverStub

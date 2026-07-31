@@ -93,7 +93,9 @@ describe('fs mutations', () => {
     await bridge.fs.createFile(target.path, 'notes.txt')
 
     const result = await bridge.fs.copy([`${source.path}/notes.txt`], target.path, 'keep-both')
-    expect(result.succeeded).toEqual([`${target.path}/notes copy.txt`])
+    expect(result.succeeded).toEqual([
+      { source: `${source.path}/notes.txt`, target: `${target.path}/notes copy.txt` },
+    ])
 
     const listing = await bridge.fs.readDirectory(target.path)
     expect(listing.map((item) => item.name).sort()).toEqual(['notes copy.txt', 'notes.txt'])
@@ -108,6 +110,32 @@ describe('fs mutations', () => {
     const result = await bridge.fs.copy([`${source.path}/same.txt`], target.path, 'fail')
     expect(result.conflicts).toEqual([`${source.path}/same.txt`])
     expect(result.succeeded).toEqual([])
+  })
+
+  it('duplicates in place when copying into the folder an item already lives in', async () => {
+    await bridge.fs.createFile(scratch, 'notes.txt')
+
+    const result = await bridge.fs.copy([`${scratch}/notes.txt`], scratch, 'keep-both')
+    expect(result.succeeded).toEqual([
+      { source: `${scratch}/notes.txt`, target: `${scratch}/notes copy.txt` },
+    ])
+    expect(await bridge.fs.exists(`${scratch}/notes.txt`)).toBe(true)
+  })
+
+  // A name is a name, not a path. Without this the frontend could write outside
+  // the folder the user is looking at by passing "../".
+  it('rejects names that are not a single path component', async () => {
+    for (const name of ['', '   ', '.', '..', '../escape', 'a/b']) {
+      await expect(bridge.fs.createFolder(scratch, name)).rejects.toSatisfy(
+        (error: unknown) => isFsError(error) && error.code === 'invalid-name',
+      )
+    }
+
+    const target = await bridge.fs.createFolder(scratch, 'Target')
+    await expect(bridge.fs.rename(target.path, '../escape')).rejects.toSatisfy(
+      (error: unknown) => isFsError(error) && error.code === 'invalid-name',
+    )
+    expect(await bridge.fs.exists(target.path)).toBe(true)
   })
 
   it('refuses to move a folder into itself', async () => {

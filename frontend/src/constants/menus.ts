@@ -13,10 +13,20 @@
 
 export type MenuCommandId =
   // File
+  | 'file.newFolder'
+  | 'file.newFile'
   | 'file.newTab'
   | 'file.closeTab'
+  | 'file.rename'
+  | 'file.duplicate'
+  | 'file.moveToTrash'
+  | 'file.delete'
   | 'file.revealInFinder'
   // Edit
+  | 'edit.undo'
+  | 'edit.copy'
+  | 'edit.cut'
+  | 'edit.paste'
   | 'edit.selectAll'
   | 'edit.deselectAll'
   // View
@@ -62,8 +72,17 @@ export const APP_MENUS: MenuDefinition[] = [
     id: 'file',
     label: 'File',
     items: [
+      { id: 'file.newFolder', label: 'New Folder' },
+      { id: 'file.newFile', label: 'New File' },
+      { separator: true },
       { id: 'file.newTab', label: 'New Tab' },
       { id: 'file.closeTab', label: 'Close Tab' },
+      { separator: true },
+      { id: 'file.rename', label: 'Rename' },
+      { id: 'file.duplicate', label: 'Duplicate' },
+      { separator: true },
+      { id: 'file.moveToTrash', label: 'Move to Trash' },
+      { id: 'file.delete', label: 'Delete Immediately…' },
       { separator: true },
       { id: 'file.revealInFinder', label: 'Reveal in Finder' },
     ],
@@ -72,6 +91,12 @@ export const APP_MENUS: MenuDefinition[] = [
     id: 'edit',
     label: 'Edit',
     items: [
+      { id: 'edit.undo', label: 'Undo' },
+      { separator: true },
+      { id: 'edit.cut', label: 'Cut' },
+      { id: 'edit.copy', label: 'Copy' },
+      { id: 'edit.paste', label: 'Paste' },
+      { separator: true },
       { id: 'edit.selectAll', label: 'Select All' },
       { id: 'edit.deselectAll', label: 'Deselect All' },
     ],

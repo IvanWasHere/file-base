@@ -32,6 +32,41 @@ interface SelectionState {
   selectAll: (paneId: string, paths: readonly string[]) => void
   clear: (paneId: string) => void
   discardPane: (paneId: string) => void
+
+  /**
+   * Drops paths from every pane's selection, after a trash or delete.
+   *
+   * Pane-agnostic because two panes can show the same folder, and a selection
+   * that outlives its item makes the status bar count rows nobody can see.
+   */
+  forgetPaths: (paths: readonly string[]) => void
+  /** Follows an item through a rename so it stays selected under its new name. */
+  replacePath: (from: string, to: string) => void
+}
+
+/** Rewrites one pane's selection, dropping the entry if nothing changed. */
+function remap(
+  selection: PaneSelection,
+  change: (path: string) => string | null,
+): PaneSelection | null {
+  const selected = new Set<string>()
+  let changed = false
+
+  for (const path of selection.selected) {
+    const next = change(path)
+    if (next === null) {
+      changed = true
+      continue
+    }
+    if (next !== path) changed = true
+    selected.add(next)
+  }
+
+  const anchor = selection.anchor === null ? null : change(selection.anchor)
+  const lead = selection.lead === null ? null : change(selection.lead)
+  if (!changed && anchor === selection.anchor && lead === selection.lead) return null
+
+  return { selected, anchor, lead }
 }
 
 function update(
@@ -102,7 +137,41 @@ export const useSelectionStore = create<SelectionState>()((set) => ({
       delete byPane[paneId]
       return { byPane }
     }),
+
+  forgetPaths: (paths) =>
+    set((state) => {
+      const gone = new Set(paths)
+      return applyRemap(state, (path) => (gone.has(path) ? null : path))
+    }),
+
+  replacePath: (from, to) =>
+    set((state) => applyRemap(state, (path) => (path === from ? to : path))),
 }))
+
+/**
+ * Applies a path remapping to every pane, returning an unchanged `byPane` when
+ * nothing matched — a fresh object would re-render every pane for an operation
+ * that touched none of them.
+ */
+function applyRemap(
+  state: SelectionState,
+  change: (path: string) => string | null,
+): Pick<SelectionState, 'byPane'> {
+  let byPane = state.byPane
+  let mutated = false
+
+  for (const [paneId, selection] of Object.entries(state.byPane)) {
+    const next = remap(selection, change)
+    if (!next) continue
+    if (!mutated) {
+      byPane = { ...state.byPane }
+      mutated = true
+    }
+    byPane[paneId] = next
+  }
+
+  return { byPane }
+}
 
 export function usePaneSelection(paneId: string): PaneSelection {
   return useSelectionStore((state) => state.byPane[paneId] ?? EMPTY)

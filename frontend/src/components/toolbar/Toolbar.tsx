@@ -5,6 +5,7 @@ import {
   Columns2,
   Columns3,
   Eye,
+  FolderPlus,
   Grid2x2,
   RefreshCw,
   Square,
@@ -14,6 +15,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { Breadcrumb } from './Breadcrumb'
 import { ViewMenu } from './ViewMenu'
+import { useFileOperations } from '@/hooks/useFileOperations'
 import {
   canGoBack,
   canGoForward,
@@ -30,9 +32,8 @@ import type { SplitMode } from '@/types/workspace'
 /**
  * The mockup's `.toolbar`, ported.
  *
- * Only controls that actually work are here. New Folder (M6), Search (M8) and
- * Settings arrive with their milestones — a toolbar of dead buttons is worse
- * than a short one.
+ * Only controls that actually work are here. Search (M8) and Settings arrive
+ * with their milestones — a toolbar of dead buttons is worse than a short one.
  */
 
 const SPLIT_OPTIONS: { mode: SplitMode; label: string; icon: typeof Square }[] = [
@@ -90,6 +91,7 @@ export function Toolbar() {
 
   const { isPinned, pin, unpin } = useFavorites()
   const pinned = pane ? isPinned(pane.path) : false
+  const operations = useFileOperations()
 
   if (!tab || !pane) return null
 
@@ -120,6 +122,12 @@ export function Toolbar() {
           // Invalidates every hidden-files variant of this directory at once.
           void queryClient.invalidateQueries({ queryKey: fsKeys.directoryRoot(pane.path) })
         }}
+      />
+
+      <ToolbarButton
+        label="New Folder"
+        icon={FolderPlus}
+        onClick={() => void operations.createFolder(pane.path, pane.id)}
       />
 
       <Breadcrumb path={pane.path} onNavigate={(path) => navigate(pane.id, path)} />

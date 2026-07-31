@@ -11,7 +11,13 @@
 
 import type { Bridge } from '../types'
 import { mockDb } from './mockDb'
-import type { ConflictPolicy, FileItem, FileSystemEvent, OperationResult } from '@/types/file'
+import type {
+  ConflictPolicy,
+  FileItem,
+  FileSystemEvent,
+  OperationResult,
+  TrashedItem,
+} from '@/types/file'
 import { FsError } from '@/types/errors'
 import { categorize } from '@/utils/fileCategory'
 import {
@@ -36,6 +42,7 @@ interface Node {
 }
 
 const HOME = '/Users/dev'
+const TRASH = `${HOME}/.Trash`
 const FIXED_NOW = Date.UTC(2025, 0, 22)
 
 /** [relative path, size in bytes, days before FIXED_NOW]. Size 0 = directory. */
@@ -132,6 +139,7 @@ function buildTree(): Map<string, Node> {
   }
 
   ensureDirectory(HOME, FIXED_NOW)
+  ensureDirectory(TRASH, FIXED_NOW)
   ensureDirectory('/Applications', FIXED_NOW)
   ensureDirectory('/Volumes', FIXED_NOW)
 
@@ -150,9 +158,21 @@ function buildTree(): Map<string, Node> {
   return nodes
 }
 
-const nodes = buildTree()
+let nodes = buildTree()
 const listeners = new Set<(event: FileSystemEvent) => void>()
 const watched = new Set<string>()
+
+/**
+ * Test hook: rebuilds the seed tree.
+ *
+ * The tree is module state, so without this a test that trashed a folder would
+ * hand the next test a filesystem missing it. Called from test/setup.ts.
+ */
+export function __resetMockFilesystem(): void {
+  nodes = buildTree()
+  listeners.clear()
+  watched.clear()
+}
 
 function emit(type: FileSystemEvent['type'], path: string): void {
   const dir = dirname(path)
@@ -204,6 +224,21 @@ function descendantsOf(path: string): Node[] {
     .sort((a, b) => b.path.length - a.path.length)
 }
 
+/**
+ * Mirrors validateName in backend/filesystem/operations.go. Kept in sync
+ * deliberately: a mock that accepts "../escape" would let a test pass against
+ * behaviour the real backend refuses.
+ */
+function assertValidName(name: string, path: string): void {
+  if (!name.trim()) throw new FsError('invalid-name', 'The name cannot be empty', path)
+  if (name === '.' || name === '..') throw new FsError('invalid-name', 'That name is reserved', path)
+  if (name.includes('/')) throw new FsError('invalid-name', 'A name cannot contain "/"', path)
+  if (name.includes('\0')) {
+    throw new FsError('invalid-name', 'A name cannot contain a null character', path)
+  }
+  if (name.length > 255) throw new FsError('invalid-name', 'That name is too long', path)
+}
+
 function transfer(
   sources: string[],
   destDir: string,
@@ -219,25 +254,41 @@ function transfer(
       result.failures.push({ path: source, message: 'Source no longer exists' })
       continue
     }
-    if (mode === 'move' && isAncestor(node.path, destination)) {
-      result.failures.push({ path: source, message: 'Cannot move a folder into itself' })
+    if (node.isDirectory && isAncestor(node.path, destination)) {
+      // Checked for copy as well as move: copying a folder into its own subtree
+      // would grow without terminating.
+      result.failures.push({ path: source, message: 'A folder cannot be moved into itself' })
       continue
     }
 
     const taken = new Set(childrenOf(destination).map((child) => basename(child.path)))
     let name = basename(node.path)
 
+    // Already where it was asked to go. Only keep-both is meaningful here —
+    // that is Duplicate; any other policy would replace the item with itself.
+    if (join(destination, name) === node.path && policy !== 'keep-both') {
+      result.succeeded.push({ source: node.path, target: node.path })
+      continue
+    }
+
     if (taken.has(name)) {
-      if (policy === 'fail') {
-        result.conflicts.push(source)
-        continue
-      }
-      if (policy === 'skip') continue
-      if (policy === 'keep-both') name = nextAvailableName(name, taken)
-      if (policy === 'replace') {
-        const victim = join(destination, name)
-        for (const descendant of descendantsOf(victim)) nodes.delete(descendant.path)
-        nodes.delete(victim)
+      switch (policy) {
+        case 'skip':
+          continue
+        case 'keep-both':
+          name = nextAvailableName(name, taken)
+          break
+        case 'replace': {
+          const victim = join(destination, name)
+          for (const descendant of descendantsOf(victim)) nodes.delete(descendant.path)
+          nodes.delete(victim)
+          break
+        }
+        default:
+          // 'fail', and anything unrecognised. Defaulting an unknown policy to
+          // "ask" rather than "overwrite" keeps a typo from destroying data.
+          result.conflicts.push(source)
+          continue
       }
     }
 
@@ -251,7 +302,7 @@ function transfer(
 
     if (mode === 'move') emit('remove', node.path)
     emit('create', target)
-    result.succeeded.push(target)
+    result.succeeded.push({ source: node.path, target })
   }
 
   return result
@@ -259,6 +310,7 @@ function transfer(
 
 function create(parent: string, name: string, isDirectory: boolean): FileItem {
   const parentPath = normalize(parent)
+  assertValidName(name, parentPath)
   requireNode(parentPath)
   const path = join(parentPath, name)
   if (nodes.has(path)) {
@@ -274,6 +326,37 @@ function create(parent: string, name: string, isDirectory: boolean): FileItem {
   nodes.set(path, node)
   emit('create', path)
   return toFileItem(node)
+}
+
+/** Moves a node and its whole subtree onto a new path prefix. */
+function rekey(node: Node, target: string): Node {
+  for (const descendant of descendantsOf(node.path)) {
+    const rebased = target + descendant.path.slice(node.path.length)
+    nodes.set(rebased, { ...descendant, path: rebased })
+    nodes.delete(descendant.path)
+  }
+  nodes.delete(node.path)
+  const moved: Node = { ...node, path: target }
+  nodes.set(target, moved)
+  return moved
+}
+
+/**
+ * Trash is a move, not a delete — mirroring the backend, so undo has something
+ * to restore from. A mock that discarded the node would make undo untestable.
+ */
+function moveToTrash(paths: string[]): TrashedItem[] {
+  const trashed: TrashedItem[] = []
+  for (const path of paths) {
+    const node = requireNode(path)
+    const taken = new Set(childrenOf(TRASH).map((child) => basename(child.path)))
+    const target = join(TRASH, nextAvailableName(basename(node.path), taken))
+    const original = node.path
+    rekey(node, target)
+    emit('remove', original)
+    trashed.push({ originalPath: original, trashPath: target })
+  }
+  return trashed
 }
 
 function remove(paths: string[]): void {
@@ -338,6 +421,7 @@ export const bridge: Bridge = {
     createFolder: async (parent, name) => create(parent, name, true),
     createFile: async (parent, name) => create(parent, name, false),
     rename: async (path, newName) => {
+      assertValidName(newName, normalize(path))
       const node = requireNode(path)
       const target = join(dirname(node.path), newName)
       if (target === node.path) return toFileItem(node)
@@ -345,21 +429,13 @@ export const bridge: Bridge = {
         throw new FsError('already-exists', `${newName} already exists`, target)
       }
 
-      // Re-key the node and every descendant onto the new prefix.
-      for (const descendant of descendantsOf(node.path)) {
-        const rebased = target + descendant.path.slice(node.path.length)
-        nodes.set(rebased, { ...descendant, path: rebased })
-        nodes.delete(descendant.path)
-      }
-      nodes.delete(node.path)
-      const renamed: Node = { ...node, path: target }
-      nodes.set(target, renamed)
+      const renamed = rekey(node, target)
       emit('rename', target)
       return toFileItem(renamed)
     },
     move: async (sources, destDir, policy) => transfer(sources, destDir, policy, 'move'),
     copy: async (sources, destDir, policy) => transfer(sources, destDir, policy, 'copy'),
-    trash: async (paths) => remove(paths),
+    trash: async (paths) => moveToTrash(paths),
     delete: async (paths) => remove(paths),
   },
   watcher: {

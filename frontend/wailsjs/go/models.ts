@@ -67,6 +67,68 @@ export namespace filesystem {
 	        this.broken = source["broken"];
 	    }
 	}
+	export class OpFailure {
+	    path: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new OpFailure(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.message = source["message"];
+	    }
+	}
+	export class OpMoved {
+	    source: string;
+	    target: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new OpMoved(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source = source["source"];
+	        this.target = source["target"];
+	    }
+	}
+	export class OpResult {
+	    succeeded: OpMoved[];
+	    conflicts: string[];
+	    failures: OpFailure[];
+	
+	    static createFrom(source: any = {}) {
+	        return new OpResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.succeeded = this.convertValues(source["succeeded"], OpMoved);
+	        this.conflicts = source["conflicts"];
+	        this.failures = this.convertValues(source["failures"], OpFailure);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class StandardPaths {
 	    home: string;
 	    desktop: string;
@@ -93,6 +155,20 @@ export namespace filesystem {
 	        this.music = source["music"];
 	        this.pictures = source["pictures"];
 	        this.trash = source["trash"];
+	    }
+	}
+	export class TrashedItem {
+	    originalPath: string;
+	    trashPath: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TrashedItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.originalPath = source["originalPath"];
+	        this.trashPath = source["trashPath"];
 	    }
 	}
 	export class Volume {

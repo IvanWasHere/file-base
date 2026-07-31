@@ -17,6 +17,8 @@ export type FsErrorCode =
   | 'broken-symlink'
   | 'no-space'
   | 'read-only'
+  /** Rejected before touching the disk: empty, "..", or containing a "/". */
+  | 'invalid-name'
   | 'cancelled'
   | 'unknown'
 
@@ -64,6 +66,10 @@ export function describeFsError(error: FsError): string {
       return 'Not enough space on the destination disk.'
     case 'read-only':
       return 'This location is read-only.'
+    case 'invalid-name':
+      // Go's message names the specific problem ("A name cannot contain "/"),
+      // which is more useful than anything generic written here.
+      return error.message || 'That name cannot be used.'
     case 'cancelled':
       return 'Cancelled.'
     case 'unknown':

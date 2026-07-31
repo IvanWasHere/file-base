@@ -33,7 +33,10 @@ const (
 	codeDiskUnavailable   = "disk-unavailable"
 	codeNoSpace           = "no-space"
 	codeReadOnly          = "read-only"
-	codeUnknown           = "unknown"
+	// codeInvalidName covers names Go refuses before touching the disk — empty,
+	// "..", containing a separator — and the paths it refuses to delete at all.
+	codeInvalidName = "invalid-name"
+	codeUnknown     = "unknown"
 )
 
 func wrap(path string, err error) error {

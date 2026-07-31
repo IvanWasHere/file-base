@@ -20,6 +20,7 @@ import type {
   OperationResult,
   ReadDirectoryOptions,
   StandardPaths,
+  TrashedItem,
   Volume,
 } from '@/types/file'
 
@@ -39,7 +40,8 @@ export interface FilesystemApi {
   rename(path: string, newName: string): Promise<FileItem>
   move(sources: string[], destDir: string, policy: ConflictPolicy): Promise<OperationResult>
   copy(sources: string[], destDir: string, policy: ConflictPolicy): Promise<OperationResult>
-  trash(paths: string[]): Promise<void>
+  /** Resolves to where each item landed, which is what undo replays. */
+  trash(paths: string[]): Promise<TrashedItem[]>
   /** Permanent, unrecoverable delete. Always confirmed in the UI first. */
   delete(paths: string[]): Promise<void>
 }

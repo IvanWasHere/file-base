@@ -13,7 +13,7 @@
  *     decisions in Go).
  */
 
-import type { FileItem } from '@/types/file'
+import type { FileItem, OperationResult } from '@/types/file'
 import type { FsErrorCode } from '@/types/errors'
 import { FsError } from '@/types/errors'
 import { categorize } from '@/utils/fileCategory'
@@ -32,6 +32,7 @@ const KNOWN_CODES = new Set<string>([
   'broken-symlink',
   'no-space',
   'read-only',
+  'invalid-name',
   'cancelled',
   'unknown',
 ])
@@ -98,5 +99,27 @@ export function toFileItem(wire: filesystem.FileItem): FileItem {
     mimeType: wire.mimeType,
     category: categorize(extension, wire.isDirectory),
     broken: wire.broken,
+  }
+}
+
+/**
+ * Flattens Go's `OpResult` into a plain `OperationResult`.
+ *
+ * The two are structurally identical, but Wails hands back class instances, and
+ * a Zustand/React Query cache holding class instances compares and serialises
+ * differently from the plain objects the mock bridge returns. The slice
+ * defaults guard the null a nil Go slice would produce.
+ */
+export function toOperationResult(wire: filesystem.OpResult): OperationResult {
+  return {
+    succeeded: (wire.succeeded ?? []).map((moved) => ({
+      source: moved.source,
+      target: moved.target,
+    })),
+    conflicts: wire.conflicts ?? [],
+    failures: (wire.failures ?? []).map((failure) => ({
+      path: failure.path,
+      message: failure.message,
+    })),
   }
 }

@@ -4,6 +4,7 @@ package filesystem
 
 import (
 	"io/fs"
+	"path/filepath"
 	"syscall"
 )
 
@@ -57,4 +58,35 @@ func statVolume(path string) (volumeStat, error) {
 		Removable: stat.Flags&mntRemovable != 0,
 		Browsable: stat.Flags&mntDontBrowse == 0,
 	}, nil
+}
+
+// mountPoint returns the root of the volume containing path — "/" for anything
+// on the boot disk, "/Volumes/Backup" for a file on an external drive.
+//
+// Trash uses it to pick the volume's own trash directory, and Delete uses it to
+// refuse a recursive delete aimed at a mount root. A path that does not exist
+// resolves through its nearest existing ancestor, since a not-yet-created file
+// still belongs to a volume.
+func mountPoint(path string) (string, error) {
+	current := filepath.Clean(path)
+	for {
+		var stat syscall.Statfs_t
+		err := syscall.Statfs(current, &stat)
+		if err == nil {
+			name := make([]byte, 0, len(stat.Mntonname))
+			for _, char := range stat.Mntonname {
+				if char == 0 {
+					break
+				}
+				name = append(name, byte(char))
+			}
+			return string(name), nil
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", err
+		}
+		current = parent
+	}
 }

@@ -5,6 +5,8 @@ import { PaneGroup } from '@/features/explorer/PaneGroup'
 import { PreviewPanel } from '@/features/preview/PreviewPanel'
 import { Sidebar } from '@/components/sidebar/Sidebar'
 import { StatusBar } from '@/components/common/StatusBar'
+import { Toaster } from '@/components/common/Toaster'
+import { DialogHost } from '@/components/dialogs/DialogHost'
 import { MenuBar } from '@/components/toolbar/MenuBar'
 import { TabBar } from '@/components/toolbar/TabBar'
 import { Toolbar } from '@/components/toolbar/Toolbar'
@@ -91,6 +93,9 @@ export function ExplorerLayout() {
       </div>
 
       {tab && pane && <ActiveStatusBar />}
+
+      <Toaster />
+      <DialogHost />
     </div>
   )
 }

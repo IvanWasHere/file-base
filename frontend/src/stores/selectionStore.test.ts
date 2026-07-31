@@ -123,3 +123,52 @@ describe('setSelection', () => {
     expect(selectedPaths()).toEqual(['/c', '/d'])
   })
 })
+
+describe('forgetPaths', () => {
+  it('drops trashed items from every pane at once', () => {
+    store().setSelection(PANE, ['/a', '/b'])
+    store().setSelection('pane-2', ['/b', '/c'])
+
+    store().forgetPaths(['/b'])
+
+    expect(selectedPaths()).toEqual(['/a'])
+    expect(selectedPaths('pane-2')).toEqual(['/c'])
+  })
+
+  it('clears the anchor and lead when they were removed', () => {
+    store().select(PANE, '/a')
+    store().forgetPaths(['/a'])
+
+    expect(selectedPaths()).toEqual([])
+    expect(selectionOf()?.anchor).toBeNull()
+    expect(selectionOf()?.lead).toBeNull()
+  })
+
+  // A new object here would re-render every pane for an operation that touched
+  // none of them.
+  it('leaves the state identical when nothing matched', () => {
+    store().select(PANE, '/a')
+    const before = store().byPane
+
+    store().forgetPaths(['/nowhere'])
+    expect(store().byPane).toBe(before)
+  })
+})
+
+describe('replacePath', () => {
+  it('follows a renamed item so it stays selected', () => {
+    store().select(PANE, '/a')
+    store().replacePath('/a', '/renamed')
+
+    expect(selectedPaths()).toEqual(['/renamed'])
+    expect(selectionOf()?.lead).toBe('/renamed')
+    expect(selectionOf()?.anchor).toBe('/renamed')
+  })
+
+  it('leaves the other members of a multi-selection alone', () => {
+    store().setSelection(PANE, ['/a', '/b'])
+    store().replacePath('/a', '/renamed')
+
+    expect(selectedPaths().sort()).toEqual(['/b', '/renamed'])
+  })
+})

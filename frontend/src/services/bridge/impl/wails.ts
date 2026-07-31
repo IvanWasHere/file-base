@@ -6,18 +6,26 @@
  * this directory and nothing else.
  *
  * Implemented in M1: filesystem reads and shell integration.
- * Still stubbed: mutations (M5/M6), dialogs (M6), watcher (M7), thumbs (M10).
+ * Implemented in M6: filesystem mutations.
+ * Still stubbed: dialogs (M6), watcher (M7), previews and thumbs (M10).
  * Stubs throw a milestone-labelled error rather than silently resolving.
  */
 
 import type { Bridge } from '../types'
-import { guard, toFileItem } from './decode'
+import { guard, toFileItem, toOperationResult } from './decode'
 import {
+  Copy,
+  CreateFile,
+  CreateFolder,
+  Delete,
   Exists,
   ListVolumes,
+  Move,
   ReadDirectory,
   ReadFileInfo,
+  Rename,
   StandardPaths,
+  Trash,
 } from '../../../../wailsjs/go/filesystem/FS'
 import { OpenFile, OpenWith, RevealInFinder } from '../../../../wailsjs/go/shell/Shell'
 import { Exec, Query, Tx } from '../../../../wailsjs/go/db/DB'
@@ -48,13 +56,25 @@ export const bridge: Bridge = {
     standardPaths: () => guard(() => StandardPaths()),
     exists: (path) => guard(() => Exists(path)),
 
-    createFolder: () => notImplemented('fs.createFolder', 'M6'),
-    createFile: () => notImplemented('fs.createFile', 'M6'),
-    rename: () => notImplemented('fs.rename', 'M6'),
-    move: () => notImplemented('fs.move', 'M6'),
-    copy: () => notImplemented('fs.copy', 'M6'),
-    trash: () => notImplemented('fs.trash', 'M6'),
-    delete: () => notImplemented('fs.delete', 'M6'),
+    createFolder: (parent, name) =>
+      guard(async () => toFileItem(await CreateFolder(parent, name))),
+    createFile: (parent, name) => guard(async () => toFileItem(await CreateFile(parent, name))),
+    rename: (path, newName) => guard(async () => toFileItem(await Rename(path, newName))),
+    // The conflict policy is decided in TS and applied in Go — Go never picks a
+    // winner (PLAN.md §1). `OpResult` is structurally `OperationResult`, so it
+    // needs no translation, only the class-to-plain-object flattening.
+    move: (sources, destDir, policy) =>
+      guard(async () => toOperationResult(await Move(sources, destDir, policy))),
+    copy: (sources, destDir, policy) =>
+      guard(async () => toOperationResult(await Copy(sources, destDir, policy))),
+    trash: (paths) =>
+      guard(async () =>
+        (await Trash(paths)).map((item) => ({
+          originalPath: item.originalPath,
+          trashPath: item.trashPath,
+        })),
+      ),
+    delete: (paths) => guard(() => Delete(paths)),
   },
   watcher: {
     watch: () => notImplemented('watcher.watch', 'M7'),

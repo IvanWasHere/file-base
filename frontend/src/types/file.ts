@@ -68,11 +68,34 @@ export interface ReadDirectoryOptions {
 /** How a copy/move resolves a name collision. Decided in TS, applied in Go. */
 export type ConflictPolicy = 'replace' | 'skip' | 'keep-both' | 'fail'
 
+/**
+ * Where one item ended up.
+ *
+ * Both halves are reported because neither can be derived from the other: a
+ * keep-both resolution renames the item, and a batch containing skips cannot be
+ * zipped back against its input. Undo replays this pairing.
+ */
+export interface MovedItem {
+  source: string
+  target: string
+}
+
 export interface OperationResult {
-  succeeded: string[]
+  succeeded: MovedItem[]
   /** Paths that collided, when the policy was 'fail'. */
   conflicts: string[]
   failures: { path: string; message: string }[]
+}
+
+/**
+ * Where a trashed item came from and where it landed.
+ *
+ * macOS keeps its own Put Back mapping in metadata the backend does not write,
+ * so the mapping is returned instead — it is what "Undo Move to Trash" replays.
+ */
+export interface TrashedItem {
+  originalPath: string
+  trashPath: string
 }
 
 /** Emitted by the Go watcher; consumed by the React Query invalidator (M7). */

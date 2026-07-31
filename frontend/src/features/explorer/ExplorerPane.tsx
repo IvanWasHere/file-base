@@ -1,14 +1,18 @@
 import { Loader2 } from 'lucide-react'
-import { useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import { DetailsView } from '@/components/explorer/DetailsView'
 import { IconsView } from '@/components/explorer/IconsView'
 import { DirectoryError } from '@/components/common/DirectoryError'
 import { Breadcrumb } from '@/components/toolbar/Breadcrumb'
 import { useDirectory } from '@/hooks/useDirectory'
+import { useFileOperations } from '@/hooks/useFileOperations'
+import { useOperationKeys } from '@/hooks/useOperationKeys'
 import { bridge } from '@/services/bridge'
+import { toast } from '@/stores/toastStore'
 import { usePaneSelection, useSelectionStore } from '@/stores/selectionStore'
 import { useUiStore } from '@/stores/uiStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
+import { describeFsError, isFsError } from '@/types/errors'
 import type { FileItem } from '@/types/file'
 import type { Pane } from '@/types/workspace'
 import { formatCount } from '@/utils/format'
@@ -53,18 +57,31 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
     if (selected.size > 0 && !previewOpen) setPreviewOpen(true)
   }, [selected.size, previewOpen, setPreviewOpen])
 
+  const operations = useFileOperations()
+
   const handleActivate = (item: FileItem) => {
     if (item.broken) return
     onFocus()
     if (item.isDirectory) {
       navigate(pane.id, item.path)
     } else {
-      void bridge.shell.openFile(item.path).catch(() => {
-        // M6 adds the toast surface; until then a failed open must not become
-        // an unhandled rejection.
+      void bridge.shell.openFile(item.path).catch((error: unknown) => {
+        toast.error(
+          `Could not open ${item.name}`,
+          isFsError(error) ? describeFsError(error) : undefined,
+        )
       })
     }
   }
+
+  const handleRename = useCallback(
+    (path: string, newName: string) => {
+      void operations.rename(path, newName)
+    },
+    [operations],
+  )
+
+  const handleOperationKey = useOperationKeys({ paneId: pane.id, path: pane.path })
 
   return (
     <section
@@ -95,6 +112,10 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
 
       <div
         className="min-h-0 flex-1"
+        // Bubble phase, deliberately: the inline rename editor stops
+        // propagation, so Cmd+C and Delete reach the clipboard and the trash
+        // only when the user is not in the middle of typing a name.
+        onKeyDown={handleOperationKey}
         style={{
           backgroundImage: 'radial-gradient(circle at 1px 1px, var(--grid-dot) 1px, transparent 0)',
           backgroundSize: '24px 24px',
@@ -115,6 +136,7 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
             onSortChange={(sort) => setSort(pane.id, sort)}
             onActivate={handleActivate}
             onFocus={onFocus}
+            onRename={handleRename}
           />
         ) : (
           <IconsView
@@ -123,6 +145,7 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
             items={items}
             onActivate={handleActivate}
             onFocus={onFocus}
+            onRename={handleRename}
           />
         )}
       </div>

@@ -1,11 +1,15 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { AlertTriangle, ArrowDown, ArrowUp, FolderOpen, Link2 } from 'lucide-react'
-import { memo, useCallback, useRef } from 'react'
+import { memo, useCallback, useMemo, useRef } from 'react'
 import { FileIcon } from '@/components/common/FileIcon'
+import { InlineRename } from '@/components/explorer/InlineRename'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { useMarqueeSelection } from '@/hooks/useMarqueeSelection'
+import { useReclaimFocus } from '@/hooks/useReclaimFocus'
 import { useSelection } from '@/hooks/useSelection'
 import type { SortKey, SortSpec } from '@/services/filesystem/sort'
+import { useCutPaths } from '@/stores/clipboardStore'
+import { useUiStore } from '@/stores/uiStore'
 import type { FileItem } from '@/types/file'
 import { typeLabel } from '@/utils/fileCategory'
 import { formatDate, formatSize } from '@/utils/format'
@@ -34,19 +38,28 @@ interface DetailsViewProps {
   onSortChange: (sort: SortSpec) => void
   onActivate: (item: FileItem) => void
   onFocus: () => void
+  onRename: (path: string, newName: string) => void
 }
 
 /** Memoised so scrolling re-renders only rows entering the window. */
 const Row = memo(function Row({
   item,
   selected,
+  cut,
+  renaming,
   onSelect,
   onActivate,
+  onRename,
+  onCancelRename,
 }: {
   item: FileItem
   selected: boolean
+  cut: boolean
+  renaming: boolean
   onSelect: (item: FileItem, event: React.MouseEvent) => void
   onActivate: (item: FileItem) => void
+  onRename: (path: string, newName: string) => void
+  onCancelRename: () => void
 }) {
   return (
     <div
@@ -57,11 +70,20 @@ const Row = memo(function Row({
       onDoubleClick={() => onActivate(item)}
       className={`grid ${COLUMNS} hover:bg-hover h-full cursor-default items-center border-b border-[var(--border-subtle)] px-3 text-[13px] ${
         selected ? 'bg-[var(--accent-glow)]' : ''
-      }`}
+      } ${cut ? 'opacity-45' : ''}`}
     >
       <div role="gridcell" className="flex min-w-0 items-center gap-2">
         <FileIcon category={item.category} />
-        <span className={`truncate ${item.broken ? 'text-muted italic' : ''}`}>{item.name}</span>
+        {renaming ? (
+          <InlineRename
+            name={item.name}
+            isDirectory={item.isDirectory}
+            onCommit={(next) => onRename(item.path, next)}
+            onCancel={onCancelRename}
+          />
+        ) : (
+          <span className={`truncate ${item.broken ? 'text-muted italic' : ''}`}>{item.name}</span>
+        )}
         {item.symlink && <Link2 size={12} className="text-muted shrink-0" aria-label="Alias" />}
         {item.broken && (
           <AlertTriangle
@@ -91,11 +113,36 @@ export function DetailsView({
   onSortChange,
   onActivate,
   onFocus,
+  onRename,
 }: DetailsViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const { selected, lead, handlePointerSelect, select, extendTo, selectAll, clear, setSelection } =
     useSelection(paneId, items)
+
+  const renamingPath = useUiStore((state) =>
+    state.renaming?.paneId === paneId ? state.renaming.path : null,
+  )
+  const endRename = useUiStore((state) => state.endRename)
+  const cutPaths = useCutPaths()
+  const cut = useMemo(() => new Set(cutPaths), [cutPaths])
+
+  // Closing the editor unmounts the input, dropping focus to the document body
+  // — after which every shortcut is inert until the next click. The list has to
+  // take focus back explicitly; the grid stays mounted, so useReclaimFocus
+  // (which fires on mount) cannot cover this.
+  const finishRename = useCallback(() => {
+    endRename()
+    scrollRef.current?.focus({ preventScroll: true })
+  }, [endRename])
+
+  const handleRename = useCallback(
+    (path: string, newName: string) => {
+      finishRename()
+      onRename(path, newName)
+    },
+    [finishRename, onRename],
+  )
 
   // React Compiler will not auto-memoize a component using useVirtualizer,
   // because the hook returns fresh functions each render. That is accounted
@@ -139,6 +186,8 @@ export function DetailsView({
       setSelection(indices.map((index) => items[index]?.path ?? '').filter(Boolean))
     },
   })
+
+  useReclaimFocus(scrollRef, items.length > 0)
 
   const toggleSort = (key: SortKey) => {
     onSortChange(
@@ -219,8 +268,12 @@ export function DetailsView({
                 <Row
                   item={item}
                   selected={selected.has(item.path)}
+                  cut={cut.has(item.path)}
+                  renaming={renamingPath === item.path}
                   onSelect={handlePointerSelect}
                   onActivate={onActivate}
+                  onRename={handleRename}
+                  onCancelRename={finishRename}
                 />
               </div>
             )

@@ -1,10 +1,14 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { FolderOpen } from 'lucide-react'
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileIcon } from '@/components/common/FileIcon'
+import { InlineRename } from '@/components/explorer/InlineRename'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { useMarqueeSelection } from '@/hooks/useMarqueeSelection'
+import { useReclaimFocus } from '@/hooks/useReclaimFocus'
 import { useSelection } from '@/hooks/useSelection'
+import { useCutPaths } from '@/stores/clipboardStore'
+import { useUiStore } from '@/stores/uiStore'
 import type { FileItem } from '@/types/file'
 import type { ViewMode } from '@/types/workspace'
 import type { Rect } from '@/utils/selection'
@@ -62,14 +66,22 @@ const Tile = memo(function Tile({
   item,
   spec,
   selected,
+  cut,
+  renaming,
   onSelect,
   onActivate,
+  onRename,
+  onCancelRename,
 }: {
   item: FileItem
   spec: GridSpec
   selected: boolean
+  cut: boolean
+  renaming: boolean
   onSelect: (item: FileItem, event: React.MouseEvent) => void
   onActivate: (item: FileItem) => void
+  onRename: (path: string, newName: string) => void
+  onCancelRename: () => void
 }) {
   return (
     <div
@@ -81,7 +93,7 @@ const Tile = memo(function Tile({
       onDoubleClick={() => onActivate(item)}
       className={`hover:bg-hover flex h-full cursor-default rounded-lg transition-colors ${
         spec.horizontal ? 'items-center gap-2 px-2' : 'flex-col items-center gap-1.5 px-2 pt-3 pb-2'
-      } ${selected ? 'bg-[var(--accent-glow)]' : ''}`}
+      } ${selected ? 'bg-[var(--accent-glow)]' : ''} ${cut ? 'opacity-45' : ''}`}
     >
       <div
         role="gridcell"
@@ -94,13 +106,28 @@ const Tile = memo(function Tile({
       >
         <FileIcon category={item.category} size={spec.icon} />
       </div>
-      <span
-        className={`${spec.label} ${
-          spec.horizontal ? 'truncate' : 'line-clamp-2 text-center leading-tight break-words'
-        } ${selected ? 'text-accent' : 'text-secondary'} ${item.broken ? 'italic opacity-60' : ''}`}
-      >
-        {item.name}
-      </span>
+      {renaming ? (
+        // The editor spans the tile width rather than the label's clamp, so a
+        // long name is editable instead of being cropped to two lines.
+        <div className={`flex w-full min-w-0 ${spec.horizontal ? '' : 'justify-center'}`}>
+          <InlineRename
+            name={item.name}
+            isDirectory={item.isDirectory}
+            onCommit={(next) => onRename(item.path, next)}
+            onCancel={onCancelRename}
+          />
+        </div>
+      ) : (
+        <span
+          className={`${spec.label} ${
+            spec.horizontal ? 'truncate' : 'line-clamp-2 text-center leading-tight break-words'
+          } ${selected ? 'text-accent' : 'text-secondary'} ${
+            item.broken ? 'italic opacity-60' : ''
+          }`}
+        >
+          {item.name}
+        </span>
+      )}
     </div>
   )
 })
@@ -111,9 +138,17 @@ interface IconsViewProps {
   items: FileItem[]
   onActivate: (item: FileItem) => void
   onFocus: () => void
+  onRename: (path: string, newName: string) => void
 }
 
-export function IconsView({ paneId, mode, items, onActivate, onFocus }: IconsViewProps) {
+export function IconsView({
+  paneId,
+  mode,
+  items,
+  onActivate,
+  onFocus,
+  onRename,
+}: IconsViewProps) {
   const spec = SPECS[mode]
   const scrollRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
@@ -139,6 +174,28 @@ export function IconsView({ paneId, mode, items, onActivate, onFocus }: IconsVie
 
   const { selected, lead, handlePointerSelect, select, extendTo, selectAll, clear, setSelection } =
     useSelection(paneId, items)
+
+  const renamingPath = useUiStore((state) =>
+    state.renaming?.paneId === paneId ? state.renaming.path : null,
+  )
+  const endRename = useUiStore((state) => state.endRename)
+  const cutPaths = useCutPaths()
+  const cut = useMemo(() => new Set(cutPaths), [cutPaths])
+
+  // See DetailsView: closing the editor drops focus to the body, leaving every
+  // shortcut inert until the next click.
+  const finishRename = useCallback(() => {
+    endRename()
+    scrollRef.current?.focus({ preventScroll: true })
+  }, [endRename])
+
+  const handleRename = useCallback(
+    (path: string, newName: string) => {
+      finishRename()
+      onRename(path, newName)
+    },
+    [finishRename, onRename],
+  )
 
   // See DetailsView: the compiler skips memoizing around useVirtualizer, and
   // `Tile` is memoised by hand instead.
@@ -182,6 +239,8 @@ export function IconsView({ paneId, mode, items, onActivate, onFocus }: IconsVie
       setSelection(indices.map((index) => items[index]?.path ?? '').filter(Boolean))
     },
   })
+
+  useReclaimFocus(scrollRef, items.length > 0)
 
   if (items.length === 0) {
     return (
@@ -233,8 +292,12 @@ export function IconsView({ paneId, mode, items, onActivate, onFocus }: IconsVie
                   item={item}
                   spec={spec}
                   selected={selected.has(item.path)}
+                  cut={cut.has(item.path)}
+                  renaming={renamingPath === item.path}
                   onSelect={handlePointerSelect}
                   onActivate={onActivate}
+                  onRename={handleRename}
+                  onCancelRename={finishRename}
                 />
               ))}
             </div>
