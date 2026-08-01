@@ -41,6 +41,7 @@ const KNOWN_CODES = new Set<string>([
   'no-space',
   'read-only',
   'invalid-name',
+  'too-large',
   'cancelled',
   'unknown',
 ])

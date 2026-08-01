@@ -18,9 +18,13 @@ export function Move(arg1:Array<string>,arg2:string,arg3:string):Promise<filesys
 
 export function ReadDirectory(arg1:string,arg2:boolean):Promise<Array<filesystem.FileItem>>;
 
+export function ReadFileBase64(arg1:string,arg2:number):Promise<string>;
+
 export function ReadFileInfo(arg1:string):Promise<filesystem.FileItem>;
 
 export function ReadFileInfos(arg1:Array<string>):Promise<Array<filesystem.FileItem>>;
+
+export function ReadTextFile(arg1:string,arg2:number):Promise<string>;
 
 export function Rename(arg1:string,arg2:string):Promise<filesystem.FileItem>;
 

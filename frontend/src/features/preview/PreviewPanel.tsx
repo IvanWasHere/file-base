@@ -1,16 +1,16 @@
 import { Info, X } from 'lucide-react'
-import { FileIcon } from '@/components/common/FileIcon'
+import { PreviewContent } from '@/features/preview/PreviewContent'
 import { useUiStore } from '@/stores/uiStore'
 import type { FileItem } from '@/types/file'
 import { typeLabel } from '@/utils/fileCategory'
 import { formatDateTime, formatSize } from '@/utils/format'
 
 /**
- * The mockup's `.preview-panel`, ported.
+ * The mockup's `.preview-panel`, ported, with the content preview M10 added.
  *
- * Metadata only for now — it needs no backend beyond what M1 already returns.
- * Image, text and PDF *content* previews arrive in M10 with `readTextFile` /
- * `readFileBase64` and the thumbnail cache.
+ * Metadata is rendered from what the listing already carries, so it appears
+ * instantly; the content above it loads separately and falls back to the file's
+ * icon when there is nothing to show.
  */
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -46,12 +46,7 @@ export function PreviewPanel({ item }: { item: FileItem | null }) {
 
       {item ? (
         <div className="flex-1 overflow-y-auto px-2 py-3">
-          <div
-            className="mb-4 flex h-[120px] items-center justify-center rounded-lg"
-            style={{ background: `var(--ft-bg-${item.category})` }}
-          >
-            <FileIcon category={item.category} size={48} />
-          </div>
+          <PreviewContent item={item} />
 
           <div className="mb-3 text-sm leading-snug font-semibold break-words">{item.name}</div>
 

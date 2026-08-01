@@ -19,6 +19,8 @@ export type FsErrorCode =
   | 'read-only'
   /** Rejected before touching the disk: empty, "..", or containing a "/". */
   | 'invalid-name'
+  /** A refusal, not a failure: the file is past what the operation will handle. */
+  | 'too-large'
   | 'cancelled'
   | 'unknown'
 
@@ -66,6 +68,8 @@ export function describeFsError(error: FsError): string {
       return 'Not enough space on the destination disk.'
     case 'read-only':
       return 'This location is read-only.'
+    case 'too-large':
+      return 'This file is too large to preview.'
     case 'invalid-name':
       // Go's message names the specific problem ("A name cannot contain "/"),
       // which is more useful than anything generic written here.

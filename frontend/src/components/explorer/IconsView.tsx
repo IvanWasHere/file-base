@@ -5,6 +5,7 @@ import { FileIcon } from '@/components/common/FileIcon'
 import { InlineRename } from '@/components/explorer/InlineRename'
 import { useDragSource, useDropZone } from '@/hooks/useFileDrag'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
+import { useThumbnail } from '@/hooks/useThumbnail'
 import { useMarqueeSelection } from '@/hooks/useMarqueeSelection'
 import { useReclaimFocus } from '@/hooks/useReclaimFocus'
 import { useSelection } from '@/hooks/useSelection'
@@ -89,6 +90,10 @@ const Tile = memo(function Tile({
   onRename: (path: string, newName: string) => void
   onCancelRename: () => void
 }) {
+  // Requested per tile rather than per view: the observer only fires for tiles
+  // the user actually scrolled to.
+  const { ref: thumbRef, url: thumbnail } = useThumbnail(item)
+
   return (
     <div
       role="row"
@@ -106,15 +111,27 @@ const Tile = memo(function Tile({
       }`}
     >
       <div
+        ref={thumbRef}
         role="gridcell"
-        className="flex shrink-0 items-center justify-center rounded-lg"
+        className="flex shrink-0 items-center justify-center overflow-hidden rounded-lg"
         style={{
           width: spec.tile,
           height: spec.tile,
           background: `var(--ft-bg-${item.category})`,
         }}
       >
-        <FileIcon category={item.category} size={spec.icon} />
+        {thumbnail ? (
+          <img
+            src={thumbnail}
+            alt=""
+            // The thumbnail is decorative: the filename beneath already names
+            // the item, and a second copy would double every screen reader.
+            className="size-full object-cover"
+            draggable={false}
+          />
+        ) : (
+          <FileIcon category={item.category} size={spec.icon} />
+        )}
       </div>
       {renaming ? (
         // The editor spans the tile width rather than the label's clamp, so a

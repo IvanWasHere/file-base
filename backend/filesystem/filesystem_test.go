@@ -1,11 +1,14 @@
 package filesystem
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func decodeError(t *testing.T, err error) errorPayload {
@@ -368,5 +371,112 @@ func TestMimeTypeFor(t *testing.T) {
 		if got := mimeTypeFor(testCase.name, testCase.isDir); got != testCase.want {
 			t.Errorf("mimeTypeFor(%q) = %q, want %q", testCase.name, got, testCase.want)
 		}
+	}
+}
+
+func TestReadTextFile(t *testing.T) {
+	fs := New()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(path, []byte("hello world"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	text, err := fs.ReadTextFile(path, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text != "hello world" {
+		t.Errorf("text = %q", text)
+	}
+}
+
+// Previewing a 2GB log must not read 2GB.
+func TestReadTextFileStopsAtTheCap(t *testing.T) {
+	fs := New()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "big.log")
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", 10_000)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	text, err := fs.ReadTextFile(path, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(text) != 100 {
+		t.Errorf("read %d bytes, want the 100-byte cap", len(text))
+	}
+}
+
+// Wails cannot marshal invalid UTF-8, and a preview of a mostly-text file with
+// one bad byte is more useful than an error.
+func TestReadTextFileReplacesInvalidUtf8(t *testing.T) {
+	fs := New()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mixed.bin")
+	if err := os.WriteFile(path, []byte{'o', 'k', 0xff, 0xfe, '!'}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	text, err := fs.ReadTextFile(path, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !utf8.ValidString(text) {
+		t.Errorf("text is not valid UTF-8: %q", text)
+	}
+	if !strings.HasPrefix(text, "ok") || !strings.HasSuffix(text, "!") {
+		t.Errorf("the readable parts were lost: %q", text)
+	}
+}
+
+func TestReadFileBase64(t *testing.T) {
+	fs := New()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "data.bin")
+	payload := []byte{0x00, 0x01, 0xff, 0x10}
+	if err := os.WriteFile(path, payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	encoded, err := fs.ReadFileBase64(path, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(decoded, payload) {
+		t.Errorf("round trip lost bytes: %v", decoded)
+	}
+}
+
+// Half an image is not a preview, it is a broken one — so this refuses rather
+// than truncating.
+func TestReadFileBase64RefusesOversizeFiles(t *testing.T) {
+	fs := New()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "huge.png")
+	if err := os.WriteFile(path, make([]byte, 5000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := fs.ReadFileBase64(path, 1000)
+	if payload := decodeError(t, err); payload.Code != codeTooLarge {
+		t.Errorf("code = %q, want %q", payload.Code, codeTooLarge)
+	}
+}
+
+func TestPreviewReadsRejectFolders(t *testing.T) {
+	fs := New()
+	dir := t.TempDir()
+
+	if _, err := fs.ReadTextFile(dir, 1024); err == nil {
+		t.Error("a folder was read as text")
+	}
+	if _, err := fs.ReadFileBase64(dir, 1024); err == nil {
+		t.Error("a folder was read as base64")
 	}
 }

@@ -36,7 +36,10 @@ const (
 	// codeInvalidName covers names Go refuses before touching the disk — empty,
 	// "..", containing a separator — and the paths it refuses to delete at all.
 	codeInvalidName = "invalid-name"
-	codeUnknown     = "unknown"
+	// codeTooLarge is a refusal, not a failure: the file is fine, it is simply
+	// past the size this operation is willing to handle.
+	codeTooLarge = "too-large"
+	codeUnknown  = "unknown"
 )
 
 func wrap(path string, err error) error {

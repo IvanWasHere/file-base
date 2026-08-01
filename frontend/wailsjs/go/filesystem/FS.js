@@ -34,12 +34,20 @@ export function ReadDirectory(arg1, arg2) {
   return window['go']['filesystem']['FS']['ReadDirectory'](arg1, arg2);
 }
 
+export function ReadFileBase64(arg1, arg2) {
+  return window['go']['filesystem']['FS']['ReadFileBase64'](arg1, arg2);
+}
+
 export function ReadFileInfo(arg1) {
   return window['go']['filesystem']['FS']['ReadFileInfo'](arg1);
 }
 
 export function ReadFileInfos(arg1) {
   return window['go']['filesystem']['FS']['ReadFileInfos'](arg1);
+}
+
+export function ReadTextFile(arg1, arg2) {
+  return window['go']['filesystem']['FS']['ReadTextFile'](arg1, arg2);
 }
 
 export function Rename(arg1, arg2) {

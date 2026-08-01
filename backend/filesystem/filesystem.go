@@ -8,7 +8,9 @@
 package filesystem
 
 import (
+	"encoding/base64"
 	"errors"
+	"io"
 	"io/fs"
 	"mime"
 	"os"
@@ -99,6 +101,73 @@ func (f *FS) ReadFileInfo(path string) (FileItem, error) {
 		return FileItem{}, wrap(cleaned, err)
 	}
 	return Describe(cleaned, false), nil
+}
+
+// ReadTextFile returns up to maxBytes of a file, for the preview panel.
+//
+// The cap is the point: previewing a 2GB log must not read 2GB. Truncation is
+// silent here and reported by the frontend from the size it already knows,
+// because "is this truncated" is a comparison the caller can make and Go
+// returning a second value for it would complicate every call.
+//
+// Invalid UTF-8 is replaced rather than rejected: a preview of a mostly-text
+// file with one bad byte is more useful than an error, and Wails would refuse
+// to marshal invalid UTF-8 anyway.
+func (f *FS) ReadTextFile(path string, maxBytes int) (string, error) {
+	cleaned := filepath.Clean(path)
+	if maxBytes <= 0 {
+		maxBytes = 256 * 1024
+	}
+
+	handle, err := os.Open(cleaned)
+	if err != nil {
+		return "", wrap(cleaned, err)
+	}
+	defer func() { _ = handle.Close() }()
+
+	if info, statErr := handle.Stat(); statErr == nil && info.IsDir() {
+		return "", newError(codeNotADirectory, cleaned, "That is a folder, not a file")
+	}
+
+	buffer := make([]byte, maxBytes)
+	read, err := io.ReadFull(handle, buffer)
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return "", wrap(cleaned, err)
+	}
+
+	return strings.ToValidUTF8(string(buffer[:read]), "�"), nil
+}
+
+// ReadFileBase64 returns up to maxBytes of a file, base64-encoded.
+//
+// Base64 rather than raw bytes because this feeds an `img` or `embed` `src`:
+// Wails would marshal a []byte to a number array, which the frontend would have
+// to re-encode anyway, at three times the transfer size.
+//
+// A file larger than the cap is refused rather than truncated — half an image
+// is not a preview, it is a broken one.
+func (f *FS) ReadFileBase64(path string, maxBytes int) (string, error) {
+	cleaned := filepath.Clean(path)
+	if maxBytes <= 0 {
+		maxBytes = 8 * 1024 * 1024
+	}
+
+	info, err := os.Stat(cleaned)
+	if err != nil {
+		return "", wrap(cleaned, err)
+	}
+	if info.IsDir() {
+		return "", newError(codeNotADirectory, cleaned, "That is a folder, not a file")
+	}
+	if info.Size() > int64(maxBytes) {
+		return "", newError(codeTooLarge, cleaned, "The file is too large to preview")
+	}
+
+	data, err := os.ReadFile(cleaned)
+	if err != nil {
+		return "", wrap(cleaned, err)
+	}
+	return base64.StdEncoding.EncodeToString(data), nil
 }
 
 // ReadFileInfos describes many paths in one call.

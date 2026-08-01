@@ -134,8 +134,15 @@ export interface DatabaseApi {
 }
 
 export interface ThumbsApi {
-  /** Returns raw PNG bytes; caching by path+mtime is a TS concern (M10). */
-  generate(path: string, size: number): Promise<Uint8Array>
+  /**
+   * Renders a thumbnail and returns it as a `data:` URL, ready for an `img`
+   * `src`. Caching by path + mtime is a TS concern (services/thumbs).
+   *
+   * A URL rather than bytes because Wails marshals a Go []byte to a JSON number
+   * array — four times the size — and because the caller would otherwise have
+   * to guess whether it received PNG or JPEG.
+   */
+  generate(path: string, size: number): Promise<string>
 }
 
 export interface Bridge {

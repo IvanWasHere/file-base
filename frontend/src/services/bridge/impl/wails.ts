@@ -6,9 +6,10 @@
  * this directory and nothing else.
  *
  * Implemented in M1: filesystem reads and shell integration.
- * Implemented in M6: filesystem mutations.
- * Still stubbed: dialogs (M6), watcher (M7), previews and thumbs (M10).
- * Stubs throw a milestone-labelled error rather than silently resolving.
+ * Implemented since: mutations (M6), watcher (M7), search (M8), file drop (M9),
+ * previews and thumbnails (M10).
+ * Still stubbed: dialogs, whose two in-window consumers landed in M6 instead.
+ * Stubs throw a labelled error rather than silently resolving.
  */
 
 import type { Bridge } from '../types'
@@ -34,13 +35,16 @@ import {
   ListVolumes,
   Move,
   ReadDirectory,
+  ReadFileBase64,
   ReadFileInfo,
   ReadFileInfos,
+  ReadTextFile,
   Rename,
   StandardPaths,
   Trash,
 } from '../../../../wailsjs/go/filesystem/FS'
 import { Cancel, Find } from '../../../../wailsjs/go/search/Search'
+import { Generate } from '../../../../wailsjs/go/thumbs/Thumbs'
 import { OpenFile, OpenWith, RevealInFinder } from '../../../../wailsjs/go/shell/Shell'
 import { Exec, Query, Tx } from '../../../../wailsjs/go/db/DB'
 import { Unwatch, Watch } from '../../../../wailsjs/go/watcher/Watcher'
@@ -66,8 +70,8 @@ export const bridge: Bridge = {
         return options?.includeHidden ? items : items.filter((item) => !item.hidden)
       }),
     readFileInfo: (path) => guard(async () => toFileItem(await ReadFileInfo(path))),
-    readTextFile: () => notImplemented('fs.readTextFile', 'M10'),
-    readFileBase64: () => notImplemented('fs.readFileBase64', 'M10'),
+    readTextFile: (path, maxBytes) => guard(() => ReadTextFile(path, maxBytes)),
+    readFileBase64: (path, maxBytes) => guard(() => ReadFileBase64(path, maxBytes)),
     listVolumes: () => guard(() => ListVolumes()),
     standardPaths: () => guard(() => StandardPaths()),
     exists: (path) => guard(() => Exists(path)),
@@ -154,6 +158,6 @@ export const bridge: Bridge = {
       ),
   },
   thumbs: {
-    generate: () => notImplemented('thumbs.generate', 'M10'),
+    generate: (path, size) => guard(() => Generate(path, size)),
   },
 }

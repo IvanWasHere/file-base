@@ -43,6 +43,10 @@ interface Node {
   content?: string
 }
 
+/** 1×1 transparent PNG, shared by the image preview and the thumbnailer. */
+const TRANSPARENT_PIXEL =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+
 const HOME = '/Users/dev'
 const TRASH = `${HOME}/.Trash`
 const FIXED_NOW = Date.UTC(2025, 0, 22)
@@ -472,8 +476,7 @@ export const bridge: Bridge = {
     readTextFile: async (path) => requireNode(path).content ?? '',
     readFileBase64: async (path) => {
       requireNode(path)
-      // 1×1 transparent PNG — enough for preview plumbing to be exercised.
-      return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+      return TRANSPARENT_PIXEL
     },
     listVolumes: () =>
       Promise.resolve([
@@ -617,6 +620,12 @@ export const bridge: Bridge = {
   // an actual SQL engine rather than a fake that would accept invalid SQL.
   db: mockDb,
   thumbs: {
-    generate: () => Promise.resolve(new Uint8Array()),
+    // A 1×1 transparent PNG as a data URL — enough for the caching, the
+    // IntersectionObserver plumbing and the img element to be exercised.
+    generate: async (path) => {
+      const node = requireNode(path)
+      if (node.isDirectory) throw new FsError('unknown', 'a folder has no thumbnail', path)
+      return `data:image/png;base64,${TRANSPARENT_PIXEL}`
+    },
   },
 }

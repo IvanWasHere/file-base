@@ -15,6 +15,7 @@ import { loadSettings, saveSettings, type AppSettings } from './repositories/set
 import { loadAllFolderPrefs, saveFolderPrefs, type FolderPrefs } from './repositories/folderPrefs'
 import { recordVisit } from './repositories/recents'
 import { loadSession, saveSession } from './repositories/session'
+import { evictOldThumbnails } from '@/services/thumbs/thumbCache'
 import { useUiStore } from '@/stores/uiStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 
@@ -63,6 +64,12 @@ export async function hydrate(homePath: string): Promise<HydrationResult> {
   })
 
   folderPrefs = await loadAllFolderPrefs()
+
+  // Trimming the thumbnail cache once at startup rather than on every write:
+  // the check is a count, the deletion is rare, and doing it while the user
+  // scrolls would put a query on the hot path to solve a problem that develops
+  // over months.
+  detach(evictOldThumbnails(), 'thumbnail cache eviction')
 
   const session = await loadSession()
   if (session) {

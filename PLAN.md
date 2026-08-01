@@ -306,8 +306,23 @@ Notes from the build:
 
 Verified in the running app against real files: a move onto a folder, a folder into itself refused with `dropEffect: none`, an Option-drag copying while keeping the original, and a Finder drop round-tripped through the real Wails event system — hit-testing real row geometry, copying into the folder under the pointer, and reporting a drop that landed on chrome.
 
-### M10 — Preview & thumbnails
-Preview panel: image, text/code (with size cap), PDF, metadata, tags. Background thumbnail generation in Go, cached in SQLite by `path + mtime`, requested lazily from an IntersectionObserver in grid views.
+### M10 — Preview & thumbnails ✅ complete
+`ReadTextFile` / `ReadFileBase64` in `backend/filesystem`; `backend/thumbs`; `services/thumbs/thumbCache` and `useThumbnail`; `PreviewContent` with image, text and PDF renderers.
+
+Notes from the build:
+
+- **Both readers are capped, but they fail differently on purpose.** Text truncates — a partial log is still readable, and the panel reports the truncation by comparing against the size the listing already carries. Images and PDFs are refused past their cap, because half an image is a broken image rather than a preview. That refusal is its own error code (`too-large`): the file is fine, the operation simply will not handle it.
+- **Thumbnails cross the bridge as `data:` URLs, not bytes.** Wails marshals a Go `[]byte` to a JSON array of numbers — a 10KB thumbnail becomes ~40KB of text — and the caller would otherwise have to guess whether it received PNG or JPEG. This forced **migration 003**: migration 001 had speculatively created the cache table with a BLOB column, which STRICT mode will not accept a string into. The table had never held a row, so it is dropped and rebuilt as text.
+- **The encoder picks a format by transparency.** JPEG for photographs, a third of the size; PNG when there is alpha to keep, because a JPEG fills it with black. Verified against a real half-transparent PNG.
+- **Images smaller than the target are not scaled up.** Enlarging a 24×24 icon to 256×256 produces a blurry square worse than the icon the UI would otherwise draw.
+- **Decoding is bounded by a semaphore, not by however many goroutines Wails hands over.** Scrolling a folder of photographs asks for hundreds at once (PLAN.md §3).
+- **Freshness is keyed on the source mtime rather than invalidated by the watcher.** An edited image invalidates its own thumbnail the next time anyone looks at it — no sweep, no subscription, no way for the two to drift. In-memory de-duplication sits above it so an IntersectionObserver firing for forty tiles starts one render, not forty.
+- **Bug found by the lint rule, and it was real:** the thumbnail hook reset its state in an effect, which left one frame where a recycled virtualized tile showed the *previous* file's image. Now derived from the item's identity, so there is no window at all.
+- **Bug found by a test: `image/jpg` is not a mime type.** The URL was built as `image/${extension}`. Browsers sniff a data URL and render it anyway, so the mistake was invisible — until something stops sniffing, and SVG already did, rendering as nothing without `image/svg+xml`. Now a map.
+- **Bug found in the running app: an extension is a claim, not a fact.** A text file named `.png` reads back perfectly well, so the preview rendered an empty `<img>`. Only the decoder knows better, and by then the element exists — so the image's own `onError` now falls back to the icon. The thumbnail path already handled this, because there the render itself fails.
+- **Tags are not implemented.** M10's line mentions them, but migration 001 already called tagging "schema now, UI later" and the PRD lists it as a Future Feature. The schema is there; putting a tag editor in the preview belongs with a milestone that is about tagging.
+
+Verified in the running app against real files: text preview with its truncation notice, an oversized image refused by code, a full-resolution image inline, and thumbnails rendering at 128×64 from an 800×400 source (JPEG), 128×128 with transparency intact (PNG), a 24×24 icon left unscaled, and a text file named `.png` falling back to its icon in both the grid and the panel.
 
 ### M11 — Menus & shortcuts
 Context menus for file / folder / background with native-feeling styling and keyboard traversal; native app menu (`menu.NewMenu`) mirroring the actions; a central shortcut registry (Cmd+C/V/X/A/N/F, Cmd+Shift+N, Delete, Enter, Space for preview, Cmd+1..4 for view modes, Cmd+T/W for tabs, Cmd+[ / ]) with a `useKeyboard` hook that respects focus context.

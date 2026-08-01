@@ -8,6 +8,7 @@ import (
 	"file-base/backend/filesystem"
 	"file-base/backend/search"
 	"file-base/backend/shell"
+	"file-base/backend/thumbs"
 	"file-base/backend/watcher"
 
 	"github.com/wailsapp/wails/v2"
@@ -96,7 +97,7 @@ func main() {
 		},
 		// Each package binds separately so the generated TypeScript bindings stay
 		// namespaced (wailsjs/go/filesystem/FS, wailsjs/go/db/DB).
-		// dialogs binds with its first consumer, thumbs in M10.
+		// dialogs binds with its first consumer.
 		Bind: []interface{}{
 			app,
 			filesystem.New(),
@@ -104,6 +105,7 @@ func main() {
 			database,
 			watch,
 			finder,
+			thumbs.New(),
 		},
 	})
 
