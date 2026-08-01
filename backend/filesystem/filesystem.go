@@ -84,7 +84,7 @@ func (f *FS) ReadDirectory(path string, followSymlinks bool) ([]FileItem, error)
 
 	items := make([]FileItem, 0, len(entries))
 	for _, entry := range entries {
-		items = append(items, describe(filepath.Join(cleaned, entry.Name()), followSymlinks))
+		items = append(items, Describe(filepath.Join(cleaned, entry.Name()), followSymlinks))
 	}
 
 	// Stable byte order only. Real ordering (name/date/size/type, folders-first,
@@ -98,7 +98,27 @@ func (f *FS) ReadFileInfo(path string) (FileItem, error) {
 	if _, err := os.Lstat(cleaned); err != nil {
 		return FileItem{}, wrap(cleaned, err)
 	}
-	return describe(cleaned, false), nil
+	return Describe(cleaned, false), nil
+}
+
+// ReadFileInfos describes many paths in one call.
+//
+// The FTS5 index stores paths, not metadata, so a search hit list has to be
+// stat'd before it can be rendered — 200 separate bridge round trips for one
+// keystroke's worth of results is the thing this avoids.
+//
+// Paths that no longer exist are omitted rather than returned broken: a stale
+// index entry is not something to show the user, it is something to skip.
+func (f *FS) ReadFileInfos(paths []string) ([]FileItem, error) {
+	items := make([]FileItem, 0, len(paths))
+	for _, path := range paths {
+		cleaned := filepath.Clean(path)
+		if _, err := os.Lstat(cleaned); err != nil {
+			continue
+		}
+		items = append(items, Describe(cleaned, false))
+	}
+	return items, nil
 }
 
 func (f *FS) Exists(path string) (bool, error) {
@@ -202,8 +222,11 @@ func bootVolumeName() string {
 	return "Macintosh HD"
 }
 
-// describe builds a FileItem, degrading to a Broken entry when stat fails.
-func describe(path string, followSymlinks bool) FileItem {
+// Describe builds a FileItem, degrading to a Broken entry when stat fails.
+//
+// Exported for backend/search, which describes entries as it walks past them
+// and would otherwise pay for a second Lstat by going through ReadFileInfo.
+func Describe(path string, followSymlinks bool) FileItem {
 	name := filepath.Base(path)
 
 	linkInfo, err := os.Lstat(path)

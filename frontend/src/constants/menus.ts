@@ -29,6 +29,7 @@ export type MenuCommandId =
   | 'edit.paste'
   | 'edit.selectAll'
   | 'edit.deselectAll'
+  | 'edit.find'
   // View
   | 'view.details'
   | 'view.largeIcons'
@@ -99,6 +100,8 @@ export const APP_MENUS: MenuDefinition[] = [
       { separator: true },
       { id: 'edit.selectAll', label: 'Select All' },
       { id: 'edit.deselectAll', label: 'Deselect All' },
+      { separator: true },
+      { id: 'edit.find', label: 'Find…' },
     ],
   },
   {

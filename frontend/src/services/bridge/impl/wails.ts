@@ -12,7 +12,17 @@
  */
 
 import type { Bridge } from '../types'
-import { guard, toFileItem, toFileSystemEvent, toOperationResult, watcherEvent } from './decode'
+import {
+  guard,
+  searchBatchEvent,
+  searchDoneEvent,
+  toFileItem,
+  toFileSystemEvent,
+  toOperationResult,
+  toSearchBatch,
+  toSearchDone,
+  watcherEvent,
+} from './decode'
 import {
   Copy,
   CreateFile,
@@ -23,10 +33,12 @@ import {
   Move,
   ReadDirectory,
   ReadFileInfo,
+  ReadFileInfos,
   Rename,
   StandardPaths,
   Trash,
 } from '../../../../wailsjs/go/filesystem/FS'
+import { Cancel, Find } from '../../../../wailsjs/go/search/Search'
 import { OpenFile, OpenWith, RevealInFinder } from '../../../../wailsjs/go/shell/Shell'
 import { Exec, Query, Tx } from '../../../../wailsjs/go/db/DB'
 import { Unwatch, Watch } from '../../../../wailsjs/go/watcher/Watcher'
@@ -57,6 +69,8 @@ export const bridge: Bridge = {
     listVolumes: () => guard(() => ListVolumes()),
     standardPaths: () => guard(() => StandardPaths()),
     exists: (path) => guard(() => Exists(path)),
+    readFileInfos: (paths) =>
+      guard(async () => (await ReadFileInfos(paths)).map(toFileItem)),
 
     createFolder: (parent, name) =>
       guard(async () => toFileItem(await CreateFolder(parent, name))),
@@ -77,6 +91,27 @@ export const bridge: Bridge = {
         })),
       ),
     delete: (paths) => guard(() => Delete(paths)),
+  },
+  search: {
+    find: (criteria) => guard(() => Find(criteria)),
+    cancel: (id) => guard(() => Cancel(id)),
+    // Both streams are subscribed together and torn down together: a listener
+    // for completion that outlived its result listener would report a search
+    // finishing with results nobody collected.
+    subscribe: (handlers) => {
+      const offBatch = EventsOn(searchBatchEvent, (payload: unknown) => {
+        const batch = toSearchBatch(payload)
+        if (batch) handlers.onBatch(batch)
+      })
+      const offDone = EventsOn(searchDoneEvent, (payload: unknown) => {
+        const done = toSearchDone(payload)
+        if (done) handlers.onDone(done)
+      })
+      return () => {
+        offBatch()
+        offDone()
+      }
+    },
   },
   watcher: {
     watch: (path) => guard(() => Watch(path)),

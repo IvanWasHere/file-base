@@ -6,6 +6,7 @@ import { bridge } from '@/services/bridge'
 import { fsKeys, standardPathsQuery } from '@/services/filesystem/queries'
 import { useClipboardStore } from '@/stores/clipboardStore'
 import { useHistoryStore } from '@/stores/historyStore'
+import { useSearchStore } from '@/stores/searchStore'
 import { usePaneSelection, useSelectionStore } from '@/stores/selectionStore'
 import { useUiStore } from '@/stores/uiStore'
 import {
@@ -51,6 +52,7 @@ export function useMenuCommands(): MenuCommandState {
   const clearSelection = useSelectionStore((state) => state.clear)
   const { selected, lead } = usePaneSelection(pane?.id ?? '')
   const operations = useFileOperations()
+  const openSearch = useSearchStore((state) => state.open)
   const clipboardCount = useClipboardStore((state) => state.paths.length)
   const undoDepth = useHistoryStore((state) => state.entries.length)
 
@@ -130,6 +132,10 @@ export function useMenuCommands(): MenuCommandState {
         return
       case 'edit.paste':
         if (pane) void operations.paste(pane.path)
+        return
+
+      case 'edit.find':
+        if (pane) openSearch(pane.id)
         return
 
       case 'edit.selectAll':

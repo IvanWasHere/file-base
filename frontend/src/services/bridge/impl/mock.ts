@@ -9,7 +9,7 @@
  * hierarchy onto real-looking absolute paths under /Users/dev.
  */
 
-import type { Bridge } from '../types'
+import type { Bridge, SearchHandlers } from '../types'
 import { mockDb } from './mockDb'
 import type {
   ConflictPolicy,
@@ -17,6 +17,7 @@ import type {
   FileItem,
   FileSystemEvent,
   OperationResult,
+  SearchCriteria,
   TrashedItem,
 } from '@/types/file'
 import { FsError } from '@/types/errors'
@@ -173,6 +174,8 @@ export function __resetMockFilesystem(): void {
   nodes = buildTree()
   listeners.clear()
   watched.clear()
+  searchHandlers.clear()
+  cancelled.clear()
 }
 
 /**
@@ -384,6 +387,55 @@ function remove(paths: string[]): void {
   }
 }
 
+/**
+ * The in-memory equivalent of the Go walk.
+ *
+ * Kept in step with backend/search deliberately — the criteria semantics
+ * (case-insensitive name match, hidden subtrees skipped whole, size bounds
+ * applying to files only) are what the UI is written against, and a mock that
+ * matched differently would let tests pass against behaviour the app does not
+ * have.
+ */
+function runSearch(criteria: SearchCriteria): FileItem[] {
+  const root = normalize(criteria.root)
+  const query = criteria.query.trim().toLowerCase()
+  const extensions = new Set(
+    criteria.extensions.map((extension) => extension.replace(/^\./, '').toLowerCase()),
+  )
+  const limit = criteria.maxResults > 0 ? criteria.maxResults : 5000
+
+  const results: FileItem[] = []
+  for (const node of [...nodes.values()].sort((a, b) => a.path.localeCompare(b.path))) {
+    if (node.path === root || !isAncestor(root, node.path)) continue
+
+    const relative = node.path.slice(root === ROOT ? 1 : root.length + 1)
+    // A hidden ancestor hides everything beneath it, as skipping the subtree
+    // does in the backend.
+    if (!criteria.includeHidden && relative.split('/').some(isHiddenName)) continue
+
+    const item = toFileItem(node)
+    if (query && !item.name.toLowerCase().includes(query)) continue
+    if (criteria.kind === 'file' && item.isDirectory) continue
+    if (criteria.kind === 'folder' && !item.isDirectory) continue
+    if (extensions.size > 0 && (item.isDirectory || !extensions.has(item.extension))) continue
+
+    if (!item.isDirectory) {
+      if (criteria.minSize > 0 && item.size < criteria.minSize) continue
+      if (criteria.maxSize > 0 && item.size > criteria.maxSize) continue
+    }
+    if (criteria.modifiedAfter > 0 && item.modifiedAt < criteria.modifiedAfter) continue
+    if (criteria.modifiedBefore > 0 && item.modifiedAt > criteria.modifiedBefore) continue
+
+    results.push(item)
+    if (results.length >= limit) break
+  }
+  return results
+}
+
+const searchHandlers = new Set<SearchHandlers>()
+const cancelled = new Set<string>()
+let searchCounter = 0
+
 export const bridge: Bridge = {
   fs: {
     // Async so the not-found throw becomes a rejection. Reading a missing
@@ -441,6 +493,11 @@ export const bridge: Bridge = {
         trash: join(HOME, '.Trash'),
       }),
     exists: (path) => Promise.resolve(nodes.has(normalize(path))),
+    readFileInfos: async (paths) =>
+      paths
+        .map((path) => nodes.get(normalize(path)))
+        .filter((node): node is Node => node !== undefined)
+        .map(toFileItem),
     createFolder: async (parent, name) => create(parent, name, true),
     createFile: async (parent, name) => create(parent, name, false),
     rename: async (path, newName) => {
@@ -460,6 +517,46 @@ export const bridge: Bridge = {
     copy: async (sources, destDir, policy) => transfer(sources, destDir, policy, 'copy'),
     trash: async (paths) => moveToTrash(paths),
     delete: async (paths) => remove(paths),
+  },
+  search: {
+    find: async (criteria) => {
+      searchCounter += 1
+      const id = `mock-search-${searchCounter}`
+      const items = runSearch(criteria)
+
+      // Delivered on a microtask, not synchronously: the caller has not yet
+      // received the id when find() is still running, so a synchronous batch
+      // would arrive for a search the UI cannot attribute yet.
+      void Promise.resolve().then(() => {
+        if (cancelled.has(id)) {
+          cancelled.delete(id)
+          for (const handler of searchHandlers) {
+            handler.onDone({ id, scanned: 0, matched: 0, truncated: false, cancelled: true, error: '' })
+          }
+          return
+        }
+        for (const handler of searchHandlers) {
+          if (items.length > 0) handler.onBatch({ id, items, scanned: items.length })
+          handler.onDone({
+            id,
+            scanned: items.length,
+            matched: items.length,
+            truncated: criteria.maxResults > 0 && items.length >= criteria.maxResults,
+            cancelled: false,
+            error: '',
+          })
+        }
+      })
+
+      return id
+    },
+    cancel: async (id) => {
+      cancelled.add(id)
+    },
+    subscribe: (handlers) => {
+      searchHandlers.add(handlers)
+      return () => searchHandlers.delete(handlers)
+    },
   },
   watcher: {
     watch: (path) => {

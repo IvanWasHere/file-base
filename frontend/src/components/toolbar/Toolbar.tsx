@@ -8,6 +8,7 @@ import {
   FolderPlus,
   Grid2x2,
   RefreshCw,
+  Search,
   Square,
   Star,
   StarOff,
@@ -16,6 +17,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Breadcrumb } from './Breadcrumb'
 import { ViewMenu } from './ViewMenu'
 import { useFileOperations } from '@/hooks/useFileOperations'
+import { useSearchStore } from '@/stores/searchStore'
 import {
   canGoBack,
   canGoForward,
@@ -92,6 +94,9 @@ export function Toolbar() {
   const { isPinned, pin, unpin } = useFavorites()
   const pinned = pane ? isPinned(pane.path) : false
   const operations = useFileOperations()
+  const openSearch = useSearchStore((state) => state.open)
+  const closeSearch = useSearchStore((state) => state.close)
+  const searchOpen = useSearchStore((state) => state.byPane[pane?.id ?? '']?.open ?? false)
 
   if (!tab || !pane) return null
 
@@ -128,6 +133,12 @@ export function Toolbar() {
         label="New Folder"
         icon={FolderPlus}
         onClick={() => void operations.createFolder(pane.path, pane.id)}
+      />
+      <ToolbarButton
+        label="Search"
+        icon={Search}
+        active={searchOpen}
+        onClick={() => (searchOpen ? closeSearch(pane.id) : openSearch(pane.id))}
       />
 
       <Breadcrumb path={pane.path} onNavigate={(path) => navigate(pane.id, path)} />

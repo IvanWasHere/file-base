@@ -196,3 +196,38 @@ export namespace filesystem {
 
 }
 
+export namespace search {
+	
+	export class Criteria {
+	    query: string;
+	    root: string;
+	    extensions: string[];
+	    kind: string;
+	    minSize: number;
+	    maxSize: number;
+	    modifiedAfter: number;
+	    modifiedBefore: number;
+	    includeHidden: boolean;
+	    maxResults: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Criteria(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.query = source["query"];
+	        this.root = source["root"];
+	        this.extensions = source["extensions"];
+	        this.kind = source["kind"];
+	        this.minSize = source["minSize"];
+	        this.maxSize = source["maxSize"];
+	        this.modifiedAfter = source["modifiedAfter"];
+	        this.modifiedBefore = source["modifiedBefore"];
+	        this.includeHidden = source["includeHidden"];
+	        this.maxResults = source["maxResults"];
+	    }
+	}
+
+}
+

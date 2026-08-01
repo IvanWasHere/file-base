@@ -81,7 +81,7 @@ func (f *FS) CreateFolder(parent string, name string) (FileItem, error) {
 	if err := os.Mkdir(path, 0o755); err != nil {
 		return FileItem{}, wrap(path, err)
 	}
-	return describe(path, false), nil
+	return Describe(path, false), nil
 }
 
 // CreateFile creates an empty file inside parent.
@@ -98,7 +98,7 @@ func (f *FS) CreateFile(parent string, name string) (FileItem, error) {
 	if err := handle.Close(); err != nil {
 		return FileItem{}, wrap(path, err)
 	}
-	return describe(path, false), nil
+	return Describe(path, false), nil
 }
 
 // Rename changes an item's name in place. newName is a bare name, not a path —
@@ -114,7 +114,7 @@ func (f *FS) Rename(path string, newName string) (FileItem, error) {
 
 	target := filepath.Join(filepath.Dir(cleaned), newName)
 	if target == cleaned {
-		return describe(cleaned, false), nil
+		return Describe(cleaned, false), nil
 	}
 
 	// APFS is case-insensitive by default, so "notes" -> "Notes" finds itself
@@ -129,7 +129,7 @@ func (f *FS) Rename(path string, newName string) (FileItem, error) {
 	if err := os.Rename(cleaned, target); err != nil {
 		return FileItem{}, wrap(cleaned, err)
 	}
-	return describe(target, false), nil
+	return Describe(target, false), nil
 }
 
 // Move relocates sources into destDir, falling back to copy-then-delete when

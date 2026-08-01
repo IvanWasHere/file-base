@@ -18,6 +18,7 @@
 import { useCallback } from 'react'
 import { useFileOperations } from '@/hooks/useFileOperations'
 import { useClipboardStore } from '@/stores/clipboardStore'
+import { useSearchStore } from '@/stores/searchStore'
 import { useSelectionStore } from '@/stores/selectionStore'
 import { useUiStore } from '@/stores/uiStore'
 
@@ -79,6 +80,11 @@ export function useOperationKeys({ paneId, path }: UseOperationKeysOptions) {
         case 'z':
           event.preventDefault()
           void operations.undo()
+          return
+
+        case 'f':
+          event.preventDefault()
+          useSearchStore.getState().open(paneId)
           return
 
         case 'n':

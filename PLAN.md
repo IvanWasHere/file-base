@@ -266,8 +266,27 @@ Notes from the build:
 
 Verified in the running app with changes made entirely from the shell: files and folders appearing and disappearing with no user action, 500 creations coalescing to 3 invalidations, and the watched directory being deleted putting the pane into its error state.
 
-### M8 — Search
-Current-directory filter (debounced, instant); recursive search via a streaming Go walk with cancellation; FTS5-backed instant search for indexed roots; filename/extension/size/date filters; hidden-files toggle; results rendered in the pane with a "searching in…" header.
+### M8 — Search ✅ complete
+`backend/search` (streaming walk, criteria, cancellation); `services/search/{criteria,searchIndex}`; `searchStore` and `useSearch`; the search bar, filter row, results strip and index control.
+
+Three modes behind one search box, chosen by what is possible rather than by anything the user configures: the current folder is a pure predicate over the listing already in the query cache; an indexed root is one FTS5 query plus a batch stat; anything else is a streaming walk. Only the last can be slow, so only it is debounced and only it reports progress.
+
+Notes from the build:
+
+- **Criteria are applied in Go, and that is the deliberate exception to "no filtering in the backend".** A search is the user's explicit question passed down whole, and it can only be answered while walking — the alternative is streaming half a million paths to TypeScript so it can discard all but nine. TypeScript still owns what is asked and how the answer is shown.
+- **Streaming is the point.** Results flush every 64 matches *or* 100ms, whichever comes first: a hit in a deep tree can be seconds from the next, so time matters as much as count. Cancellation is real — a superseded query stops its walk rather than leaving five competing for the disk.
+- **`ReadFileInfos` was added to the filesystem package.** The index stores paths, not metadata, so a hit list has to be stat'd; 200 bridge round trips per keystroke is what the batch call avoids.
+- **The FTS5 table is created lazily, not in migration 002.** FTS5 is a compile-time option: the Go driver has it, the sql.js build behind the mock does not. A migration creating it would fail outright and take the whole app down in tests and browser dev for the sake of an optional accelerator. The migration carries only `index_meta`; everything in `searchIndex.ts` degrades to "unavailable" and the caller walks.
+- **The index is an accelerator, never a source of truth.** Every hit is re-stat'd through the bridge, so an entry deleted since the index was built drops out instead of appearing as a phantom row. Verified against real files.
+- **Query terms are quoted.** Someone typing `report OR draft` is naming a file, not writing a query language; unquoted, FTS5 would read the operators.
+- **Indexing is opt-in per folder.** Walking a home directory is minutes of disk work nobody asked for, and doing it silently is the behaviour people resent in desktop search. The offer sits beside the control that starts a recursive search — where the cost is about to be paid.
+- **Bug found by reading real output: a size filter returned folders.** The rule had been "size bounds apply to files only" — reasonable in isolation, but it meant asking for 10–100 MB handed back every directory in the tree. A size filter now *excludes* directories rather than exempting them, in both the Go and TS implementations.
+- **Bug found by an acceptance test: results could arrive before the caller subscribed.** `useSearch` awaited `find()` for the id and subscribed afterwards; the result stream and the call response are independent messages, so the first batch could be dropped. It now subscribes first and buffers until the id is known. The mock exposed it because its delivery is a microtask, but the race is real against Wails IPC.
+- **One acceptance test was passing vacuously**, asserting a row that was in the folder listing anyway. Rewritten to search for something that only exists two levels down, so finding it proves the walk descended.
+- **The hidden-files filter needed the listing to contain hidden files.** In folder scope the filter runs over what was already read, so the pane now reads with hidden entries whenever the search asks for them — otherwise the toggle silently did nothing.
+- **Note for M11/M12:** the index goes stale on its own. Keeping it live from watcher events is the obvious next step; the record carries `indexed_at` and the UI shows the age so the staleness is at least visible.
+
+Verified in the running app against real files: the folder filter narrowing instantly, a recursive walk finding a file two levels down, every filter (kind, extension, size, date, hidden) against the Go walk, and the same query answered from the FTS5 index — including a file deleted on disk dropping out of indexed results.
 
 ### M9 — Drag & drop
 Internal drag between panes and onto sidebar folders (copy vs move via modifier), with drop-target highlighting; external file drop from Finder into the app via Wails' `DragAndDrop` option.

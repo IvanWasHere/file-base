@@ -4,9 +4,13 @@ import { DetailsView } from '@/components/explorer/DetailsView'
 import { IconsView } from '@/components/explorer/IconsView'
 import { DirectoryError } from '@/components/common/DirectoryError'
 import { Breadcrumb } from '@/components/toolbar/Breadcrumb'
+import { SearchBar } from '@/features/search/SearchBar'
+import { SearchStatusBar } from '@/features/search/SearchStatusBar'
 import { useDirectory } from '@/hooks/useDirectory'
 import { useFileOperations } from '@/hooks/useFileOperations'
 import { useOperationKeys } from '@/hooks/useOperationKeys'
+import { useSearch } from '@/hooks/useSearch'
+import { usePaneSearch } from '@/stores/searchStore'
 import { bridge } from '@/services/bridge'
 import { toast } from '@/stores/toastStore'
 import { usePaneSelection, useSelectionStore } from '@/stores/selectionStore'
@@ -37,8 +41,13 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
   const clearSelection = useSelectionStore((state) => state.clear)
   const { selected } = usePaneSelection(pane.id)
 
+  const search = usePaneSearch(pane.id)
+
+  // A search asking for hidden files has to be given a listing that contains
+  // them: in folder scope the filter runs over what was already read, so
+  // reading without hidden entries would make the toggle silently do nothing.
   const { items, isLoading, isFetching, error, refetch } = useDirectory(pane.path, {
-    includeHidden: showHiddenFiles,
+    includeHidden: showHiddenFiles || (search.open && search.filters.includeHidden),
     sort: pane.sort,
   })
 
@@ -58,6 +67,16 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
   }, [selected.size, previewOpen, setPreviewOpen])
 
   const operations = useFileOperations()
+
+  const { active: searching, items: results, cancel: cancelSearch } = useSearch(
+    pane.id,
+    pane.path,
+    items,
+  )
+  // Results replace the listing while a search is on. They are already ordered
+  // by the backend's walk or the filter's input order; re-sorting a recursive
+  // result set by name would scatter siblings across the list.
+  const shown = searching ? results : items
 
   const handleActivate = (item: FileItem) => {
     if (item.broken) return
@@ -110,6 +129,11 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
         <span className="text-muted shrink-0">{formatCount(items.length, 'item')}</span>
       </div>
 
+      {search.open && <SearchBar paneId={pane.id} root={pane.path} />}
+      {searching && (
+        <SearchStatusBar search={search} resultCount={shown.length} onCancel={cancelSearch} />
+      )}
+
       <div
         className="min-h-0 flex-1"
         // Bubble phase, deliberately: the inline rename editor stops
@@ -131,7 +155,7 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
         ) : pane.viewMode === 'details' ? (
           <DetailsView
             paneId={pane.id}
-            items={items}
+            items={shown}
             sort={pane.sort}
             onSortChange={(sort) => setSort(pane.id, sort)}
             onActivate={handleActivate}
@@ -142,7 +166,7 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
           <IconsView
             paneId={pane.id}
             mode={pane.viewMode}
-            items={items}
+            items={shown}
             onActivate={handleActivate}
             onFocus={onFocus}
             onRename={handleRename}

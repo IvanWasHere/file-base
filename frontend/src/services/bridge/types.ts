@@ -19,6 +19,9 @@ import type {
   FileSystemEvent,
   OperationResult,
   ReadDirectoryOptions,
+  SearchBatch,
+  SearchCriteria,
+  SearchDone,
   StandardPaths,
   TrashedItem,
   Volume,
@@ -34,6 +37,12 @@ export interface FilesystemApi {
   listVolumes(): Promise<Volume[]>
   standardPaths(): Promise<StandardPaths>
   exists(path: string): Promise<boolean>
+  /**
+   * Describes many paths in one call. The search index stores paths, not
+   * metadata, so its hits must be stat'd before they can be rendered.
+   * Paths that no longer exist are omitted.
+   */
+  readFileInfos(paths: string[]): Promise<FileItem[]>
 
   createFolder(parent: string, name: string): Promise<FileItem>
   createFile(parent: string, name: string): Promise<FileItem>
@@ -44,6 +53,19 @@ export interface FilesystemApi {
   trash(paths: string[]): Promise<TrashedItem[]>
   /** Permanent, unrecoverable delete. Always confirmed in the UI first. */
   delete(paths: string[]): Promise<void>
+}
+
+export interface SearchHandlers {
+  onBatch: (batch: SearchBatch) => void
+  onDone: (done: SearchDone) => void
+}
+
+export interface SearchApi {
+  /** Starts a walk and resolves to its id; results arrive on the subscription. */
+  find(criteria: SearchCriteria): Promise<string>
+  cancel(id: string): Promise<void>
+  /** Returns an unsubscribe function. */
+  subscribe(handlers: SearchHandlers): () => void
 }
 
 export interface WatcherApi {
@@ -105,6 +127,7 @@ export interface ThumbsApi {
 
 export interface Bridge {
   fs: FilesystemApi
+  search: SearchApi
   watcher: WatcherApi
   shell: ShellApi
   dialogs: DialogsApi

@@ -13,7 +13,14 @@
  *     decisions in Go).
  */
 
-import type { FileChangeKind, FileItem, FileSystemEvent, OperationResult } from '@/types/file'
+import type {
+  FileChangeKind,
+  FileItem,
+  FileSystemEvent,
+  OperationResult,
+  SearchBatch,
+  SearchDone,
+} from '@/types/file'
 import type { FsErrorCode } from '@/types/errors'
 import { FsError } from '@/types/errors'
 import { categorize } from '@/utils/fileCategory'
@@ -104,6 +111,47 @@ export function toFileItem(wire: filesystem.FileItem): FileItem {
 
 /** The Wails event name the watcher emits on; must match backend/watcher. */
 export const watcherEvent = 'fs:change'
+
+/** Must match backend/search. */
+export const searchBatchEvent = 'search:batch'
+export const searchDoneEvent = 'search:done'
+
+/**
+ * Validates a streamed result batch.
+ *
+ * As with watcher events, an event payload arrives untyped. A batch missing its
+ * id would be routed to no search at all, so it is dropped rather than guessed.
+ */
+export function toSearchBatch(payload: unknown): SearchBatch | null {
+  if (typeof payload !== 'object' || payload === null) return null
+  const wire = payload as Record<string, unknown>
+  if (typeof wire.id !== 'string' || !wire.id) return null
+
+  const items = Array.isArray(wire.items)
+    ? wire.items.map((item) => toFileItem(item as filesystem.FileItem))
+    : []
+
+  return { id: wire.id, items, scanned: numberOr(wire.scanned, 0) }
+}
+
+export function toSearchDone(payload: unknown): SearchDone | null {
+  if (typeof payload !== 'object' || payload === null) return null
+  const wire = payload as Record<string, unknown>
+  if (typeof wire.id !== 'string' || !wire.id) return null
+
+  return {
+    id: wire.id,
+    scanned: numberOr(wire.scanned, 0),
+    matched: numberOr(wire.matched, 0),
+    truncated: wire.truncated === true,
+    cancelled: wire.cancelled === true,
+    error: typeof wire.error === 'string' ? wire.error : '',
+  }
+}
+
+function numberOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
 
 const CHANGE_KINDS = new Set<string>(['create', 'write', 'remove', 'rename', 'chmod'])
 

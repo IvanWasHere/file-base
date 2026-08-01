@@ -6,6 +6,7 @@ import (
 
 	"file-base/backend/db"
 	"file-base/backend/filesystem"
+	"file-base/backend/search"
 	"file-base/backend/shell"
 	"file-base/backend/watcher"
 
@@ -25,6 +26,9 @@ func main() {
 
 	watch := watcher.New()
 	defer func() { _ = watcher.Stop(watch) }()
+
+	finder := search.New()
+	defer search.Stop(finder)
 
 	err := wails.Run(&options.App{
 		Title:     "Files",
@@ -75,6 +79,9 @@ func main() {
 			if err := watcher.Start(watch, ctx); err != nil {
 				println("watcher unavailable:", err.Error())
 			}
+			// Search only needs the context to stream results back; there is
+			// nothing to fail.
+			search.Start(finder, ctx)
 		},
 		// Each package binds separately so the generated TypeScript bindings stay
 		// namespaced (wailsjs/go/filesystem/FS, wailsjs/go/db/DB).
@@ -85,6 +92,7 @@ func main() {
 			shell.New(),
 			database,
 			watch,
+			finder,
 		},
 	})
 

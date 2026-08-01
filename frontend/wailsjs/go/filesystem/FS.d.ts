@@ -20,6 +20,8 @@ export function ReadDirectory(arg1:string,arg2:boolean):Promise<Array<filesystem
 
 export function ReadFileInfo(arg1:string):Promise<filesystem.FileItem>;
 
+export function ReadFileInfos(arg1:Array<string>):Promise<Array<filesystem.FileItem>>;
+
 export function Rename(arg1:string,arg2:string):Promise<filesystem.FileItem>;
 
 export function StandardPaths():Promise<filesystem.StandardPaths>;

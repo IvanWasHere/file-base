@@ -98,6 +98,43 @@ export interface TrashedItem {
   trashPath: string
 }
 
+/** What a search is looking for. Assembled in TS, applied during the Go walk. */
+export interface SearchCriteria {
+  /** Case-insensitive substring of the name. Empty matches everything. */
+  query: string
+  root: string
+  /** Lowercase, without the dot. Empty means any. */
+  extensions: string[]
+  kind: 'any' | 'file' | 'folder'
+  /** Zero means unbounded, on all four. */
+  minSize: number
+  maxSize: number
+  modifiedAfter: number
+  modifiedBefore: number
+  includeHidden: boolean
+  maxResults: number
+}
+
+/** Results as they stream in. */
+export interface SearchBatch {
+  id: string
+  items: FileItem[]
+  /** Entries visited so far — what makes a long search look alive. */
+  scanned: number
+}
+
+/** Emitted exactly once per search. */
+export interface SearchDone {
+  id: string
+  scanned: number
+  matched: number
+  /** The result cap was hit; there are more matches than were returned. */
+  truncated: boolean
+  cancelled: boolean
+  /** Set only when the walk could not start at all. */
+  error: string
+}
+
 export type FileChangeKind = 'create' | 'write' | 'remove' | 'rename' | 'chmod'
 
 /**
