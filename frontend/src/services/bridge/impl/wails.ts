@@ -13,12 +13,14 @@
 
 import type { Bridge } from '../types'
 import {
+  fileDropEvent,
   guard,
   searchBatchEvent,
   searchDoneEvent,
   toFileItem,
   toFileSystemEvent,
   toOperationResult,
+  toExternalDrop,
   toSearchBatch,
   toSearchDone,
   watcherEvent,
@@ -112,6 +114,13 @@ export const bridge: Bridge = {
         offDone()
       }
     },
+  },
+  desktop: {
+    onFileDrop: (handler) =>
+      EventsOn(fileDropEvent, (payload: unknown) => {
+        const drop = toExternalDrop(payload)
+        if (drop) handler(drop)
+      }),
   },
   watcher: {
     watch: (path) => guard(() => Watch(path)),

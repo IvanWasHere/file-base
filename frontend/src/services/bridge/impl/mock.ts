@@ -9,7 +9,7 @@
  * hierarchy onto real-looking absolute paths under /Users/dev.
  */
 
-import type { Bridge, SearchHandlers } from '../types'
+import type { Bridge, ExternalDrop, SearchHandlers } from '../types'
 import { mockDb } from './mockDb'
 import type {
   ConflictPolicy,
@@ -176,6 +176,7 @@ export function __resetMockFilesystem(): void {
   watched.clear()
   searchHandlers.clear()
   cancelled.clear()
+  dropHandlers.clear()
 }
 
 /**
@@ -436,6 +437,19 @@ const searchHandlers = new Set<SearchHandlers>()
 const cancelled = new Set<string>()
 let searchCounter = 0
 
+const dropHandlers = new Set<(drop: ExternalDrop) => void>()
+
+/**
+ * Test hook: simulates Finder dropping files onto the window.
+ *
+ * The real event comes from the native layer above the webview, so there is no
+ * way to produce it from a test — this is the seam that makes the handling
+ * testable at all.
+ */
+export function __emitFileDrop(drop: ExternalDrop): void {
+  for (const handler of dropHandlers) handler(drop)
+}
+
 export const bridge: Bridge = {
   fs: {
     // Async so the not-found throw becomes a rejection. Reading a missing
@@ -556,6 +570,14 @@ export const bridge: Bridge = {
     subscribe: (handlers) => {
       searchHandlers.add(handlers)
       return () => searchHandlers.delete(handlers)
+    },
+  },
+  desktop: {
+    // Finder cannot reach a mock, so this exists to be driven by tests through
+    // `__emitFileDrop`.
+    onFileDrop: (handler) => {
+      dropHandlers.add(handler)
+      return () => dropHandlers.delete(handler)
     },
   },
   watcher: {

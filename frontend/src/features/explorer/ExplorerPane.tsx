@@ -155,6 +155,7 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
         ) : pane.viewMode === 'details' ? (
           <DetailsView
             paneId={pane.id}
+            path={pane.path}
             items={shown}
             sort={pane.sort}
             onSortChange={(sort) => setSort(pane.id, sort)}
@@ -165,6 +166,7 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
         ) : (
           <IconsView
             paneId={pane.id}
+            path={pane.path}
             mode={pane.viewMode}
             items={shown}
             onActivate={handleActivate}

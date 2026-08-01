@@ -288,9 +288,23 @@ Notes from the build:
 
 Verified in the running app against real files: the folder filter narrowing instantly, a recursive walk finding a file two levels down, every filter (kind, extension, size, date, hidden) against the Go walk, and the same query answered from the FTS5 index — including a file deleted on disk dropping out of indexed results.
 
-### M9 — Drag & drop
-Internal drag between panes and onto sidebar folders (copy vs move via modifier), with drop-target highlighting; external file drop from Finder into the app via Wails' `DragAndDrop` option.
-⚠️ Dragging *out* to Finder is not supported by the webview — mitigate with "Reveal in Finder" + copy-path.
+### M9 — Drag & drop ✅ complete
+`dragStore`, `useFileDrag` (drag sources and drop zones), `utils/volume` (the copy-versus-move rule), `useExternalDrop`, and `runtime.OnFileDrop` bridged from `main.go`. Drop targets: folder rows and tiles, a pane's own listing, and every sidebar place.
+
+Notes from the build:
+
+- **The payload lives in a store, not in `DataTransfer`.** The browser makes drag data unreadable during `dragover` — `getData` returns "" until the drop — and every decision a drag makes while moving (legal target? copy or move? which row lights up?) needs the payload. `DataTransfer` carries a plain-text copy of the paths for anything outside the app that might read it.
+- **Drop handling is on the container, not the row.** A virtualized list recreates its rows constantly; thirty of them with their own handlers and their own volume-list subscription would be wasteful. One set of handlers on the scroll element hit-tests with `closest('[data-drop-path]')`, and rows only declare what they are.
+- **Copy versus move follows Finder, which meant knowing about volumes.** Same volume moves, different volumes copies, Option forces a copy. `utils/volume` answers it from the mount points the sidebar already reads, so it stays a pure string operation — with the subtlety that the *longest* matching mount wins, since "/" is a prefix of everything.
+- **Cmd-to-force-move is deliberately absent.** It would silently turn a cross-volume drag into a copy-then-delete, and there is no progress UI for the long operation that would follow.
+- **Dragging an unselected row drags only that row**, as Finder does, rather than the selection it was not part of.
+- **A drop refused at the target never lights up**, so a drag that cannot work never looks like it would: a folder into itself or its own subtree, and a move back into the folder it came from. A *copy* back into the same folder is allowed — that is Duplicate, and it starts at keep-both.
+- **External drops never reach the DOM.** The native layer sits above the webview, so there is no dragover, no drop event and no element under the pointer — only window coordinates. The target is recovered by hit-testing those against the same `data-drop-path` attributes, which is exactly why both paths agree about what a folder is. A drop that lands on chrome says so rather than guessing a destination.
+- **External drops always copy.** Moving a file out of wherever the user keeps it, because they dragged it into another window, is not something to infer.
+- **Dragging *out* to Finder remains impossible** (PLAN.md §3). Copy Path was added beside Reveal in Finder as the documented way across.
+- **jsdom has no `DragEvent`**, so the acceptance tests build the events by hand — and `altKey` has to be defined onto them explicitly, or every Option-drag silently reads as a plain one and the test asserts the wrong thing.
+
+Verified in the running app against real files: a move onto a folder, a folder into itself refused with `dropEffect: none`, an Option-drag copying while keeping the original, and a Finder drop round-tripped through the real Wails event system — hit-testing real row geometry, copying into the folder under the pointer, and reporting a drop that landed on chrome.
 
 ### M10 — Preview & thumbnails
 Preview panel: image, text/code (with size cap), PDF, metadata, tags. Background thumbnail generation in Go, cached in SQLite by `path + mtime`, requested lazily from an IntersectionObserver in grid views.

@@ -75,6 +75,19 @@ export interface WatcherApi {
   subscribe(handler: (event: FileSystemEvent) => void): () => void
 }
 
+/** Files dragged in from Finder, with where they landed in the window. */
+export interface ExternalDrop {
+  /** Window coordinates, for finding which pane was under the pointer. */
+  x: number
+  y: number
+  paths: string[]
+}
+
+export interface DesktopApi {
+  /** Returns an unsubscribe function. */
+  onFileDrop(handler: (drop: ExternalDrop) => void): () => void
+}
+
 export interface ShellApi {
   openFile(path: string): Promise<void>
   revealInFinder(path: string): Promise<void>
@@ -129,6 +142,7 @@ export interface Bridge {
   fs: FilesystemApi
   search: SearchApi
   watcher: WatcherApi
+  desktop: DesktopApi
   shell: ShellApi
   dialogs: DialogsApi
   db: DatabaseApi

@@ -22,6 +22,7 @@ export type MenuCommandId =
   | 'file.moveToTrash'
   | 'file.delete'
   | 'file.revealInFinder'
+  | 'file.copyPath'
   // Edit
   | 'edit.undo'
   | 'edit.copy'
@@ -86,6 +87,7 @@ export const APP_MENUS: MenuDefinition[] = [
       { id: 'file.delete', label: 'Delete Immediately…' },
       { separator: true },
       { id: 'file.revealInFinder', label: 'Reveal in Finder' },
+      { id: 'file.copyPath', label: 'Copy Path' },
     ],
   },
   {

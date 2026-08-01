@@ -3,11 +3,13 @@ import { FolderOpen } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileIcon } from '@/components/common/FileIcon'
 import { InlineRename } from '@/components/explorer/InlineRename'
+import { useDragSource, useDropZone } from '@/hooks/useFileDrag'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { useMarqueeSelection } from '@/hooks/useMarqueeSelection'
 import { useReclaimFocus } from '@/hooks/useReclaimFocus'
 import { useSelection } from '@/hooks/useSelection'
 import { useCutPaths } from '@/stores/clipboardStore'
+import { useDragStore } from '@/stores/dragStore'
 import { useUiStore } from '@/stores/uiStore'
 import type { FileItem } from '@/types/file'
 import type { ViewMode } from '@/types/workspace'
@@ -68,6 +70,8 @@ const Tile = memo(function Tile({
   selected,
   cut,
   renaming,
+  dropTarget,
+  dragProps,
   onSelect,
   onActivate,
   onRename,
@@ -78,6 +82,8 @@ const Tile = memo(function Tile({
   selected: boolean
   cut: boolean
   renaming: boolean
+  dropTarget: boolean
+  dragProps: React.HTMLAttributes<HTMLDivElement> & { draggable: boolean }
   onSelect: (item: FileItem, event: React.MouseEvent) => void
   onActivate: (item: FileItem) => void
   onRename: (path: string, newName: string) => void
@@ -87,13 +93,17 @@ const Tile = memo(function Tile({
     <div
       role="row"
       data-file-row
+      {...(item.isDirectory ? { 'data-drop-path': item.path } : {})}
+      {...dragProps}
       aria-selected={selected}
       title={item.name}
       onMouseDown={(event) => onSelect(item, event)}
       onDoubleClick={() => onActivate(item)}
       className={`hover:bg-hover flex h-full cursor-default rounded-lg transition-colors ${
         spec.horizontal ? 'items-center gap-2 px-2' : 'flex-col items-center gap-1.5 px-2 pt-3 pb-2'
-      } ${selected ? 'bg-[var(--accent-glow)]' : ''} ${cut ? 'opacity-45' : ''}`}
+      } ${selected ? 'bg-[var(--accent-glow)]' : ''} ${cut ? 'opacity-45' : ''} ${
+        dropTarget ? 'ring-accent bg-[var(--accent-glow)] ring-2 ring-inset' : ''
+      }`}
     >
       <div
         role="gridcell"
@@ -134,6 +144,8 @@ const Tile = memo(function Tile({
 
 interface IconsViewProps {
   paneId: string
+  /** The folder being shown — the drop target when the pointer is not on a tile. */
+  path: string
   mode: Exclude<ViewMode, 'details'>
   items: FileItem[]
   onActivate: (item: FileItem) => void
@@ -143,6 +155,7 @@ interface IconsViewProps {
 
 export function IconsView({
   paneId,
+  path,
   mode,
   items,
   onActivate,
@@ -189,10 +202,12 @@ export function IconsView({
     scrollRef.current?.focus({ preventScroll: true })
   }, [endRename])
 
+  // `target` rather than `path`: the pane's own path is a prop now, and
+  // shadowing it here would be a trap for the next edit.
   const handleRename = useCallback(
-    (path: string, newName: string) => {
+    (target: string, newName: string) => {
       finishRename()
-      onRename(path, newName)
+      onRename(target, newName)
     },
     [finishRename, onRename],
   )
@@ -242,6 +257,10 @@ export function IconsView({
 
   useReclaimFocus(scrollRef, items.length > 0)
 
+  const dragSource = useDragSource(paneId, path)
+  const dropZone = useDropZone(path)
+  const dropTarget = useDragStore((state) => state.over)
+
   if (items.length === 0) {
     return (
       <div className="text-muted flex h-full flex-col items-center justify-center gap-2">
@@ -264,7 +283,10 @@ export function IconsView({
         onMouseDown(event)
         if (!(event.target as HTMLElement).closest('[data-file-row]')) clear()
       }}
-      className="relative h-full overflow-auto outline-none"
+      {...dropZone}
+      className={`relative h-full overflow-auto outline-none ${
+        dropTarget === path ? 'ring-accent ring-2 ring-inset' : ''
+      }`}
       style={{ padding: spec.padding }}
     >
       <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
@@ -294,6 +316,8 @@ export function IconsView({
                   selected={selected.has(item.path)}
                   cut={cut.has(item.path)}
                   renaming={renamingPath === item.path}
+                  dropTarget={dropTarget === item.path}
+                  dragProps={dragSource(item)}
                   onSelect={handlePointerSelect}
                   onActivate={onActivate}
                   onRename={handleRename}

@@ -12,6 +12,8 @@ import { TabBar } from '@/components/toolbar/TabBar'
 import { Toolbar } from '@/components/toolbar/Toolbar'
 import { DirectoryError } from '@/components/common/DirectoryError'
 import { useDirectory } from '@/hooks/useDirectory'
+import { useExternalDrop } from '@/hooks/useExternalDrop'
+import { useFileOperations } from '@/hooks/useFileOperations'
 import { hydrate, startPersistence } from '@/services/db/persistence'
 import { standardPathsQuery } from '@/services/filesystem/queries'
 import { startWatchInvalidation } from '@/services/filesystem/watch'
@@ -62,6 +64,10 @@ export function ExplorerLayout() {
   // watcher reports directories, and which panes care is the query cache's
   // business (PLAN.md §1, rule 2).
   useEffect(() => startWatchInvalidation(queryClient), [queryClient])
+
+  // Subscribed once for the window: a Finder drop arrives with coordinates and
+  // is routed by hit-test, so no pane needs its own listener.
+  useExternalDrop(useFileOperations())
 
   // `!tab` covers hydration too: since M5, startup waits on migrations and the
   // session query, and rendering the chrome around an empty workspace would

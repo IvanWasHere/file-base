@@ -7,6 +7,7 @@ import { fsKeys, standardPathsQuery } from '@/services/filesystem/queries'
 import { useClipboardStore } from '@/stores/clipboardStore'
 import { useHistoryStore } from '@/stores/historyStore'
 import { useSearchStore } from '@/stores/searchStore'
+import { toast } from '@/stores/toastStore'
 import { usePaneSelection, useSelectionStore } from '@/stores/selectionStore'
 import { useUiStore } from '@/stores/uiStore'
 import {
@@ -118,6 +119,18 @@ export function useMenuCommands(): MenuCommandState {
       case 'file.revealInFinder': {
         const path = targets[0] ?? pane?.path
         if (path) void bridge.shell.revealInFinder(path).catch(() => undefined)
+        return
+      }
+
+      // Dragging *out* to Finder is not something the webview can do
+      // (PLAN.md §3). Reveal in Finder and this are the way across.
+      case 'file.copyPath': {
+        const path = targets[0] ?? pane?.path
+        if (!path) return
+        void navigator.clipboard.writeText(targets.length > 1 ? targets.join('\n') : path).then(
+          () => toast.info(targets.length > 1 ? `Copied ${targets.length} paths` : 'Copied path'),
+          () => toast.error('Could not copy the path'),
+        )
         return
       }
 

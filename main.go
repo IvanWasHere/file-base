@@ -14,6 +14,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 //go:embed all:frontend/dist
@@ -82,6 +83,16 @@ func main() {
 			// Search only needs the context to stream results back; there is
 			// nothing to fail.
 			search.Start(finder, ctx)
+
+			// Files dragged in from Finder. The coordinates matter: the drop
+			// happens in the native layer, above the webview, so the frontend
+			// cannot tell which pane was under the pointer without them
+			// (PLAN.md M9).
+			runtime.OnFileDrop(ctx, func(x, y int, paths []string) {
+				runtime.EventsEmit(ctx, "files:dropped", map[string]any{
+					"x": x, "y": y, "paths": paths,
+				})
+			})
 		},
 		// Each package binds separately so the generated TypeScript bindings stay
 		// namespaced (wailsjs/go/filesystem/FS, wailsjs/go/db/DB).

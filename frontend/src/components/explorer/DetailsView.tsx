@@ -3,12 +3,14 @@ import { AlertTriangle, ArrowDown, ArrowUp, FolderOpen, Link2 } from 'lucide-rea
 import { memo, useCallback, useMemo, useRef } from 'react'
 import { FileIcon } from '@/components/common/FileIcon'
 import { InlineRename } from '@/components/explorer/InlineRename'
+import { useDragSource, useDropZone } from '@/hooks/useFileDrag'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { useMarqueeSelection } from '@/hooks/useMarqueeSelection'
 import { useReclaimFocus } from '@/hooks/useReclaimFocus'
 import { useSelection } from '@/hooks/useSelection'
 import type { SortKey, SortSpec } from '@/services/filesystem/sort'
 import { useCutPaths } from '@/stores/clipboardStore'
+import { useDragStore } from '@/stores/dragStore'
 import { useUiStore } from '@/stores/uiStore'
 import type { FileItem } from '@/types/file'
 import { typeLabel } from '@/utils/fileCategory'
@@ -33,6 +35,8 @@ const HEADERS: { key: SortKey; label: string }[] = [
 
 interface DetailsViewProps {
   paneId: string
+  /** The folder being shown — the drop target when the pointer is not on a row. */
+  path: string
   items: FileItem[]
   sort: SortSpec
   onSortChange: (sort: SortSpec) => void
@@ -47,6 +51,8 @@ const Row = memo(function Row({
   selected,
   cut,
   renaming,
+  dropTarget,
+  dragProps,
   onSelect,
   onActivate,
   onRename,
@@ -56,6 +62,8 @@ const Row = memo(function Row({
   selected: boolean
   cut: boolean
   renaming: boolean
+  dropTarget: boolean
+  dragProps: React.HTMLAttributes<HTMLDivElement> & { draggable: boolean }
   onSelect: (item: FileItem, event: React.MouseEvent) => void
   onActivate: (item: FileItem) => void
   onRename: (path: string, newName: string) => void
@@ -65,12 +73,18 @@ const Row = memo(function Row({
     <div
       role="row"
       data-file-row
+      // Only folders advertise themselves as drop targets; the container's
+      // hit-test reads this attribute to find what is under the pointer.
+      {...(item.isDirectory ? { 'data-drop-path': item.path } : {})}
+      {...dragProps}
       aria-selected={selected}
       onMouseDown={(event) => onSelect(item, event)}
       onDoubleClick={() => onActivate(item)}
       className={`grid ${COLUMNS} hover:bg-hover h-full cursor-default items-center border-b border-[var(--border-subtle)] px-3 text-[13px] ${
         selected ? 'bg-[var(--accent-glow)]' : ''
-      } ${cut ? 'opacity-45' : ''}`}
+      } ${cut ? 'opacity-45' : ''} ${
+        dropTarget ? 'ring-accent bg-[var(--accent-glow)] ring-2 ring-inset' : ''
+      }`}
     >
       <div role="gridcell" className="flex min-w-0 items-center gap-2">
         <FileIcon category={item.category} />
@@ -108,6 +122,7 @@ const Row = memo(function Row({
 
 export function DetailsView({
   paneId,
+  path,
   items,
   sort,
   onSortChange,
@@ -136,10 +151,12 @@ export function DetailsView({
     scrollRef.current?.focus({ preventScroll: true })
   }, [endRename])
 
+  // `target` rather than `path`: the pane's own path is a prop now, and
+  // shadowing it here would be a trap for the next edit.
   const handleRename = useCallback(
-    (path: string, newName: string) => {
+    (target: string, newName: string) => {
       finishRename()
-      onRename(path, newName)
+      onRename(target, newName)
     },
     [finishRename, onRename],
   )
@@ -188,6 +205,10 @@ export function DetailsView({
   })
 
   useReclaimFocus(scrollRef, items.length > 0)
+
+  const dragSource = useDragSource(paneId, path)
+  const dropZone = useDropZone(path)
+  const dropTarget = useDragStore((state) => state.over)
 
   const toggleSort = (key: SortKey) => {
     onSortChange(
@@ -247,7 +268,10 @@ export function DetailsView({
           // A click on empty space clears, matching Finder.
           if (!(event.target as HTMLElement).closest('[data-file-row]')) clear()
         }}
-        className="relative flex-1 overflow-auto outline-none"
+        {...dropZone}
+        className={`relative flex-1 overflow-auto outline-none ${
+          dropTarget === path ? 'ring-accent ring-2 ring-inset' : ''
+        }`}
       >
         <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
           {virtualizer.getVirtualItems().map((virtualRow) => {
@@ -270,6 +294,8 @@ export function DetailsView({
                   selected={selected.has(item.path)}
                   cut={cut.has(item.path)}
                   renaming={renamingPath === item.path}
+                  dropTarget={dropTarget === item.path}
+                  dragProps={dragSource(item)}
                   onSelect={handlePointerSelect}
                   onActivate={onActivate}
                   onRename={handleRename}

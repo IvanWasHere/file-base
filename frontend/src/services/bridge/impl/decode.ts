@@ -23,6 +23,7 @@ import type {
 } from '@/types/file'
 import type { FsErrorCode } from '@/types/errors'
 import { FsError } from '@/types/errors'
+import type { ExternalDrop } from '../types'
 import { categorize } from '@/utils/fileCategory'
 import { extname } from '@/utils/path'
 import type { filesystem } from '../../../../wailsjs/go/models'
@@ -115,6 +116,22 @@ export const watcherEvent = 'fs:change'
 /** Must match backend/search. */
 export const searchBatchEvent = 'search:batch'
 export const searchDoneEvent = 'search:done'
+
+/** Must match the OnFileDrop bridge in main.go. */
+export const fileDropEvent = 'files:dropped'
+
+/** Validates a Finder drop. A payload with no paths is nothing to act on. */
+export function toExternalDrop(payload: unknown): ExternalDrop | null {
+  if (typeof payload !== 'object' || payload === null) return null
+  const wire = payload as Record<string, unknown>
+
+  const paths = Array.isArray(wire.paths)
+    ? wire.paths.filter((path): path is string => typeof path === 'string' && path.length > 0)
+    : []
+  if (paths.length === 0) return null
+
+  return { x: numberOr(wire.x, 0), y: numberOr(wire.y, 0), paths }
+}
 
 /**
  * Validates a streamed result batch.

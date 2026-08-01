@@ -14,7 +14,9 @@ import {
   Trash2,
   type LucideIcon,
 } from 'lucide-react'
+import { useDropZone } from '@/hooks/useFileDrag'
 import { useFavorites, useRecents } from '@/hooks/useFavorites'
+import { useIsDropTarget } from '@/stores/dragStore'
 import { standardPathsQuery, volumesQuery } from '@/services/filesystem/queries'
 import { useActivePane, useActiveTab, useWorkspaceStore } from '@/stores/workspaceStore'
 import type { StandardPaths } from '@/types/file'
@@ -53,12 +55,17 @@ function SectionTitle({ children }: { children: string }) {
   )
 }
 
+/**
+ * A place in the sidebar, which is also a drop target: dragging files onto
+ * Documents or an external drive is one of the two things a sidebar is for.
+ */
 function SidebarItem({
   label,
   icon: Icon,
   colorVar,
   detail,
   active,
+  path,
   onClick,
 }: {
   label: string
@@ -69,19 +76,25 @@ function SidebarItem({
   // capacity pass undefined here.
   detail?: string | undefined
   active: boolean
+  path: string
   onClick: () => void
 }) {
+  const dropZone = useDropZone(path)
+  const isTarget = useIsDropTarget(path)
+
   return (
     <button
       type="button"
       onClick={onClick}
+      data-drop-path={path}
+      {...dropZone}
       aria-current={active ? 'location' : undefined}
       title={label}
       className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
         active
           ? 'text-accent bg-[var(--accent-glow)]'
           : 'text-secondary hover:bg-hover hover:text-primary'
-      }`}
+      } ${isTarget ? 'ring-accent bg-[var(--accent-glow)] ring-2 ring-inset' : ''}`}
     >
       <Icon
         size={14}
@@ -130,6 +143,7 @@ export function Sidebar() {
               label={favorite.label}
               icon={favorite.icon}
               colorVar={favorite.colorVar}
+              path={paths[favorite.key]}
               active={isActive(paths[favorite.key])}
               onClick={() => go(paths[favorite.key])}
             />
@@ -145,6 +159,7 @@ export function Sidebar() {
               label={favorite.label}
               icon={Star}
               colorVar="var(--accent)"
+              path={favorite.path}
               active={isActive(favorite.path)}
               onClick={() => go(favorite.path)}
             />
@@ -160,6 +175,7 @@ export function Sidebar() {
               key={recent.path}
               label={basename(recent.path)}
               icon={Clock}
+              path={recent.path}
               active={isActive(recent.path)}
               onClick={() => go(recent.path)}
             />
@@ -176,6 +192,7 @@ export function Sidebar() {
               label={volume.name}
               icon={HardDrive}
               detail={volume.totalBytes > 0 ? formatSize(volume.totalBytes) : undefined}
+              path={volume.path}
               active={isActive(volume.path)}
               onClick={() => go(volume.path)}
             />
