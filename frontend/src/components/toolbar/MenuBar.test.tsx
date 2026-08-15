@@ -59,6 +59,39 @@ describe('menu bar', () => {
     await waitFor(() => expect(screen.queryByRole('menu', { name: 'View' })).toBeNull())
   })
 
+  // Every "outside" that used to count as inside, because the dismiss handler
+  // asked about the whole menu-bar block rather than the open menu.
+  it.each([
+    ['the empty stretch of the menu bar', () => screen.getByRole('menubar', { name: 'Application' })],
+    ['the window drag strip above the titles', () =>
+      screen.getByRole('menubar', { name: 'Application' }).parentElement as HTMLElement],
+    ['the file list', () => screen.getByRole('grid', { name: 'Folder contents' })],
+  ])('closes an open menu on a press on %s', async (_label, target) => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+
+    await user.click(screen.getByRole('menuitem', { name: 'View' }))
+    expect(await screen.findByRole('menu', { name: 'View' })).toBeInTheDocument()
+
+    // `pointerDown`, which is what the handler listens for — a press that lands
+    // outside should dismiss before the click it belongs to is delivered.
+    fireEvent.pointerDown(target())
+
+    await waitFor(() => expect(screen.queryByRole('menu', { name: 'View' })).toBeNull())
+  })
+
+  it('keeps the menu open for a press inside it', async () => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+
+    await user.click(screen.getByRole('menuitem', { name: 'View' }))
+    const menu = await screen.findByRole('menu', { name: 'View' })
+
+    fireEvent.pointerDown(menu)
+
+    expect(screen.getByRole('menu', { name: 'View' })).toBeInTheDocument()
+  })
+
   it('switches menus on hover once one is open', async () => {
     const { user } = renderApp()
     await rowFor('Documents')

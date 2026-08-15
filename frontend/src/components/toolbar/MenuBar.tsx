@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   MenuItemButton,
   MenuPanel,
@@ -30,14 +30,29 @@ import { useMenuCommands } from '@/hooks/useMenuCommands'
  */
 export function MenuBar() {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
-  const container = useRef<HTMLDivElement>(null)
   const { run, isEnabled, isChecked, isVisible } = useMenuCommands()
 
   useEffect(() => {
     if (!openMenu) return
 
+    /**
+     * Anything that is not the open menu or a menu title dismisses it.
+     *
+     * This used to ask whether the press landed inside the whole menu-bar
+     * *block* — which is the full width of the window plus the 50px strip the
+     * traffic lights float in. Clicking the empty stretch to the right of "Go",
+     * or the title bar above it, therefore counted as "inside" and left the
+     * menu hanging open, which is not how a menu bar behaves anywhere.
+     *
+     * Asking about the panel and the titles instead means the only two things
+     * that keep a menu open are the two that should: the menu itself, including
+     * any flyout (both are `role="menu"`), and the row of titles, whose own
+     * click handler toggles.
+     */
     const onPointerDown = (event: PointerEvent) => {
-      if (!container.current?.contains(event.target as Node)) setOpenMenu(null)
+      const target = event.target as HTMLElement | null
+      if (target?.closest('[role="menu"], [data-menubar-item]')) return
+      setOpenMenu(null)
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpenMenu(null)
@@ -71,7 +86,6 @@ export function MenuBar() {
 
   return (
     <div
-      ref={container}
       className="bg-deep border-edge flex shrink-0 flex-col border-b"
       // Reserves the strip the traffic lights float in, so the menu sits below
       // them. The strip itself drags the window.
@@ -90,6 +104,10 @@ export function MenuBar() {
               <button
                 type="button"
                 role="menuitem"
+                // Read by the dismiss handler above: a press on a title is the
+                // one thing besides the menu itself that must not close it,
+                // because this button's own click already toggles.
+                data-menubar-item
                 aria-haspopup="menu"
                 aria-expanded={open}
                 onClick={() => setOpenMenu(open ? null : menu.id)}

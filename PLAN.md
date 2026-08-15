@@ -1787,6 +1787,25 @@ be read synchronously, so the first frame is dark whatever is stored. Go could
 read that one row itself at startup and set `BackgroundColour` from it, which is
 the cheapest fix if it grates.
 
+#### Menu dismissal ✅ fixed
+
+Reported as "clicking outside an open menu should close it", and it was half
+true: the dismiss handler asked whether the press landed inside the menu bar's
+**container**, which is the full width of the window plus the 50px strip the
+traffic lights float in. A press on the file list closed the menu; a press on
+the empty stretch to the right of *Go*, or on the title bar above it, counted as
+inside and left the menu hanging open.
+
+It now asks about the open panel and the titles instead —
+`closest('[role="menu"], [data-menubar-item]')` — so the only two things that
+keep a menu open are the menu itself, flyouts included, and the row of titles,
+whose own click already toggles. Three cases are pinned by tests that **fail
+against the old handler**: the empty menu bar, the drag strip, and the file list
+(which already worked and must keep working).
+
+The context menus never had this: they test containment against the panel, which
+is what the menu bar now does too.
+
 #### Release pipeline ✅ done
 
 `.github/workflows/release.yml`: push a `v*` tag, get a **draft** release with a
