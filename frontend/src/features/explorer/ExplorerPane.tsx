@@ -1,5 +1,5 @@
 import { Loader2 } from 'lucide-react'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { DetailsView } from '@/components/explorer/DetailsView'
 import { IconsView } from '@/components/explorer/IconsView'
 import { DirectoryError } from '@/components/common/DirectoryError'
@@ -59,22 +59,6 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
     clearSelection(pane.id)
   }, [pane.path, pane.id, clearSelection])
 
-  // Selecting reveals the preview if it was closed, as in the mockup. Driven by
-  // the selection itself rather than the click handler, so keyboard and marquee
-  // selection behave the same as a click.
-  //
-  // Only on the *transition* into having a selection, though. Reacting to
-  // "something is selected and the panel is shut" meant the panel reopened the
-  // instant it was closed, which made M11's Space and the View menu's Show
-  // Preview look broken whenever a file was highlighted — which is most of the
-  // time. An explicit close has to outlast the selection that provoked it.
-  const hadSelection = useRef(false)
-  useEffect(() => {
-    const has = selected.size > 0
-    if (has && !hadSelection.current && !previewOpen) setPreviewOpen(true)
-    hadSelection.current = has
-  }, [selected.size, previewOpen, setPreviewOpen])
-
   const operations = useFileOperations()
 
   const { active: searching, items: results, cancel: cancelSearch } = useSearch(
@@ -86,6 +70,37 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
   // by the backend's walk or the filter's input order; re-sorting a recursive
   // result set by name would scatter siblings across the list.
   const shown = searching ? results : items
+
+  /**
+   * Selecting a *file* reveals the preview if it was closed. Driven by the
+   * selection itself rather than a click handler, so keyboard and marquee
+   * selection behave the same as a click.
+   *
+   * **A folder does not reveal it.** The panel has nothing to add about a
+   * folder that the listing does not already show, so opening it on a folder
+   * click only takes width away from the thing being browsed — and browsing is
+   * mostly clicking through folders. Adding a file to the selection still
+   * reveals it, which is why the guard below tracks whether a *file* was
+   * selected rather than whether anything was.
+   *
+   * Only on the *transition*, though. Reacting to "a file is selected and the
+   * panel is shut" meant the panel reopened the instant it was closed, which
+   * made M11's Space and the View menu's Show Preview look broken whenever a
+   * file was highlighted — which is most of the time. An explicit close has to
+   * outlast the selection that provoked it.
+   *
+   * Read off `shown` rather than `items` so a search result counts too.
+   */
+  const fileSelected = useMemo(
+    () => shown.some((item) => !item.isDirectory && selected.has(item.path)),
+    [shown, selected],
+  )
+
+  const hadFile = useRef(false)
+  useEffect(() => {
+    if (fileSelected && !hadFile.current && !previewOpen) setPreviewOpen(true)
+    hadFile.current = fileSelected
+  }, [fileSelected, previewOpen, setPreviewOpen])
 
   const handleActivate = (item: FileItem) => {
     if (item.broken) return
