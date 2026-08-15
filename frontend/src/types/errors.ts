@@ -22,6 +22,8 @@ export type FsErrorCode =
   /** A refusal, not a failure: the file is past what the operation will handle. */
   | 'too-large'
   | 'cancelled'
+  /** An archive needs a password, or the one given was wrong (M18). */
+  | 'password-required'
   | 'unknown'
 
 export class FsError extends Error {
@@ -76,6 +78,10 @@ export function describeFsError(error: FsError): string {
       return error.message || 'That name cannot be used.'
     case 'cancelled':
       return 'Cancelled.'
+    case 'password-required':
+      // Go's message distinguishes "protected" from "that did not work", which
+      // is more useful than anything generic written here.
+      return error.message || 'This archive needs a password.'
     case 'unknown':
       return error.message || 'Something went wrong.'
   }

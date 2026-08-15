@@ -14,6 +14,8 @@
 
 import type { Bridge } from '../types'
 import {
+  archiveDoneEvent,
+  archiveProgressEvent,
   fileDropEvent,
   guard,
   hashDoneEvent,
@@ -22,6 +24,8 @@ import {
   menuCommandEvent,
   searchBatchEvent,
   searchDoneEvent,
+  toArchiveDone,
+  toArchiveProgress,
   toFileItem,
   toFileSystemEvent,
   toHashDone,
@@ -54,6 +58,13 @@ import { Cancel, Find } from '../../../../wailsjs/go/search/Search'
 // Aliased: both packages bind a `Cancel`, and importing them under one name
 // would silently give whichever came last.
 import { Cancel as CancelHash, Hash } from '../../../../wailsjs/go/hashing/Hashing'
+import {
+  Cancel as CancelArchive,
+  Create as CreateArchive,
+  Extract,
+  NewMount,
+  ReleaseMount,
+} from '../../../../wailsjs/go/archive/Archive'
 import { Generate } from '../../../../wailsjs/go/thumbs/Thumbs'
 import { OpenFile, OpenWith, RevealInFinder } from '../../../../wailsjs/go/shell/Shell'
 import { Exec, Query, Tx } from '../../../../wailsjs/go/db/DB'
@@ -174,6 +185,27 @@ export const bridge: Bridge = {
   },
   thumbs: {
     generate: (path, size) => guard(() => Generate(path, size)),
+  },
+  archives: {
+    extract: (request) => guard(() => Extract(request)),
+    create: (request) => guard(() => CreateArchive(request)),
+    cancel: (id) => guard(() => CancelArchive(id)),
+    newMount: (archivePath) => guard(() => NewMount(archivePath)),
+    releaseMount: (mountPath) => guard(() => ReleaseMount(mountPath)),
+    subscribe: (handlers) => {
+      const offProgress = EventsOn(archiveProgressEvent, (payload: unknown) => {
+        const progress = toArchiveProgress(payload)
+        if (progress) handlers.onProgress(progress)
+      })
+      const offDone = EventsOn(archiveDoneEvent, (payload: unknown) => {
+        const done = toArchiveDone(payload)
+        if (done) handlers.onDone(done)
+      })
+      return () => {
+        offProgress()
+        offDone()
+      }
+    },
   },
   hashing: {
     hash: (request) => guard(() => Hash(request)),

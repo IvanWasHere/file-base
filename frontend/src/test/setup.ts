@@ -4,6 +4,7 @@ import { afterEach, beforeEach } from 'vitest'
 import { __resetMockFilesystem } from '@/services/bridge/impl/mock'
 import { resetMockDatabase } from '@/services/bridge/impl/mockDb'
 import { __resetFolderPrefsCache } from '@/services/db/persistence'
+import { __releaseAllMounts } from '@/services/archives/mountRegistry'
 import { __resetDigestCache } from '@/services/hashing/hashService'
 import { __resetWatchCounts } from '@/services/filesystem/watch'
 
@@ -54,6 +55,9 @@ beforeEach(() => {
   // Digests are cached for the session, so without this a file hashed by one
   // test would answer instantly in the next and never exercise the job at all.
   __resetDigestCache()
+  // Mounts are module state, so one left registered by a test would make the
+  // next reuse an extraction whose folder the mock filesystem no longer has.
+  __releaseAllMounts()
 
   globalThis.ResizeObserver = ResizeObserverStub
 

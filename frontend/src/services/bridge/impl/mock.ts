@@ -9,7 +9,13 @@
  * hierarchy onto real-looking absolute paths under /Users/dev.
  */
 
-import type { Bridge, ExternalDrop, HashHandlers, SearchHandlers } from '../types'
+import type {
+  ArchiveHandlers,
+  Bridge,
+  ExternalDrop,
+  HashHandlers,
+  SearchHandlers,
+} from '../types'
 import { mockDb } from './mockDb'
 import { algorithmSpec } from '@/constants/hashAlgorithms'
 import type { HashResult } from '@/types/hashing'
@@ -45,6 +51,8 @@ interface Node {
   content?: string
   /** Reflected in `permissions`, so the x bit survives a read (M15). */
   executable?: boolean
+  /** A browse mount is extracted read-only, and the listing has to show that. */
+  readOnly?: boolean
 }
 
 /** 1×1 transparent PNG, shared by the image preview and the thumbnailer. */
@@ -184,6 +192,8 @@ export function __resetMockFilesystem(): void {
   watched.clear()
   searchHandlers.clear()
   cancelled.clear()
+  archiveHandlers.clear()
+  archiveCancelled.clear()
   hashHandlers.clear()
   hashCancelled.clear()
   dropHandlers.clear()
@@ -224,10 +234,14 @@ function toFileItem(node: Node): FileItem {
     createdAt: node.createdAt,
     modifiedAt: node.modifiedAt,
     permissions: node.isDirectory
-      ? 'drwxr-xr-x'
-      : node.executable
-        ? '-rwxr-xr-x'
-        : '-rw-r--r--',
+      ? node.readOnly
+        ? 'dr-xr-xr-x'
+        : 'drwxr-xr-x'
+      : node.readOnly
+        ? '-r--r--r--'
+        : node.executable
+          ? '-rwxr-xr-x'
+          : '-rw-r--r--',
     hidden: isHiddenName(name),
     symlink: false,
     mimeType: node.isDirectory ? 'inode/directory' : 'application/octet-stream',
@@ -515,6 +529,76 @@ function syntheticDigest(seed: string, length: number): string {
   return hex.slice(0, length)
 }
 
+/* ---------- archives (M18) ---------- */
+
+const archiveHandlers = new Set<ArchiveHandlers>()
+const archiveCancelled = new Set<string>()
+let archiveCounter = 0
+let mountCounter = 0
+
+const MOCK_MOUNT_ROOT = `${HOME}/.mock-mounts`
+
+/**
+ * A mock archive is a JSON manifest stored as the file's content.
+ *
+ * There is no compression here and there could not be: the point of the mock is
+ * that the *UI* — mounting, browsing, progress, the password prompt, releasing —
+ * can be driven with no Go process. Whether the bytes are really deflated is
+ * `backend/archive`'s business, and its own tests check that against the real
+ * `unzip`, `tar` and an independent AES implementation.
+ */
+interface MockArchive {
+  mock: 'archive'
+  password: string
+  entries: { name: string; content: string; size: number }[]
+}
+
+function readMockArchive(path: string): MockArchive | null {
+  const node = nodes.get(normalize(path))
+  if (!node || node.isDirectory) return null
+  try {
+    const parsed: unknown = JSON.parse(node.content ?? '')
+    if (typeof parsed === 'object' && parsed !== null && (parsed as MockArchive).mock === 'archive') {
+      return parsed as MockArchive
+    }
+  } catch {
+    // Not one of ours.
+  }
+  return null
+}
+
+/** Every directory between `root` and `path`, inclusive, outermost first. */
+function ancestorsBetween(root: string, path: string): string[] {
+  const chain: string[] = []
+  let current = path
+  while (current && current !== root && current !== ROOT && isAncestor(root, current)) {
+    chain.unshift(current)
+    current = dirname(current)
+  }
+  return chain
+}
+
+/** Every descendant of a source, with the name it takes inside the archive. */
+function manifestFor(sources: readonly string[]): MockArchive['entries'] {
+  const entries: MockArchive['entries'] = []
+  for (const source of sources) {
+    const node = nodes.get(normalize(source))
+    if (!node) continue
+    const base = dirname(node.path)
+    const collect = (candidate: Node) => {
+      if (candidate.isDirectory) return
+      entries.push({
+        name: candidate.path.slice(base.length + 1),
+        content: candidate.content ?? '',
+        size: candidate.size,
+      })
+    }
+    collect(node)
+    for (const descendant of descendantsOf(node.path)) collect(descendant)
+  }
+  return entries
+}
+
 const menuHandlers = new Set<(id: string) => void>()
 
 /**
@@ -709,6 +793,171 @@ export const bridge: Bridge = {
       const node = requireNode(path)
       if (node.isDirectory) throw new FsError('unknown', 'a folder has no thumbnail', path)
       return `data:image/png;base64,${TRANSPARENT_PIXEL}`
+    },
+  },
+  archives: {
+    create: async (request) => {
+      archiveCounter += 1
+      const id = `mock-archive-${archiveCounter}`
+      const entries = manifestFor(request.sources)
+
+      void Promise.resolve().then(() => {
+        if (archiveCancelled.has(id)) {
+          archiveCancelled.delete(id)
+          for (const handler of archiveHandlers) {
+            handler.onDone({ id, path: '', entries: 0, bytes: 0, cancelled: true })
+          }
+          return
+        }
+
+        const payload: MockArchive = { mock: 'archive', password: request.password, entries }
+        const body = JSON.stringify(payload)
+        const parent = dirname(request.destination)
+        const name = basename(request.destination)
+
+        try {
+          // Through `create`, so the mock keeps the backend's O_EXCL promise:
+          // compressing onto an existing name fails rather than overwriting it.
+          create(parent, name, false, body)
+        } catch (error) {
+          for (const handler of archiveHandlers) {
+            handler.onDone({
+              id, path: '', entries: 0, bytes: 0, cancelled: false,
+              error: error instanceof FsError ? error : new FsError('unknown', String(error)),
+            })
+          }
+          return
+        }
+
+        const bytes = entries.reduce((sum, entry) => sum + entry.size, 0)
+        for (const handler of archiveHandlers) {
+          handler.onProgress({ id, entry: entries[0]?.name ?? '', done: bytes, total: bytes })
+          handler.onDone({
+            id, path: request.destination, entries: entries.length, bytes, cancelled: false,
+          })
+        }
+      })
+
+      return id
+    },
+
+    extract: async (request) => {
+      archiveCounter += 1
+      const id = `mock-archive-${archiveCounter}`
+      const archive = readMockArchive(request.path)
+
+      void Promise.resolve().then(() => {
+        const fail = (error: FsError) => {
+          for (const handler of archiveHandlers) {
+            handler.onDone({ id, path: '', entries: 0, bytes: 0, cancelled: false, error })
+          }
+        }
+
+        if (archiveCancelled.has(id)) {
+          archiveCancelled.delete(id)
+          for (const handler of archiveHandlers) {
+            handler.onDone({ id, path: '', entries: 0, bytes: 0, cancelled: true })
+          }
+          return
+        }
+        if (!archive) {
+          fail(new FsError('unknown', 'this file is not an archive we can open', request.path))
+          return
+        }
+        if (archive.password && archive.password !== request.password) {
+          fail(
+            new FsError(
+              'password-required',
+              request.password ? 'That password did not work.' : 'This archive is protected. Enter its password.',
+              request.path,
+            ),
+          )
+          return
+        }
+
+        let bytes = 0
+        for (const entry of archive.entries) {
+          // The same refusal the backend makes, so a test can prove the UI
+          // reports it rather than proving the mock is lenient.
+          if (entry.name.split('/').includes('..') || entry.name.startsWith('/')) {
+            fail(
+              new FsError(
+                'unknown',
+                'this archive contains an entry that would write outside the destination',
+                request.path,
+              ),
+            )
+            return
+          }
+
+          const target = join(request.destination, entry.name)
+          const parent = dirname(target)
+          if (!nodes.has(parent)) {
+            for (const segment of ancestorsBetween(request.destination, parent)) {
+              if (!nodes.has(segment)) {
+                nodes.set(segment, {
+                  path: segment, isDirectory: true, size: 0,
+                  createdAt: FIXED_NOW, modifiedAt: FIXED_NOW,
+                })
+              }
+            }
+          }
+          nodes.set(target, {
+            path: target, isDirectory: false, size: entry.size,
+            createdAt: FIXED_NOW, modifiedAt: FIXED_NOW,
+            ...(entry.content ? { content: entry.content } : {}),
+            ...(request.readOnly ? { readOnly: true } : {}),
+          })
+          bytes += entry.size
+        }
+
+        for (const handler of archiveHandlers) {
+          handler.onProgress({ id, entry: archive.entries[0]?.name ?? '', done: bytes, total: bytes })
+          handler.onDone({
+            id, path: request.destination, entries: archive.entries.length, bytes, cancelled: false,
+          })
+        }
+      })
+
+      return id
+    },
+
+    cancel: async (id) => {
+      archiveCancelled.add(id)
+    },
+
+    newMount: async (archivePath) => {
+      mountCounter += 1
+      const root = `${MOCK_MOUNT_ROOT}/mount-${mountCounter}`
+      for (const segment of [MOCK_MOUNT_ROOT, root]) {
+        if (!nodes.has(segment)) {
+          nodes.set(segment, {
+            path: segment, isDirectory: true, size: 0,
+            createdAt: FIXED_NOW, modifiedAt: FIXED_NOW,
+          })
+        }
+      }
+      const mount = join(root, basename(normalize(archivePath)))
+      nodes.set(mount, {
+        path: mount, isDirectory: true, size: 0, createdAt: FIXED_NOW, modifiedAt: FIXED_NOW,
+      })
+      return mount
+    },
+
+    releaseMount: async (mountPath) => {
+      const root = dirname(normalize(mountPath))
+      // Mirrors the backend's guard: this deletes recursively, so anything that
+      // is not one of ours is refused rather than trusted.
+      if (!basename(root).startsWith('mount-') || dirname(root) !== MOCK_MOUNT_ROOT) {
+        throw new FsError('unknown', 'that is not an archive mount', mountPath)
+      }
+      for (const descendant of descendantsOf(root)) nodes.delete(descendant.path)
+      nodes.delete(root)
+    },
+
+    subscribe: (handlers) => {
+      archiveHandlers.add(handlers)
+      return () => archiveHandlers.delete(handlers)
     },
   },
   hashing: {

@@ -66,6 +66,9 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'file.copyPath', accelerator: 'Cmd+Alt+C' },
   // Cmd+Shift+H is Go → Home, so the checksum modal takes the Option spelling.
   { id: 'file.calculateHashes', accelerator: 'Cmd+Alt+H' },
+  // Uncompress has none: it acts on whatever is selected and is destructive of
+  // disk space rather than of data, so a binding nobody would guess is clutter.
+  { id: 'file.compress', accelerator: 'Cmd+Alt+K' },
 
   // Edit
   { id: 'edit.undo', accelerator: 'Cmd+Z' },

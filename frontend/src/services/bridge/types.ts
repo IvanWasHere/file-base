@@ -27,6 +27,12 @@ import type {
   Volume,
 } from '@/types/file'
 import type { HashDone, HashProgress, HashRequest, HashResult } from '@/types/hashing'
+import type {
+  ArchiveDone,
+  ArchiveProgress,
+  CreateRequest,
+  ExtractRequest,
+} from '@/types/archive'
 
 export interface FilesystemApi {
   readDirectory(path: string, options?: Partial<ReadDirectoryOptions>): Promise<FileItem[]>
@@ -191,6 +197,34 @@ export interface HashApi {
   subscribe(handlers: HashHandlers): () => void
 }
 
+export interface ArchiveHandlers {
+  onProgress: (progress: ArchiveProgress) => void
+  onDone: (done: ArchiveDone) => void
+}
+
+/**
+ * Archives (M18), shaped like `SearchApi` and `HashApi` for the same reasons:
+ * unbounded work, answers that should appear as they land, and a window that
+ * can be closed meaning stop.
+ *
+ * `newMount` and `releaseMount` are the temp-folder half. Reference counting
+ * lives in TypeScript, as M7's watch counts do — Go takes idempotent primitives
+ * and knows nothing about panes.
+ */
+export interface ArchiveApi {
+  /** Starts an extraction and resolves to its id. */
+  extract(request: ExtractRequest): Promise<string>
+  /** Starts a compression and resolves to its id. */
+  create(request: CreateRequest): Promise<string>
+  cancel(id: string): Promise<void>
+  /** Creates the temp folder a browsed archive is extracted into. */
+  newMount(archivePath: string): Promise<string>
+  /** Removes one. Refuses any path it did not create. */
+  releaseMount(mountPath: string): Promise<void>
+  /** Returns an unsubscribe function. */
+  subscribe(handlers: ArchiveHandlers): () => void
+}
+
 export interface Bridge {
   fs: FilesystemApi
   search: SearchApi
@@ -201,4 +235,5 @@ export interface Bridge {
   db: DatabaseApi
   thumbs: ThumbsApi
   hashing: HashApi
+  archives: ArchiveApi
 }

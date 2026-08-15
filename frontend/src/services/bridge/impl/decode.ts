@@ -22,6 +22,7 @@ import type {
   SearchDone,
 } from '@/types/file'
 import type { HashDone, HashProgress, HashResult } from '@/types/hashing'
+import type { ArchiveDone, ArchiveProgress } from '@/types/archive'
 import type { FsErrorCode } from '@/types/errors'
 import { FsError } from '@/types/errors'
 import type { ExternalDrop } from '../types'
@@ -32,6 +33,7 @@ import type { filesystem } from '../../../../wailsjs/go/models'
 const ERROR_PREFIX = 'fs-error:'
 
 const KNOWN_CODES = new Set<string>([
+  'password-required',
   'permission-denied',
   'not-found',
   'already-exists',
@@ -225,6 +227,44 @@ export function toHashDone(payload: unknown): HashDone | null {
     completed: numberOr(wire.completed, 0),
     failed: numberOr(wire.failed, 0),
     cancelled: wire.cancelled === true,
+  }
+}
+
+/** Must match backend/archive. */
+export const archiveProgressEvent = 'archive:progress'
+export const archiveDoneEvent = 'archive:done'
+
+export function toArchiveProgress(payload: unknown): ArchiveProgress | null {
+  if (typeof payload !== 'object' || payload === null) return null
+  const wire = payload as Record<string, unknown>
+  if (typeof wire.id !== 'string' || !wire.id) return null
+
+  return {
+    id: wire.id,
+    entry: typeof wire.entry === 'string' ? wire.entry : '',
+    done: numberOr(wire.done, 0),
+    total: numberOr(wire.total, 0),
+  }
+}
+
+/**
+ * A failed job carries the same `fs-error:` envelope a rejected call would, so
+ * `password-required` arrives as a typed code the caller can branch on rather
+ * than as prose it would have to match against.
+ */
+export function toArchiveDone(payload: unknown): ArchiveDone | null {
+  if (typeof payload !== 'object' || payload === null) return null
+  const wire = payload as Record<string, unknown>
+  if (typeof wire.id !== 'string' || !wire.id) return null
+
+  const raw = typeof wire.error === 'string' ? wire.error : ''
+  return {
+    id: wire.id,
+    path: typeof wire.path === 'string' ? wire.path : '',
+    entries: numberOr(wire.entries, 0),
+    bytes: numberOr(wire.bytes, 0),
+    cancelled: wire.cancelled === true,
+    ...(raw ? { error: toFsError(raw) } : {}),
   }
 }
 

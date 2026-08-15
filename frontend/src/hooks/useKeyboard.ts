@@ -44,7 +44,7 @@ export function useKeyboard(): void {
       if (event.defaultPrevented) return
 
       const ui = useUiStore.getState()
-      if (ui.dialog || ui.contextMenu || ui.hashJob || ui.newFile) return
+      if (ui.dialog || ui.contextMenu || ui.hashJob || ui.newFile || ui.compress) return
 
       const target = event.target as HTMLElement | null
       if (isEditable(target)) return

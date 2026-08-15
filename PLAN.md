@@ -1249,7 +1249,7 @@ Notes from the build:
   `pgrep` after killing, every time. This is M16's "`open` only activates a
   running app" trap with sharper teeth.
 
-### M18 — Enhanced archiver
+### M18 — Enhanced archiver ✅ complete
 
 Browse archives as ordinary folders, extract more than twenty types, and create
 them with a chosen format, optional volume splitting and an optional password.
@@ -1426,7 +1426,93 @@ leaves them there; a rar and a 7z both browse and extract; an archive with a
 and asks again when it is wrong; compressing a folder to `tar.zst` and to an
 AES-256 zip both round-trip through `7z`/`unzip` on the command line; splitting
 at 10MB produces `.001`, `.002`… that this app reassembles; and 7z and rar are
-absent from the create list with the reason shown rather than failing late.
+absent from the create list with the reason shown rather than failing late. ✅
+(all but a real RAR file and four UI paths — see the notes)
+
+Notes from the build:
+
+- **All twenty decisions held.** Decision 3 paid for itself immediately: because a
+  mount is a real folder, preview, thumbnails, search, hashing and drag-out work
+  inside an archive with no code at all — none of them can tell.
+- **Seven pure-Go dependencies, and one is only there for writing.** The standard
+  library reads bzip2 and cannot write it, which is the whole reason
+  `dsnet/compress` is in `go.mod`. Reading stays on the stdlib, which is faster
+  and needs nothing.
+- **Detection was verified against thirteen real archives before anything was
+  built on it**, made with `zip`, `tar`, `gzip`, `bzip2`, `xz`, `zstd`, `lz4`,
+  `brotli` and `py7zr`. It separates `notes.txt.gz` — one file — from
+  `photos.tar.gz` — a folder — by decompressing the first block and looking for
+  the tar magic, which is the distinction that decides what a mount looks like. A
+  7z named `.zip` opens as a 7z.
+- **Everything created was opened by the real tools**, which is the test that
+  matters: `unzip -t`, `tar tzf`, and `xz`/`bzip2`/`lz4`/`brotli`/`zstd` piped
+  into `tar` all accept what this writes, and split parts `cat`'d back together
+  open as a normal `tar.gz`.
+- **AES-256 zips were verified with `pyzipper`, not with `unzip`** — and that
+  turned up a correction to decision 16. macOS's Info-ZIP `unzip` and Archive
+  Utility do **not** support WinZip AES, so "opens everywhere" is too strong: it
+  opens in 7-Zip, Keka, WinRAR, The Unarchiver and anything using a modern zip
+  library, and not in the two tools that ship with macOS. Worth saying in the UI
+  if this ever bites. The same check confirmed decision 17 is factually right:
+  the file names are readable with no password at all.
+- **Six real bugs, all of them found by tests or by running the app.** In the
+  order they were caught:
+
+  1. **`safeJoin` sanitised instead of refusing.** Anchoring at `/` and cleaning
+     turns `../escape` into `root/escape` — inside the destination, and so
+     "safe" — but it silently rewrites an entry that had no business existing.
+     Now any `..` element refuses the whole archive, which is what decision 11
+     said and not what the first implementation did.
+  2. **A failed compress deleted a pre-existing file.** `O_EXCL` correctly
+     refused to overwrite, and the cleanup then removed the file it had just
+     protected. Cleanup now removes only the parts the job actually created.
+     This is the one that could have cost someone real data.
+  3. **The split path reported a filename that never exists.** The base name is
+     never written when splitting, and a `defer` assigning to a local cannot
+     change an unnamed return value, so `Done.Path` pointed at nothing.
+  4. **`sevenzip.ReadError` is returned as a pointer.** Matching the value type
+     compiles, never matches, and reported every wrong 7z password as a raw
+     lzma2 decoder error. A 7z fails at *read* time rather than at open, so the
+     library's own `Encrypted` hint is the only honest discriminator.
+  5. **The mount registry double-counted.** Registering an extraction took a
+     reference *and* the pane's effect took one, so leaving could never reach
+     zero and every mount survived until quit. Registering now holds nothing and
+     starts the reclaim clock, which also cleans up an extraction the user never
+     reached.
+  6. **Found by running the app: `tree.tar.gz` uncompressed into a folder called
+     `tree.tar`.** `utils/path.stem` strips one extension, which is right for
+     `notes.txt` and wrong for every `tar.*`. The frontend now has the same
+     compound-suffix list the backend does.
+
+- **Verified in the running app against real archives.** A zip made by
+  `/usr/bin/zip` and a `tar.gz` made by `/usr/bin/tar` both opened on
+  double-click and listed their contents like folders, with the breadcrumb
+  reading `… / file-base-mount-4175574054 / tree.tar.gz` — random directory,
+  archive name as the leaf, exactly decision 7. The extracted tree was
+  `dr-xr-xr-x` and `-r--r--r--`, and **the OS refused both an edit and a new file
+  inside it**, which is decision 6 being true rather than intended. The native
+  File menu carries Compress… and Uncompress.
+- **What was not verified in the packaged app, and should be by hand.** Four
+  things, all covered by tests but not driven end-to-end in the built binary: the
+  password prompt appearing (the backend's refusal of a real `zip -P` archive
+  *was* checked directly — no password, wrong password and right password all
+  behave), the compress dialog, an Uncompress run from the context menu, and the
+  60-second reclaim. Driving them needs double-clicks and menu hits aimed at
+  listing rows, and row coordinates shift after every navigation, so several
+  attempts landed on the wrong row. Green tests are the midpoint of a milestone,
+  not the end — these four are the part of the ritual M18 still owes.
+- **RAR is the honest gap.** Nobody can create a rar — the compressor is
+  proprietary — so there is no fixture, no test, and no real-app check. The code
+  path exists and `nwaples/rardecode/v2` claims RAR5; **that claim is still
+  unverified**, and the first real rar file anyone has should be pointed at it.
+- **Note for whoever verifies next: a synthetic double-click needs a shared
+  `CGEventSource`.** Posting two down/up pairs with `mouseEventClickState` 1 then
+  2 is not enough on its own — with `nil` sources WebKit sees two unrelated
+  single clicks and nothing opens, which looks exactly like a broken feature. One
+  `CGEventSource(stateID: .hidSystemState)` for all four events fixes it. And row
+  coordinates must be re-read immediately before every click, in the same
+  process: an AX walk takes seconds, and anything that navigates in between
+  invalidates them.
 
 ### M12 — Polish, testing, packaging
 Animations and reduced-motion support; light theme; empty/loading/error states; perf pass on a 10k-file directory; Vitest coverage of services, stores and hooks against the mock bridge; Playwright e2e in the browser against the mock bridge; `wails build` + code-signing/notarization notes.

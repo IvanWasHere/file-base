@@ -8,6 +8,7 @@ import { PhotosView } from '@/features/photos/PhotosView'
 import { SearchBar } from '@/features/search/SearchBar'
 import { SearchStatusBar } from '@/features/search/SearchStatusBar'
 import { useDirectory } from '@/hooks/useDirectory'
+import { useArchive, useMountReference } from '@/hooks/useArchive'
 import { useFileOperations } from '@/hooks/useFileOperations'
 import { useSearch } from '@/hooks/useSearch'
 import { usePaneSearch } from '@/stores/searchStore'
@@ -60,6 +61,11 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
   }, [pane.path, pane.id, clearSelection])
 
   const operations = useFileOperations()
+  const archives = useArchive()
+
+  // Holds a reference while this pane is inside a browse mount, and drops it on
+  // the way out — which is what "the user leaves" means (§M18 decision 4).
+  useMountReference(pane.path)
 
   const { active: searching, items: results, cancel: cancelSearch } = useSearch(
     pane.id,
@@ -107,6 +113,10 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
     onFocus()
     if (item.isDirectory) {
       navigate(pane.id, item.path)
+    } else if (archives.isArchive(item)) {
+      // Browsing an archive is navigating into a folder, because by the time
+      // the pane moves it *is* one (§M18 decision 3).
+      void archives.browse(item, pane.id)
     } else {
       void bridge.shell.openFile(item.path).catch((error: unknown) => {
         toast.error(

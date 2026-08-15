@@ -9,6 +9,7 @@ import { Toaster } from '@/components/common/Toaster'
 import { DialogHost } from '@/components/dialogs/DialogHost'
 import { HashModal } from '@/features/hashing/HashModal'
 import { NewFileDialog } from '@/features/newFile/NewFileDialog'
+import { CompressDialog } from '@/features/archives/CompressDialog'
 import { ContextMenuHost } from '@/components/menus/ContextMenuHost'
 import { MenuBar } from '@/components/toolbar/MenuBar'
 import { TabBar } from '@/components/toolbar/TabBar'
@@ -124,6 +125,7 @@ export function ExplorerLayout() {
           delete started before the modal opened — is still readable. */}
       <HashModal />
       <NewFileDialog />
+      <CompressDialog />
       <ContextMenuHost />
     </div>
   )

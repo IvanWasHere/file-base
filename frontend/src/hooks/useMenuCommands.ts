@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useQuery } from '@tanstack/react-query'
 import type { MenuCommandId } from '@/constants/menus'
 import { useFavorites } from '@/hooks/useFavorites'
+import { useArchive } from '@/hooks/useArchive'
 import { useFileOperations } from '@/hooks/useFileOperations'
 import { bridge } from '@/services/bridge'
 import { fsKeys, standardPathsQuery } from '@/services/filesystem/queries'
@@ -62,6 +63,7 @@ export function useMenuCommands(): MenuCommandState {
   const clearSelection = useSelectionStore((state) => state.clear)
   const { selected, lead } = usePaneSelection(pane?.id ?? '')
   const operations = useFileOperations()
+  const archives = useArchive()
   const openSearch = useSearchStore((state) => state.open)
   const clipboardCount = useClipboardStore((state) => state.paths.length)
   const undoDepth = useHistoryStore((state) => state.entries.length)
@@ -201,6 +203,14 @@ export function useMenuCommands(): MenuCommandState {
       case 'file.calculateHashes':
         ui.openHashes(targets)
         return
+
+      case 'file.compress':
+        if (pane) ui.openCompress(targets, pane.path)
+        return
+      // Permanent, unlike browsing: what it extracts stays where it lands.
+      case 'file.uncompress':
+        void archives.uncompress(targets)
+        return
       case 'file.moveToTrash':
         void operations.moveToTrash(targets)
         return
@@ -325,6 +335,15 @@ export function useMenuCommands(): MenuCommandState {
       // and the modal reports an empty result honestly.
       case 'file.calculateHashes':
         return targets.some((path) => cachedItem(path)?.isDirectory !== true)
+      case 'file.compress':
+        return targets.length > 0
+      // Only offered for something that looks like an archive, so the menu row
+      // is not present-and-dead on every ordinary file.
+      case 'file.uncompress':
+        return targets.some((path) => {
+          const item = cachedItem(path)
+          return item !== undefined && archives.isArchive(item)
+        })
       // Only a folder can be opened in a tab, and only a folder can be pinned.
       case 'file.openInNewTab':
         return targets.some((path) => cachedItem(path)?.isDirectory === true)

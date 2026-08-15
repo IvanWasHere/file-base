@@ -1,3 +1,54 @@
+export namespace archive {
+	
+	export class CreateRequest {
+	    sources: string[];
+	    destination: string;
+	    format: string;
+	    level: number;
+	    password: string;
+	    splitBytes: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CreateRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sources = source["sources"];
+	        this.destination = source["destination"];
+	        this.format = source["format"];
+	        this.level = source["level"];
+	        this.password = source["password"];
+	        this.splitBytes = source["splitBytes"];
+	    }
+	}
+	export class ExtractRequest {
+	    path: string;
+	    destination: string;
+	    password: string;
+	    maxBytes: number;
+	    maxEntries: number;
+	    readOnly: boolean;
+	    collapseRoot: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExtractRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.destination = source["destination"];
+	        this.password = source["password"];
+	        this.maxBytes = source["maxBytes"];
+	        this.maxEntries = source["maxEntries"];
+	        this.readOnly = source["readOnly"];
+	        this.collapseRoot = source["collapseRoot"];
+	    }
+	}
+
+}
+
 export namespace db {
 	
 	export class ExecResult {

@@ -5,6 +5,7 @@ import (
 	"embed"
 
 	"file-base/backend/appmenu"
+	"file-base/backend/archive"
 	"file-base/backend/db"
 	"file-base/backend/filesystem"
 	"file-base/backend/hashing"
@@ -36,6 +37,11 @@ func main() {
 
 	hasher := hashing.New()
 	defer hashing.Stop(hasher)
+
+	archives := archive.New()
+	// Reclaims every browse mount. Without it a quit leaves gigabytes of
+	// extracted archives in the temp directory (PLAN.md §M18 decision 8).
+	defer archive.Stop(archives)
 
 	err := wails.Run(&options.App{
 		Title:     "Files",
@@ -95,6 +101,13 @@ func main() {
 			search.Start(finder, ctx)
 			// Same for hashing: digests, progress and completion are all events.
 			hashing.Start(hasher, ctx)
+			archive.Start(archives, ctx)
+			// A crash cannot clean up after itself, so mounts left by a previous
+			// run are swept here — scoped by prefix inside the app's own temp
+			// root, so it can only remove what this package created.
+			if swept := archive.Sweep(); swept > 0 {
+				println("reclaimed", swept, "archive mounts left by a previous run")
+			}
 
 			// Files dragged in from Finder. The coordinates matter: the drop
 			// happens in the native layer, above the webview, so the frontend
@@ -117,6 +130,7 @@ func main() {
 			watch,
 			finder,
 			hasher,
+			archives,
 			thumbs.New(),
 		},
 	})

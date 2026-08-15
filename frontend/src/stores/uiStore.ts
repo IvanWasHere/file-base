@@ -28,10 +28,32 @@ export interface ConflictRequest {
   names: string[]
 }
 
-export type DialogRequest = ConfirmRequest | ConflictRequest
+/**
+ * An archive asking for its password (PLAN.md §M18 decision 18).
+ *
+ * Unlike M14's hash modal and M15's new-file dialog, this genuinely *is* a
+ * one-shot question with a promise waiting on the answer — which is exactly
+ * what this stack already is. It needed a variant, not a field of its own.
+ */
+export interface PasswordRequest {
+  kind: 'password'
+  /** The archive's name, so the prompt says what it is asking about. */
+  name: string
+  /** A second ask after a wrong one, which should say so rather than repeat. */
+  retry: boolean
+}
 
-/** What the user chose. `null` means the dialog was dismissed. */
-type DialogResult = boolean | ConflictPolicy | null
+export type DialogRequest = ConfirmRequest | ConflictRequest | PasswordRequest
+
+/**
+ * What the user chose. `null` means the dialog was dismissed.
+ *
+ * The string covers two unrelated answers — a `ConflictPolicy` and a typed
+ * password — which is why each `ask*` narrows the shared result to its own
+ * shape before resolving. Spelling `ConflictPolicy` out here as well would be
+ * redundant with `string` and would not make the narrowing any safer.
+ */
+type DialogResult = boolean | string | null
 
 /**
  * The resolver lives outside the store because it is a one-shot continuation,
@@ -88,6 +110,14 @@ export interface HashJob {
  * name and a template. Widening that union so every existing dialog's result
  * type is looser, for one caller's benefit, is the wrong trade (decision 12).
  */
+/** The open compress dialog, and what it will put in the archive (§M18). */
+export interface CompressRequest {
+  /** The selection at the moment it opened. */
+  sources: string[]
+  /** Where the archive will be written — the pane's folder. */
+  parent: string
+}
+
 export interface NewFileRequest {
   /** The folder to create in — the pane's, at the moment it was opened. */
   parent: string
@@ -102,6 +132,7 @@ interface UiState {
   dialog: DialogRequest | null
   hashJob: HashJob | null
   newFile: NewFileRequest | null
+  compress: CompressRequest | null
   /** Persisted: whoever verifies SHA-256 downloads verifies SHA-256 downloads. */
   hashAlgorithm: HashAlgorithm
   /** Persisted: the template id last used, so the next file starts there. */
@@ -119,6 +150,9 @@ interface UiState {
 
   openNewFile: (parent: string, paneId: string) => void
   closeNewFile: () => void
+
+  openCompress: (sources: string[], parent: string) => void
+  closeCompress: () => void
   setHashAlgorithm: (algorithm: HashAlgorithm) => void
   setLastTemplate: (id: string) => void
 
@@ -132,6 +166,8 @@ interface UiState {
   askConfirm: (request: Omit<ConfirmRequest, 'kind'>) => Promise<boolean>
   /** Resolves to the chosen policy, or null when dismissed. */
   askConflict: (request: Omit<ConflictRequest, 'kind'>) => Promise<ConflictPolicy | null>
+  /** Resolves to the password typed, or null when dismissed. */
+  askPassword: (request: Omit<PasswordRequest, 'kind'>) => Promise<string | null>
   resolveDialog: (value: DialogResult) => void
 }
 
@@ -142,6 +178,7 @@ export const useUiStore = create<UiState>()((set) => ({
   dialog: null,
   hashJob: null,
   newFile: null,
+  compress: null,
   hashAlgorithm: DEFAULT_ALGORITHM,
   lastTemplate: '',
   renaming: null,
@@ -160,6 +197,11 @@ export const useUiStore = create<UiState>()((set) => ({
   // is the thing the user just asked for.
   openNewFile: (parent, paneId) => set({ newFile: { parent, paneId }, renaming: null }),
   closeNewFile: () => set({ newFile: null }),
+
+  // Nothing to compress would be a dialog that can only be cancelled.
+  openCompress: (sources, parent) =>
+    set(sources.length > 0 ? { compress: { sources, parent }, renaming: null } : {}),
+  closeCompress: () => set({ compress: null }),
   setHashAlgorithm: (algorithm) => set({ hashAlgorithm: algorithm }),
   setLastTemplate: (id) => set({ lastTemplate: id }),
 
@@ -184,8 +226,25 @@ export const useUiStore = create<UiState>()((set) => ({
   askConflict: (request) =>
     new Promise<ConflictPolicy | null>((resolve) => {
       settlePending(null)
-      pendingResolve = (value) => resolve(typeof value === 'string' ? value : null)
+      // Narrowed against the policy union: `askPassword` also resolves a
+      // string, and without this a dismissed password prompt could leak into a
+      // conflict awaiting a policy.
+      pendingResolve = (value) =>
+        resolve(
+          value === 'replace' || value === 'skip' || value === 'keep-both' || value === 'fail'
+            ? value
+            : null,
+        )
       set({ dialog: { ...request, kind: 'conflict' } })
+    }),
+
+  askPassword: (request) =>
+    new Promise<string | null>((resolve) => {
+      settlePending(null)
+      // An empty string is a real answer here — someone pressing Enter on a
+      // blank field — so only `null` means dismissed.
+      pendingResolve = (value) => resolve(typeof value === 'string' ? value : null)
+      set({ dialog: { ...request, kind: 'password' } })
     }),
 
   resolveDialog: (value) => {

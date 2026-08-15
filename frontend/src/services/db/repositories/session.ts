@@ -16,6 +16,7 @@ import {
   splitModeFromLegacy,
 } from '@/constants/splitModes'
 import { isViewMode } from '@/constants/viewModes'
+import { isInsideAnyMount } from '@/services/archives/mountPaths'
 import { bridge } from '@/services/bridge'
 import { DEFAULT_SORT } from '@/services/filesystem/sort'
 import type { Pane, PaneLayout, SplitMode, Tab } from '@/types/workspace'
@@ -101,11 +102,19 @@ function parsePane(id: string, raw: unknown): Pane | null {
     typeof record.historyIndex === 'number' ? record.historyIndex : history.length - 1
   const historyIndex = Math.min(Math.max(rawIndex, 0), Math.max(history.length - 1, 0))
 
+  // A pane restored inside a browse mount would come back pointing at a temp
+  // folder that no longer exists — straight into M7's "this item no longer
+  // exists" state, on every launch, which reads as the app being broken. The
+  // session outlives the mount by definition, so it comes back at the archive's
+  // own folder instead (§M18 decision 9).
+  const restored = isInsideAnyMount(record.path)
+  const path = restored ?? record.path
+
   return {
     id,
-    path: record.path,
-    history: history.length > 0 ? history : [record.path],
-    historyIndex,
+    path,
+    history: restored ? [path] : history.length > 0 ? history : [record.path],
+    historyIndex: restored ? 0 : historyIndex,
     // Through the shared guard rather than a chain written out here: this was
     // the second of the two places a new view mode has to be taught about, and
     // the one that would have dropped a pane restored into Photos back to

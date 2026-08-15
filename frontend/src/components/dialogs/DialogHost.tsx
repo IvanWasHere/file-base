@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
-import { useUiStore } from '@/stores/uiStore'
+import { useEffect, useRef, useState } from 'react'
+import { useUiStore, type PasswordRequest } from '@/stores/uiStore'
 import type { ConflictPolicy } from '@/types/file'
 import { formatCount } from '@/utils/format'
 
@@ -25,6 +25,91 @@ interface Choice {
 
 export function DialogHost() {
   const dialog = useUiStore((state) => state.dialog)
+  if (dialog?.kind === 'password') return <PasswordDialog request={dialog} />
+  return <ChoiceDialog />
+}
+
+/**
+ * An archive asking for its password (M18 decision 18).
+ *
+ * Split out because it resolves a typed value rather than a chosen button, and
+ * because a password field needs focus, an Enter binding and a retry message
+ * the other two have no use for.
+ */
+function PasswordDialog({ request }: { request: PasswordRequest }) {
+  const resolveDialog = useUiStore((state) => state.resolveDialog)
+  const [password, setPassword] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
+      onMouseDown={(event) => {
+        if (!panelRef.current?.contains(event.target as Node)) resolveDialog(null)
+      }}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal
+        aria-label="Archive password"
+        className="bg-elevated border-edge w-[420px] rounded-xl border p-5 shadow-2xl"
+      >
+        <h2 className="font-display text-primary text-[15px] font-semibold">
+          {request.retry ? 'That password did not work' : 'This archive is protected'}
+        </h2>
+        <p className="text-secondary mt-1.5 text-[13px] leading-snug">
+          Enter the password for “{request.name}”.
+        </p>
+
+        <input
+          ref={inputRef}
+          type="password"
+          value={password}
+          aria-label="Password"
+          onChange={(event) => setPassword(event.target.value)}
+          onKeyDown={(event) => {
+            event.stopPropagation()
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              resolveDialog(password)
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              resolveDialog(null)
+            }
+          }}
+          className="border-edge bg-base text-primary mt-3 w-full rounded-md border px-2 py-1.5 text-[13px] outline-none focus:border-[var(--accent)]"
+        />
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => resolveDialog(null)}
+            className="border-edge text-secondary hover:bg-hover hover:text-primary rounded-md border px-3 py-1.5 text-[13px] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => resolveDialog(password)}
+            className="text-accent rounded-md bg-[var(--accent-glow)] px-3 py-1.5 text-[13px] transition-colors hover:opacity-90"
+          >
+            Open
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ChoiceDialog() {
+  const dialog = useUiStore((state) => state.dialog)
   const resolveDialog = useUiStore((state) => state.resolveDialog)
   const panelRef = useRef<HTMLDivElement>(null)
   const safeButtonRef = useRef<HTMLButtonElement>(null)
@@ -35,7 +120,7 @@ export function DialogHost() {
     if (dialog) safeButtonRef.current?.focus()
   }, [dialog])
 
-  if (!dialog) return null
+  if (!dialog || dialog.kind === 'password') return null
 
   const choices: Choice[] =
     dialog.kind === 'confirm'
