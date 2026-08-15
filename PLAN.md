@@ -22,7 +22,7 @@ The mockup is a **layout and interaction spec**, not code to port line-by-line.
 - **Keep:** the full chrome (tab bar → toolbar → sidebar / panes / preview → status bar), the palette, the five view modes — Details, Large / Medium / Small Icons, and **Photos** (§M13) — split-pane letters (A/B/C/D), resizable handles, file-type colour categories.
 - **Correct:** the mockup's four-pane layout is four columns; it becomes two rows of two, which is what its own icon has always drawn (§M16).
 - **Replace:** `parentId` integer tree → real absolute **paths** as identity. `db.files.where('parentId')` → `ReadDirectory(path)`. Dexie → SQLite for app state only. `m.redraw()` → React reactivity. Font Awesome → Lucide. CDN Tailwind → build-time Tailwind.
-- **Add (not in the mockup):** multi-selection, file operations, watcher, search, context menus, keyboard shortcuts, drag & drop, virtualization, error handling, file hashing (§M14), quick file creation from templates (§M15).
+- **Add (not in the mockup):** multi-selection, file operations, watcher, search, context menus, keyboard shortcuts, drag & drop, virtualization, error handling, file hashing (§M14), quick file creation from templates (§M15), browsing and creating archives (§M18).
 
 ---
 
@@ -1249,6 +1249,185 @@ Notes from the build:
   `pgrep` after killing, every time. This is M16's "`open` only activates a
   running app" trap with sharper teeth.
 
+### M18 — Enhanced archiver
+
+Browse archives as ordinary folders, extract more than twenty types, and create
+them with a chosen format, optional volume splitting and an optional password.
+
+**Numbered after M17, built before M12**, for the fifth time and the same
+reason. It is the largest milestone since M8 and the only one that adds a
+dependency the app does not already have.
+
+**The constraint that shapes everything: extracting is broad, creating is
+narrow.** Go's standard library covers `zip`, `tar`, `gzip`, `flate` and
+`bzip2` — and `compress/bzip2` reads only. Everything else is a third-party
+decoder, and for two of the formats people ask for most there is no encoder at
+any price: **RAR compression is proprietary and cannot legally be implemented**,
+and no maintained pure-Go library writes 7z. So this milestone extracts rar and
+7z and does not create them. That is not a scoping choice made to save effort;
+it is the state of the world, and the UI has to say so rather than offer a
+format that fails at the end of a long job.
+
+Decisions taken up front:
+
+1. **Pure Go, no bundled binaries, no shelling out.** Bundling p7zip would buy
+   7z creation, rar extraction and volume support in one dependency — and it
+   would end the property `backend/db` calls out in its first comment: no cgo,
+   so the build stays a plain `go build`. It would also add a GPL binary to
+   sign and notarize (§3), and M10 already refused the same trade for
+   thumbnails, where shelling out to `qlmanage` would have swapped a bounded
+   cost for an unbounded process-spawning one. **This is the decision to
+   overturn if 7z creation matters more than the single-binary build**; nothing
+   else here depends on it.
+2. **Format is detected from content, not from the extension.** M10 learned this
+   the hard way twice — a text file named `.png`, and `image/jpg` not being a
+   mime type. An archive named `.zip` that is really a rar must open, and a
+   `.log` that is really a gzip stream should offer to. The extension is a hint
+   that orders the sniffers, never the answer.
+3. **Browsing extracts to a temp folder and navigates there.** The alternative —
+   a virtual path scheme like `photos.zip!/holiday` — is more elegant and much
+   more invasive: the watcher, thumbnails, preview, search, hashing, drag and
+   drop, favorites and session restore all take paths, and every one of them
+   would need to learn the scheme or fail. Extracting to a real folder means
+   every completed milestone keeps working unchanged, because it *is* a real
+   folder. The cost is honest and should be stated: opening a 4GB archive to
+   look at one file inside it extracts 4GB first. If that bites, virtual paths
+   are the thing to revisit.
+4. **A mount is reference-counted, exactly as M7's watches are.** Each browsed
+   archive gets one temp folder — a "mount" — with a count of how many panes are
+   currently inside it. "The user leaves" means that count reaching zero, which
+   covers navigating away, closing the tab and closing the pane without needing
+   three rules. Two panes browsing the same archive share one extraction, and
+   the release guard matters for the same reason it did in M7: React invokes
+   cleanups twice under StrictMode, and a double decrement would delete a folder
+   another pane is still showing.
+5. **A mount is removed after a grace period, not immediately.** Back, forward
+   and a mistaken double-click all drop the count to zero for a moment, and
+   re-extracting a large archive because someone pressed Back would be the
+   feature at its worst. Sixty seconds, and the mount is reclaimed instantly if
+   the user returns.
+6. **Mounts are read-only, and that is a data-loss decision rather than a
+   stylistic one.** The sharpest way this feature can hurt someone is: open an
+   archive, open a file from it in an editor, work for an hour, navigate away,
+   and have the folder deleted underneath. Extracting with the write bits off
+   makes that impossible instead of unlikely. It also tells the truth — a browse
+   mount is a view of an archive, not a place to work. Changing something means
+   Uncompress, which is permanent, or dragging it out, which copies.
+7. **The mount path is random *and* legible.** `os.MkdirTemp` gives uniqueness
+   and no collisions; a breadcrumb reading `/var/folders/xy/T/arc-8f3k2` gives
+   nothing. The random component is a directory, and the archive's own name is
+   the leaf inside it, so the breadcrumb reads `… / Photos.zip / holiday` and
+   the path is still unique.
+8. **Orphans are swept at startup, and everything is removed at quit.** A crash
+   or a force-quit leaves mounts behind, and a temp folder that is never
+   reclaimed is a disk leak measured in gigabytes. The sweep is by prefix inside
+   the app's own temp root, so it can never touch anything it did not create.
+9. **A pane restored inside a mount comes back at the archive instead.** The
+   session outlives the temp folder by definition. Restoring a pane into a path
+   that no longer exists would put it straight into M7's "this item no longer
+   exists" state on every launch, which reads as the app being broken. This is
+   the M13/M16/M17 persistence lesson a fourth time: what is persisted is
+   untrusted, and the read path decides.
+10. **Uncompress is a different command from browsing, and it keeps its output.**
+    Right-click → Uncompress extracts beside the archive and nothing is
+    reclaimed — that is the whole distinction the user asked for. It extracts
+    into a folder named after the archive, *unless* the archive has exactly one
+    top-level entry, in which case that entry goes in directly. Otherwise a
+    two-hundred-file archive scatters two hundred files into Downloads, which is
+    the "tarbomb" every modern tool learned to defend against.
+11. **Entry paths are validated against escaping the destination, always.** An
+    archive entry named `../../../.ssh/authorized_keys` is a known attack — "zip
+    slip" — and it is the one place this feature can do harm outside the folder
+    it was pointed at. Every entry is resolved and refused if it lands outside;
+    absolute paths are refused; symlink entries pointing outside are refused.
+    This applies to browse mounts and Uncompress alike, and it is tested with a
+    hand-built malicious archive rather than assumed.
+12. **Browse mounts are capped; Uncompress is not.** A 1MB archive can expand to
+    terabytes, and browsing is something the user does by double-clicking rather
+    than by deciding. A mount stops at a total size and an entry count and says
+    why, offering Uncompress — which is an explicit decision, and so uncapped
+    beyond the disk saying no.
+13. **Extraction and compression are jobs, shaped like M8's search and M14's
+    hashing:** `id`, streamed progress, real cancellation. A multi-gigabyte
+    archive must not freeze the window, and closing the progress must actually
+    stop the work rather than let it run on. Progress is bytes, not entries, for
+    M14 decision 5's reason: an archive that is one enormous file would sit at
+    0/1 otherwise.
+14. **Creating offers formats, not a matrix.** zip, tar, and tar with each
+    compressor the encoders cover — gzip, bzip2, xz, zstd, lz4, brotli — plus a
+    level. What is *not* offered is any combination that cannot be produced:
+    7z and rar are absent from the create list entirely rather than present and
+    failing. The dialog says why, once, rather than leaving someone to discover
+    it.
+15. **Splitting is byte-splitting into `.001`, `.002`…, and the plan says so
+    plainly.** Real multi-volume zip is a container feature `archive/zip` cannot
+    write. Splitting the finished stream into parts is what 7-Zip does for its
+    own format and what people mean by "split after 100MB" — with the honest
+    consequence that a part is not independently openable and all of them are
+    needed. Extraction reassembles automatically when handed a `.001`.
+16. **A password means AES-256 in a zip, and nothing else.** WinZip AES is the
+    one place in this format set where encryption is a real, interoperable
+    answer. Offering a password on a `tar.gz` would mean inventing an envelope,
+    and a file nobody else can open is worse than no encryption. Legacy
+    ZipCrypto is not offered at all: it is broken well enough to be decorative,
+    and offering it beside AES invites picking it for compatibility.
+17. **The dialog says that an encrypted zip still shows its filenames.** WinZip
+    AES encrypts entry contents, not the central directory, so anyone with the
+    file can read the list of what is in it. People are routinely surprised by
+    this, and a checksum tool that lets someone believe CRC32 proves
+    authenticity was the same mistake M14 decision 11 refused to make.
+18. **Extracting something encrypted asks through the existing dialog stack.**
+    Unlike M14's modal and M15's, this *is* a one-shot question with a promise
+    waiting on the answer, which is exactly what `askConfirm` and `DialogRequest`
+    already are. It needs a password variant, not a new `uiStore` field. A wrong
+    password is reported and asked again rather than failing the job.
+19. **Double-clicking a single-stream file browses it too.** A `.gz` holds one
+    file, so its mount is a folder with one thing in it. That is what every
+    archive tool does, and it means `report.csv.gz` opens to `report.csv`
+    without a special case.
+20. **Nested archives work for free, and that is the payoff of decision 3.** An
+    archive inside a mount is a real file in a real folder, so double-clicking it
+    mounts it in turn. Search, thumbnails, preview and hashing inside a mount
+    work for the same reason — none of them can tell.
+
+**Formats.** Extract: zip (stored/deflate/zstd/bzip2, ZipCrypto and AES), 7z
+(including AES), rar and rar5, tar, gz, bz2, xz, lzma, lz4, zstd, brotli,
+snappy, Unix `compress`, every `tar.*` combination of those, and the zip-derived
+types by content — jar, war, apk, ipa, cbz, epub — plus cbr as rar. That is
+comfortably past twenty recognised types over about ten engines. Create: zip
+(deflate/store, optional AES-256, optional splitting), tar, and tar with gzip,
+bzip2, xz, zstd, lz4 or brotli.
+
+**Dependencies to add**, all pure Go, and each one is a decision to confirm at
+build time rather than to trust from this document: `klauspost/compress` (zstd,
+flate, a faster gzip), `ulikunitz/xz` (xz, lzma), `pierrec/lz4`,
+`dsnet/compress` (bzip2 *writing*, which the standard library does not do),
+`bodgit/sevenzip` (7z reading), `nwaples/rardecode` (rar; **confirm RAR5 before
+promising it**), and an AES-zip implementation. `mholt/archives` unifies most of
+these behind one interface and is worth evaluating first — one dependency that
+is already doing this composition beats seven that we compose ourselves.
+
+Files: `backend/archive/{archive.go,detect.go,extract.go,create.go,mount.go}`
+and their tests; `services/archives/{archiveService,mountRegistry}.ts`;
+`hooks/useArchive.ts`; `features/archives/{CompressDialog,ExtractProgress,PasswordPrompt}.tsx`;
+`constants/archiveFormats.ts`. Additions to `services/bridge/types.ts`
+(`ArchiveApi`) with both implementations, `stores/uiStore.ts` (the password
+dialog variant), `constants/{menus,contextMenus,shortcuts}.ts`,
+`backend/appmenu/appmenu.go`, `hooks/useMenuCommands.ts`,
+`services/db/repositories/session.ts` (decision 9) and `main.go`.
+
+**Done when:** double-clicking a zip opens it like a folder, with the breadcrumb
+naming the archive; the files inside preview, thumbnail, search and hash exactly
+as ordinary ones do because they are; navigating away removes the extraction
+after its grace period, and returning within it is instant; a mount cannot be
+written to; right-click → Uncompress puts the contents beside the archive and
+leaves them there; a rar and a 7z both browse and extract; an archive with a
+`../` entry is refused with the reason; an encrypted zip asks for its password
+and asks again when it is wrong; compressing a folder to `tar.zst` and to an
+AES-256 zip both round-trip through `7z`/`unzip` on the command line; splitting
+at 10MB produces `.001`, `.002`… that this app reassembles; and 7z and rar are
+absent from the create list with the reason shown rather than failing late.
+
 ### M12 — Polish, testing, packaging
 Animations and reduced-motion support; light theme; empty/loading/error states; perf pass on a 10k-file directory; Vitest coverage of services, stores and hooks against the mock bridge; Playwright e2e in the browser against the mock bridge; `wails build` + code-signing/notarization notes.
 
@@ -1273,6 +1452,11 @@ Animations and reduced-motion support; light theme; empty/loading/error states; 
 | **A persisted layout changing shape**, not just value — M16 replaces `paneSizes` with a grid | Old sizes are lifted on read, a missing field already falls back to even, and both directions get a regression test (§M16 decision 11) |
 | **`splitMode` changing type** — M17 turns the stored number into a string, the third move for one field | Legacy numbers are mapped on read; a downgrade loses the *arrangement* but keeps the panes and their paths, which is stated rather than discovered (§M17 decision 10) |
 | **A malformed cell list** — a pane drawn over another, or a hole in the layout | Neither fails loudly, so a test proves every mode tiles its grid exactly: no overlap, no gap, one cell per pane (§M17 decision 2) |
+| **Zip slip** — an archive entry named `../../.ssh/authorized_keys` writing outside the destination | Every entry resolved and refused if it lands outside; absolute paths and escaping symlinks refused; tested with a hand-built malicious archive (§M18 decision 11) |
+| **Zip bombs** — 1MB expanding to terabytes, reached by a double-click rather than a decision | Browse mounts capped on total size and entry count and say why; Uncompress is the explicit decision and stays uncapped (§M18 decision 12) |
+| **Deleting a mount with the user's work inside it** | Mounts are extracted read-only, so nothing can be edited in place to be lost; changing something means Uncompress or dragging out (§M18 decision 6) |
+| **Temp folders leaking after a crash** | Swept by prefix inside the app's own temp root at startup, and removed at quit (§M18 decision 8) |
+| **RAR and 7z cannot be created** — proprietary, and no pure-Go encoder | Absent from the create list with the reason shown, rather than offered and failing at the end of a long job (§M18 decision 14) |
 | **Notarization** for distribution | Deferred to M12; not blocking for local development |
 
 ---
