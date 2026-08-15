@@ -21,7 +21,7 @@ The mockup is a **layout and interaction spec**, not code to port line-by-line.
 
 - **Keep:** the full chrome (tab bar → toolbar → sidebar / panes / preview → status bar), the palette, the five view modes — Details, Large / Medium / Small Icons, and **Photos** (§M13) — split-pane letters (A/B/C/D), resizable handles, file-type colour categories.
 - **Replace:** `parentId` integer tree → real absolute **paths** as identity. `db.files.where('parentId')` → `ReadDirectory(path)`. Dexie → SQLite for app state only. `m.redraw()` → React reactivity. Font Awesome → Lucide. CDN Tailwind → build-time Tailwind.
-- **Add (not in the mockup):** multi-selection, file operations, watcher, search, context menus, keyboard shortcuts, drag & drop, virtualization, error handling, file hashing (§M14).
+- **Add (not in the mockup):** multi-selection, file operations, watcher, search, context menus, keyboard shortcuts, drag & drop, virtualization, error handling, file hashing (§M14), quick file creation from templates (§M15).
 
 ---
 
@@ -622,6 +622,143 @@ Notes from the build:
   subsequent read must happen in the *same* `osascript` process to observe
   anything mid-run.
 
+### M15 — Quick file creation
+
+Create a file of any type immediately, either empty or from a template —
+predefined ones that ship with the app, and custom ones the user writes
+themselves.
+
+**Numbered after M14, built before M12**, for the third time and the same
+reason: M12's polish, light-theme and empty-state passes should cover this
+surface once rather than twice. Its dependencies are M6's creation path and
+M11's menu registry.
+
+**What M6 already built, and what this is not.** `file.newFile` (Cmd+N) creates
+`untitled file`, selects it, and opens the inline rename editor — Finder's
+behaviour, and already instant. That path is not being replaced or slowed down.
+What is missing is everything about the file's *type*: it has no extension, no
+content, and no way to get either without renaming it and opening an editor.
+
+Decisions taken up front:
+
+1. **Cmd+N keeps doing exactly what it does now.** A feature about speed must
+   not put a dialog in front of the fastest thing in the app. `file.newFile`
+   stays a one-keystroke empty file; this is a second command
+   (`file.newFromTemplate`, `Cmd+Alt+N` — `Cmd+Shift+N` is New Folder), and a
+   second *route*, never a second implementation of creation.
+2. **The name field is the feature; the template list is an assist.** Typing
+   `notes.md` and pressing Enter is the whole interaction — the extension picks
+   the Markdown template on its own. Picking from the list works the other way,
+   filling in the extension and leaving the stem alone. Neither is a mode, and
+   neither is required: `foo.xyz` with no matching template creates an empty
+   `.xyz`, which is what "any type" has to mean.
+3. **Writing content is a new capability, and it is deliberately not a write
+   API.** Nothing in the bridge can put bytes into a file today, and the obvious
+   `WriteFile(path, content)` is the wrong thing to add: it can truncate
+   anything, forever, for every future caller. Instead `CreateFile` grows the
+   content — `CreateFile(parent, name, content, executable)` — and keeps M6's
+   `O_EXCL`, so it creates or it fails, and can never write over a file that is
+   already there. There is still no way to overwrite a file from this app.
+4. **One creation path, not two.** Rather than adding `CreateFileWithContent`
+   beside the existing method, the existing one is widened and M6's call site
+   passes `""`. Two near-identical methods would be two places deciding
+   `O_EXCL` and file mode, which is how they start disagreeing.
+5. **The executable bit is a parameter, not a follow-up `chmod`.** A shell
+   script template that produces a non-executable file is the single most
+   annoying way this feature can fail. Passing it to the same call means the
+   file is never briefly wrong, and a failed second call cannot leave a
+   half-made file behind.
+6. **Content crosses the bridge as a string; templates are text by
+   definition.** M10's lesson — a Go `[]byte` marshals to a JSON array of
+   numbers — and the honest consequence: a *binary* template is a file to copy,
+   which is Duplicate, not this. UTF-8, no BOM, LF endings: a BOM breaks a
+   shebang, and CRLF is not something to introduce on macOS.
+7. **A template earns its place only if the empty file would be wrong.** This is
+   the whole rule for the built-in set. "Plain Text" as a template is pointless
+   — Cmd+N already makes that file — whereas HTML without its skeleton, a
+   shell script without its shebang, or JSON that is not even `{}` are useless
+   as starting points. That filter gives roughly: HTML, CSS, JSON, YAML,
+   Markdown, JavaScript, TypeScript, React component, Python, shell script,
+   `.gitignore`, Dockerfile, SQL. Anything else is reachable by typing its
+   extension.
+8. **Built-ins are code; custom templates are files on disk.** Built-ins live in
+   `constants/fileTemplates.ts` — versioned with the app, no migration when one
+   is added. Custom ones live in a real folder,
+   `~/Library/Application Support/MacFileExplorer/Templates`, and this is a file
+   explorer: someone who wants a custom template should write a file, not fill
+   in a form. It costs no migration, no template-editor UI, and no export
+   format; the templates are portable, syncable, and editable in whatever the
+   user already uses. A template's name is its filename, its content is its
+   bytes, its default extension is its own extension, and its executable bit is
+   its own — if your template file is executable, so is the file made from it.
+9. **No new Go package, and one new standard path.** Reading that folder is
+   `ReadDirectory` plus `ReadTextFile`, both of which exist; the executable bit
+   is already in `FileItem.permissions`. Only the *location* is new, and paths
+   are resolved natively rather than string-built in TS (§1), so `StandardPaths`
+   gains `templates`. The folder is created empty on first open of the dialog —
+   not seeded, because a folder of files the user did not write is clutter, and
+   the built-ins already cover the common cases. The dialog always ends with
+   "Reveal Templates Folder", so there is a way in even when it is empty.
+10. **Four placeholders, no expression language.** `{{name}}` (the new file's
+    own stem), `{{date}}`, `{{time}}`, `{{year}}` — substituted by a map lookup,
+    with no conditionals, no loops and nothing user-defined. A LICENSE without
+    `{{year}}` is half-useful; a template language is a slope with no natural
+    stopping point, and anything needing logic is a script rather than a
+    template. **An unrecognised `{{token}}` is left exactly as it is**, which is
+    not politeness: Handlebars, Jinja and Go templates all use those braces, so
+    a template *for* one of those files would otherwise be destroyed by the
+    thing meant to produce it.
+11. **A name that already exists is reported, not silently renamed.** M6 can
+    auto-number `untitled file 2` because nobody chose that name; here the user
+    typed it, and quietly creating `notes copy.md` answers a question they did
+    not ask. The field says so as they type, and `O_EXCL` is the backstop for
+    the race between the two.
+12. **The dialog gets its own `uiStore` field, as M14's modal did.** `dialog` is
+    a one-shot question whose `DialogResult` is `boolean | ConflictPolicy |
+    null`; this one resolves a `{name, template}` pair. Widening that union so
+    every existing dialog's result type is looser, for one caller's benefit, is
+    the wrong trade — `newFile: { parent, paneId } | null` beside `hashJob`.
+13. **The last template used is remembered, in `settings`.** One value, the same
+    machinery M14's algorithm uses. Someone making ten `.tsx` files a day should
+    pay for the choice once, and it is the difference between "instant" and
+    "instant after I find it in the list again".
+14. **A user template is a file, so it can be anything.** Over 1MB it is listed
+    but refused with the reason, using `readTextFile`'s existing cap; not valid
+    UTF-8, likewise. A broken template must never stop the dialog opening — the
+    rule that keeps one dangling symlink from making a directory unlistable
+    (§M1), applied to a folder the user maintains by hand.
+15. **Creation is undoable, once, whatever the content.** The same `create`
+    entry M6 pushes, and the same optimistic patch and invalidation — a new file
+    appearing is a change the watcher would report anyway, and M6's manual
+    invalidation already covers the case where it does not.
+
+Entry points: `file.newFromTemplate` in the File menu, the native app menu and
+the background context menu (where "what can be created here" already lives);
+`Cmd+Alt+N` in M11's registry. The toolbar keeps its single New Folder button —
+a second creation button beside it would need explaining, and the menu and the
+shortcut are where this belongs.
+
+Files: `constants/fileTemplates.ts`; `services/templates/templateService.ts`
+(loading the folder, substitution); `features/newFile/{NewFileDialog,TemplateList}.tsx`.
+Additions to `backend/filesystem/{filesystem.go,operations.go}` (`StandardPaths.templates`,
+`CreateFile`'s content and executable arguments) and its tests,
+`services/bridge/types.ts` with both implementations, `services/filesystem/queries.ts`
+(a templates query), `hooks/useFileOperations.ts` (`createFromTemplate`),
+`stores/uiStore.ts` (`newFile`), `db/repositories/settings.ts` (`lastTemplate`),
+`constants/{menus,contextMenus,shortcuts}.ts`, `backend/appmenu/appmenu.go` and
+`app/layouts/ExplorerLayout.tsx`.
+
+**Done when:** Cmd+Alt+N opens the dialog on the pane's folder; typing
+`notes.md` and pressing Enter creates a Markdown file with the template's
+content and leaves it selected with its name editable; picking HTML from the
+list fills in the extension, keeps the stem, and produces a file that opens as a
+real skeleton; a shell script template produces a file that runs without
+`chmod`; `{{name}}` and `{{year}}` are substituted while `{{unknown}}` survives
+untouched; a file dropped into the Templates folder appears in the list on the
+next open, with its own extension and executable bit; a name that already exists
+is refused in the field rather than renamed; typing an extension no template
+claims still creates an empty file of that type; and undo removes it.
+
 ### M12 — Polish, testing, packaging
 Animations and reduced-motion support; light theme; empty/loading/error states; perf pass on a 10k-file directory; Vitest coverage of services, stores and hooks against the mock bridge; Playwright e2e in the browser against the mock bridge; `wails build` + code-signing/notarization notes.
 
@@ -641,6 +778,8 @@ Animations and reduced-motion support; light theme; empty/loading/error states; 
 | **Photos view on a large folder** — full-size decodes per step, thousands of filmstrip thumbs | 512px cached thumbnail as the stage image with the original swapped in behind it, horizontally virtualized filmstrip, ±1 prefetch (§M13) |
 | **Hashing multi-gigabyte files** — a modal that appears frozen, work that outlives the window | Streamed with a fixed buffer, byte-level progress, real cancellation on close, bounded worker pool (§M14) |
 | **A stale digest presented as fact** | Session-scoped cache only, keyed on path + size + mtime; nothing persisted across runs (§M14 decision 4) |
+| **Writing content could overwrite a file** — M15 is the first feature that puts bytes on disk | No write API is added at all: `CreateFile` keeps `O_EXCL`, so it creates or fails and can never truncate an existing file (§M15 decision 3) |
+| **A hand-maintained templates folder** — huge, binary or unreadable files | Read through `readTextFile`'s existing cap; a bad template is listed with its reason and never stops the dialog opening (§M15 decision 14) |
 | **Notarization** for distribution | Deferred to M12; not blocking for local development |
 
 ---
