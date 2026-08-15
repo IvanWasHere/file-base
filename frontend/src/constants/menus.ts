@@ -1,18 +1,21 @@
 /**
  * The application menu, as data.
  *
- * Pure structure with no React and no handlers, so the in-window menu bar and
- * the native macOS menu (M11) are driven by one definition rather than two that
- * drift. M11 wires `menu.NewMenu` to these same command ids and emits them over
- * the bridge; the handler map in `useMenuCommands` stays the only place a
- * command is implemented.
+ * Pure structure with no React and no handlers, so the in-window menu bar, the
+ * native macOS menu and the context menus are driven by one definition rather
+ * than three that drift. `backend/appmenu` builds the native menu against these
+ * same command ids and emits them over the bridge; the handler map in
+ * `useMenuCommands` stays the only place a command is implemented.
  *
- * Shortcut labels are deliberately absent: the global key handling arrives in
- * M11, and printing an accelerator that does nothing would be a lie in the UI.
+ * Accelerators are *not* declared here — `constants/shortcuts.ts` owns them, and
+ * menus look them up by command id. Keeping them out means a command's binding
+ * is stated once, in the registry that actually dispatches it.
  */
 
 export type MenuCommandId =
   // File
+  | 'file.open'
+  | 'file.openInNewTab'
   | 'file.newFolder'
   | 'file.newFile'
   | 'file.newTab'
@@ -23,6 +26,8 @@ export type MenuCommandId =
   | 'file.delete'
   | 'file.revealInFinder'
   | 'file.copyPath'
+  | 'file.addToFavorites'
+  | 'file.removeFromFavorites'
   // Edit
   | 'edit.undo'
   | 'edit.copy'
@@ -74,6 +79,9 @@ export const APP_MENUS: MenuDefinition[] = [
     id: 'file',
     label: 'File',
     items: [
+      { id: 'file.open', label: 'Open' },
+      { id: 'file.openInNewTab', label: 'Open in New Tab' },
+      { separator: true },
       { id: 'file.newFolder', label: 'New Folder' },
       { id: 'file.newFile', label: 'New File' },
       { separator: true },
@@ -88,6 +96,9 @@ export const APP_MENUS: MenuDefinition[] = [
       { separator: true },
       { id: 'file.revealInFinder', label: 'Reveal in Finder' },
       { id: 'file.copyPath', label: 'Copy Path' },
+      { separator: true },
+      { id: 'file.addToFavorites', label: 'Add to Favorites' },
+      { id: 'file.removeFromFavorites', label: 'Remove from Favorites' },
     ],
   },
   {
@@ -145,4 +156,23 @@ export const APP_MENUS: MenuDefinition[] = [
 
 export function isSeparator(entry: MenuEntry): entry is { separator: true } {
   return 'separator' in entry
+}
+
+/** Every item, flattened — how the context menus and the native menu resolve ids. */
+const ITEMS: MenuItem[] = APP_MENUS.flatMap((menu) =>
+  menu.items.filter((entry): entry is MenuItem => !isSeparator(entry)),
+)
+
+export function findMenuItem(id: MenuCommandId): MenuItem | undefined {
+  return ITEMS.find((item) => item.id === id)
+}
+
+/**
+ * Guards the native menu's side of the bridge: Go sends a command id as a
+ * string, and a build mismatch — a native menu from an older binary naming a
+ * command this frontend no longer has — should be ignored rather than dispatched
+ * into a switch that silently falls through.
+ */
+export function isMenuCommandId(value: unknown): value is MenuCommandId {
+  return typeof value === 'string' && ITEMS.some((item) => item.id === value)
 }

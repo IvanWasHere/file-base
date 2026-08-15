@@ -1,5 +1,5 @@
 import { Loader2 } from 'lucide-react'
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { DetailsView } from '@/components/explorer/DetailsView'
 import { IconsView } from '@/components/explorer/IconsView'
 import { DirectoryError } from '@/components/common/DirectoryError'
@@ -8,7 +8,6 @@ import { SearchBar } from '@/features/search/SearchBar'
 import { SearchStatusBar } from '@/features/search/SearchStatusBar'
 import { useDirectory } from '@/hooks/useDirectory'
 import { useFileOperations } from '@/hooks/useFileOperations'
-import { useOperationKeys } from '@/hooks/useOperationKeys'
 import { useSearch } from '@/hooks/useSearch'
 import { usePaneSearch } from '@/stores/searchStore'
 import { bridge } from '@/services/bridge'
@@ -62,8 +61,17 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
   // Selecting reveals the preview if it was closed, as in the mockup. Driven by
   // the selection itself rather than the click handler, so keyboard and marquee
   // selection behave the same as a click.
+  //
+  // Only on the *transition* into having a selection, though. Reacting to
+  // "something is selected and the panel is shut" meant the panel reopened the
+  // instant it was closed, which made M11's Space and the View menu's Show
+  // Preview look broken whenever a file was highlighted — which is most of the
+  // time. An explicit close has to outlast the selection that provoked it.
+  const hadSelection = useRef(false)
   useEffect(() => {
-    if (selected.size > 0 && !previewOpen) setPreviewOpen(true)
+    const has = selected.size > 0
+    if (has && !hadSelection.current && !previewOpen) setPreviewOpen(true)
+    hadSelection.current = has
   }, [selected.size, previewOpen, setPreviewOpen])
 
   const operations = useFileOperations()
@@ -100,8 +108,6 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
     [operations],
   )
 
-  const handleOperationKey = useOperationKeys({ paneId: pane.id, path: pane.path })
-
   return (
     <section
       aria-label={`Pane ${LETTERS[index] ?? index + 1}`}
@@ -136,10 +142,9 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
 
       <div
         className="min-h-0 flex-1"
-        // Bubble phase, deliberately: the inline rename editor stops
-        // propagation, so Cmd+C and Delete reach the clipboard and the trash
-        // only when the user is not in the middle of typing a name.
-        onKeyDown={handleOperationKey}
+        // No key handler here since M11: file-operation shortcuts moved to the
+        // window-level registry, which resolves the active pane itself and so
+        // keeps working when focus is in the sidebar rather than the listing.
         style={{
           backgroundImage: 'radial-gradient(circle at 1px 1px, var(--grid-dot) 1px, transparent 0)',
           backgroundSize: '24px 24px',

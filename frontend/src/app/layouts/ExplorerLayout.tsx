@@ -7,6 +7,7 @@ import { Sidebar } from '@/components/sidebar/Sidebar'
 import { StatusBar } from '@/components/common/StatusBar'
 import { Toaster } from '@/components/common/Toaster'
 import { DialogHost } from '@/components/dialogs/DialogHost'
+import { ContextMenuHost } from '@/components/menus/ContextMenuHost'
 import { MenuBar } from '@/components/toolbar/MenuBar'
 import { TabBar } from '@/components/toolbar/TabBar'
 import { Toolbar } from '@/components/toolbar/Toolbar'
@@ -14,6 +15,8 @@ import { DirectoryError } from '@/components/common/DirectoryError'
 import { useDirectory } from '@/hooks/useDirectory'
 import { useExternalDrop } from '@/hooks/useExternalDrop'
 import { useFileOperations } from '@/hooks/useFileOperations'
+import { useKeyboard } from '@/hooks/useKeyboard'
+import { useNativeMenu } from '@/hooks/useNativeMenu'
 import { hydrate, startPersistence } from '@/services/db/persistence'
 import { standardPathsQuery } from '@/services/filesystem/queries'
 import { startWatchInvalidation } from '@/services/filesystem/watch'
@@ -69,6 +72,12 @@ export function ExplorerLayout() {
   // is routed by hit-test, so no pane needs its own listener.
   useExternalDrop(useFileOperations())
 
+  // Both resolve the active pane themselves, so they belong to the window
+  // rather than to any pane (PLAN.md M11). Mounted above the early returns so
+  // the hook order is stable while the app is still starting up.
+  useKeyboard()
+  useNativeMenu()
+
   // `!tab` covers hydration too: since M5, startup waits on migrations and the
   // session query, and rendering the chrome around an empty workspace would
   // flash a toolbar with nothing behind it.
@@ -109,6 +118,7 @@ export function ExplorerLayout() {
 
       <Toaster />
       <DialogHost />
+      <ContextMenuHost />
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowDown, ArrowUp, FolderOpen, Link2 } from 'lucide-rea
 import { memo, useCallback, useMemo, useRef } from 'react'
 import { FileIcon } from '@/components/common/FileIcon'
 import { InlineRename } from '@/components/explorer/InlineRename'
+import { useContextMenu } from '@/hooks/useContextMenu'
 import { useDragSource, useDropZone } from '@/hooks/useFileDrag'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { useMarqueeSelection } from '@/hooks/useMarqueeSelection'
@@ -73,12 +74,18 @@ const Row = memo(function Row({
     <div
       role="row"
       data-file-row
+      // What the right-click hit-test reads. Separate from `data-drop-path`,
+      // which only folders carry: everything can be right-clicked.
+      data-file-path={item.path}
       // Only folders advertise themselves as drop targets; the container's
       // hit-test reads this attribute to find what is under the pointer.
       {...(item.isDirectory ? { 'data-drop-path': item.path } : {})}
       {...dragProps}
       aria-selected={selected}
-      onMouseDown={(event) => onSelect(item, event)}
+      // Primary button only: a right-click inside a multi-selection must not
+      // collapse it to the one row under the cursor. `useContextMenu` selects
+      // when the target is not already selected.
+      onMouseDown={(event) => event.button === 0 && onSelect(item, event)}
       onDoubleClick={() => onActivate(item)}
       className={`grid ${COLUMNS} hover:bg-hover h-full cursor-default items-center border-b border-[var(--border-subtle)] px-3 text-[13px] ${
         selected ? 'bg-[var(--accent-glow)]' : ''
@@ -179,9 +186,10 @@ export function DetailsView({
     onExtendTo: extendTo,
     onSelectAll: selectAll,
     onClear: clear,
-    onActivate,
     onScrollToIndex: (index) => virtualizer.scrollToIndex(index),
   })
+
+  const handleContextMenu = useContextMenu(paneId, items)
 
   // Row geometry is arithmetic, not DOM lookup, so a marquee dragged past the
   // viewport still selects rows that were never rendered.
@@ -220,7 +228,12 @@ export function DetailsView({
 
   if (items.length === 0) {
     return (
-      <div className="text-muted flex h-full flex-col items-center justify-center gap-2">
+      // Right-clicking an empty folder still offers New Folder and Paste, which
+      // is most of what anyone opens a background menu for.
+      <div
+        onContextMenu={handleContextMenu}
+        className="text-muted flex h-full flex-col items-center justify-center gap-2"
+      >
         <FolderOpen size={36} strokeWidth={1.25} className="opacity-40" />
         <span className="text-[13px]">This folder is empty</span>
       </div>
@@ -268,6 +281,7 @@ export function DetailsView({
           // A click on empty space clears, matching Finder.
           if (!(event.target as HTMLElement).closest('[data-file-row]')) clear()
         }}
+        onContextMenu={handleContextMenu}
         {...dropZone}
         className={`relative flex-1 overflow-auto outline-none ${
           dropTarget === path ? 'ring-accent ring-2 ring-inset' : ''

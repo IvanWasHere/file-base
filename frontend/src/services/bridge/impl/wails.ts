@@ -16,6 +16,7 @@ import type { Bridge } from '../types'
 import {
   fileDropEvent,
   guard,
+  menuCommandEvent,
   searchBatchEvent,
   searchDoneEvent,
   toFileItem,
@@ -124,6 +125,10 @@ export const bridge: Bridge = {
       EventsOn(fileDropEvent, (payload: unknown) => {
         const drop = toExternalDrop(payload)
         if (drop) handler(drop)
+      }),
+    onMenuCommand: (handler) =>
+      EventsOn(menuCommandEvent, (payload: unknown) => {
+        if (typeof payload === 'string' && payload.length > 0) handler(payload)
       }),
   },
   watcher: {

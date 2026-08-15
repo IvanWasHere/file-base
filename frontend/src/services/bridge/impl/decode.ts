@@ -121,6 +121,9 @@ export const searchDoneEvent = 'search:done'
 /** Must match the OnFileDrop bridge in main.go. */
 export const fileDropEvent = 'files:dropped'
 
+/** Must match backend/appmenu. */
+export const menuCommandEvent = 'menu:command'
+
 /** Validates a Finder drop. A payload with no paths is nothing to act on. */
 export function toExternalDrop(payload: unknown): ExternalDrop | null {
   if (typeof payload !== 'object' || payload === null) return null

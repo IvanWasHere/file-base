@@ -3,6 +3,7 @@ import { FolderOpen } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileIcon } from '@/components/common/FileIcon'
 import { InlineRename } from '@/components/explorer/InlineRename'
+import { useContextMenu } from '@/hooks/useContextMenu'
 import { useDragSource, useDropZone } from '@/hooks/useFileDrag'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { useThumbnail } from '@/hooks/useThumbnail'
@@ -98,11 +99,14 @@ const Tile = memo(function Tile({
     <div
       role="row"
       data-file-row
+      // See DetailsView: the right-click hit-test reads this on every item,
+      // where `data-drop-path` is folders only.
+      data-file-path={item.path}
       {...(item.isDirectory ? { 'data-drop-path': item.path } : {})}
       {...dragProps}
       aria-selected={selected}
       title={item.name}
-      onMouseDown={(event) => onSelect(item, event)}
+      onMouseDown={(event) => event.button === 0 && onSelect(item, event)}
       onDoubleClick={() => onActivate(item)}
       className={`hover:bg-hover flex h-full cursor-default rounded-lg transition-colors ${
         spec.horizontal ? 'items-center gap-2 px-2' : 'flex-col items-center gap-1.5 px-2 pt-3 pb-2'
@@ -248,9 +252,10 @@ export function IconsView({
     onExtendTo: extendTo,
     onSelectAll: selectAll,
     onClear: clear,
-    onActivate,
     onScrollToIndex: (index) => virtualizer.scrollToIndex(Math.floor(index / columns)),
   })
+
+  const handleContextMenu = useContextMenu(paneId, items)
 
   const getItemRect = useCallback(
     (index: number): Rect => {
@@ -280,7 +285,11 @@ export function IconsView({
 
   if (items.length === 0) {
     return (
-      <div className="text-muted flex h-full flex-col items-center justify-center gap-2">
+      // See DetailsView: New Folder and Paste are the point of a background menu.
+      <div
+        onContextMenu={handleContextMenu}
+        className="text-muted flex h-full flex-col items-center justify-center gap-2"
+      >
         <FolderOpen size={36} strokeWidth={1.25} className="opacity-40" />
         <span className="text-[13px]">This folder is empty</span>
       </div>
@@ -300,6 +309,7 @@ export function IconsView({
         onMouseDown(event)
         if (!(event.target as HTMLElement).closest('[data-file-row]')) clear()
       }}
+      onContextMenu={handleContextMenu}
       {...dropZone}
       className={`relative h-full overflow-auto outline-none ${
         dropTarget === path ? 'ring-accent ring-2 ring-inset' : ''

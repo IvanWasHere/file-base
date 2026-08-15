@@ -54,6 +54,11 @@ async function runMenuCommand(user: User, menu: string, item: string) {
   await user.click(within(popup).getByRole('menuitem', { name: item }))
 }
 
+/** Everything selected across panes — the tests only ever open one. */
+function selectedPaths(): string[] {
+  return Object.values(useSelectionStore.getState().byPane).flatMap((pane) => [...pane.selected])
+}
+
 /** The seed tree has no files at home, so most operations happen in Documents. */
 async function goToDocuments(user: User) {
   await user.dblClick(await rowFor('Documents'))
@@ -69,6 +74,7 @@ beforeEach(() => {
     showHiddenFiles: false,
     dialog: null,
     renaming: null,
+    contextMenu: null,
   })
   useClipboardStore.setState({ paths: [], mode: null, sourceDir: null })
   useHistoryStore.setState({ entries: [] })
@@ -126,23 +132,27 @@ describe('rename', () => {
     expect(await bridge.fs.exists(`${DOCUMENTS}/CV.pdf`)).toBe(true)
   })
 
-  // The editor unmounting drops focus to the body, and every shortcut is
-  // handled by the pane — so without an explicit hand-back, the first thing the
-  // user does after renaming silently does nothing.
-  it('returns focus to the list so shortcuts still work afterwards', async () => {
+  // The editor unmounting drops focus to the body. Since M11 the file-operation
+  // shortcuts are window-level and survive that, but list navigation is not:
+  // arrows and type-ahead are handled by the focused grid, so without an
+  // explicit hand-back the first arrow key after a rename does nothing.
+  it('returns focus to the list so navigation still works afterwards', async () => {
     const { user } = renderApp()
     await goToDocuments(user)
 
     await user.click(await rowFor('Resume\\.pdf'))
-    await user.keyboard('{Meta>}{Enter}{/Meta}')
+    await user.keyboard('{Enter}')
     await screen.findByRole('textbox', { name: 'Rename Resume.pdf' })
     await user.keyboard('{Escape}')
 
-    expect(document.activeElement).toBe(screen.getByRole('grid', { name: 'Folder contents' }))
+    const grid = screen.getByRole('grid', { name: 'Folder contents' })
+    expect(document.activeElement).toBe(grid)
 
-    // Proof it is more than focus bookkeeping: a shortcut lands.
-    await user.keyboard('{Meta>}c{/Meta}')
-    expect(useClipboardStore.getState().paths).toEqual([`${DOCUMENTS}/Resume.pdf`])
+    // Proof it is more than focus bookkeeping: an arrow key moves the cursor,
+    // which only the focused grid can do. Upwards, because Resume.pdf sorts
+    // last in Documents and a downward step would legitimately stay put.
+    await user.keyboard('{ArrowUp}')
+    await waitFor(() => expect(selectedPaths()).toEqual([`${DOCUMENTS}/Project Roadmap.pptx`]))
   })
 
   it('reports a collision without losing either file', async () => {

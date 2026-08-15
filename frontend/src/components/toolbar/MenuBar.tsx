@@ -1,6 +1,7 @@
-import { Check } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { MenuItemButton, MenuPanel, MenuSeparator } from '@/components/menus/MenuPanel'
 import { APP_MENUS, isSeparator, type MenuCommandId } from '@/constants/menus'
+import { acceleratorFor } from '@/constants/shortcuts'
 import { useMenuCommands } from '@/hooks/useMenuCommands'
 
 /**
@@ -19,7 +20,7 @@ import { useMenuCommands } from '@/hooks/useMenuCommands'
 export function MenuBar() {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const container = useRef<HTMLDivElement>(null)
-  const { run, isEnabled, isChecked } = useMenuCommands()
+  const { run, isEnabled, isChecked, isVisible } = useMenuCommands()
 
   useEffect(() => {
     if (!openMenu) return
@@ -81,39 +82,32 @@ export function MenuBar() {
               </button>
 
               {open && (
-                <div
-                  role="menu"
+                <MenuPanel
                   aria-label={menu.label}
-                  className="bg-elevated border-edge absolute top-full left-0 z-50 mt-1 min-w-[200px] rounded-lg border p-1"
-                  style={{ boxShadow: 'var(--shadow-menu)' }}
+                  className="absolute top-full left-0 mt-1"
+                  style={{ position: 'absolute' }}
                 >
-                  {menu.items.map((entry, index) =>
-                    isSeparator(entry) ? (
-                      <div
-                        key={`separator-${index}`}
-                        role="separator"
-                        className="bg-edge my-1 h-px"
-                      />
-                    ) : (
-                      <button
-                        key={entry.id}
-                        type="button"
-                        role={entry.checkable ? 'menuitemcheckbox' : 'menuitem'}
-                        aria-checked={entry.checkable ? isChecked(entry.id) : undefined}
-                        disabled={!isEnabled(entry.id)}
-                        onClick={() => activate(entry.id)}
-                        className="text-secondary enabled:hover:bg-hover enabled:hover:text-primary flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] transition-colors disabled:opacity-35"
-                      >
-                        <span className="flex w-3.5 shrink-0 justify-center">
-                          {entry.checkable && isChecked(entry.id) && (
-                            <Check size={12} className="text-accent" />
-                          )}
-                        </span>
-                        <span className="truncate">{entry.label}</span>
-                      </button>
-                    ),
-                  )}
-                </div>
+                  {menu.items
+                    // Hidden items go before the separators are drawn, so the
+                    // Add/Remove Favorites pair collapsing to one never leaves a
+                    // rule with nothing between it and the next.
+                    .filter((entry) => isSeparator(entry) || isVisible(entry.id))
+                    .map((entry, index) =>
+                      isSeparator(entry) ? (
+                        <MenuSeparator key={`separator-${index}`} />
+                      ) : (
+                        <MenuItemButton
+                          key={entry.id}
+                          label={entry.label}
+                          accelerator={acceleratorFor(entry.id)}
+                          checkable={entry.checkable}
+                          checked={entry.checkable ? isChecked(entry.id) : undefined}
+                          disabled={!isEnabled(entry.id)}
+                          onSelect={() => activate(entry.id)}
+                        />
+                      ),
+                    )}
+                </MenuPanel>
               )}
             </div>
           )

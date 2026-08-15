@@ -10,6 +10,13 @@ import { findByPrefix, stepIndex } from '@/utils/selection'
  *
  * Type-ahead buffers keystrokes for 700ms, matching Finder — typing "de" lands
  * on "Desktop" rather than jumping to "D" then "E".
+ *
+ * This hook owns *moving within the list* and nothing else. Commands — open,
+ * rename, trash, copy — belong to the shortcut registry (M11), and the two are
+ * kept apart by one rule: everything handled here calls `preventDefault`, and
+ * `useKeyboard` ignores an event that has already been handled. Anything this
+ * hook declines therefore falls through, which is exactly how Enter reaches
+ * Rename and Space reaches the preview panel.
  */
 
 const TYPEAHEAD_RESET_MS = 700
@@ -22,7 +29,6 @@ interface UseListKeyboardOptions {
   onExtendTo: (path: string) => void
   onSelectAll: () => void
   onClear: () => void
-  onActivate: (item: FileItem) => void
   onScrollToIndex?: (index: number) => void
 }
 
@@ -34,7 +40,6 @@ export function useListKeyboard({
   onExtendTo,
   onSelectAll,
   onClear,
-  onActivate,
   onScrollToIndex,
 }: UseListKeyboardOptions) {
   const typeahead = useRef({ query: '', at: 0 })
@@ -52,6 +57,12 @@ export function useListKeyboard({
         else onSelect(item.path)
         onScrollToIndex?.(index)
       }
+
+      // Cmd+Arrow is navigation between folders, not within one: Cmd+Up goes to
+      // the enclosing folder, Cmd+Left/Right are back and forward, Cmd+Down
+      // opens. Claiming the arrows unconditionally would have shadowed all four.
+      const accel = event.metaKey || event.ctrlKey
+      if (accel && event.key.startsWith('Arrow')) return
 
       switch (event.key) {
         case 'ArrowDown':
@@ -87,15 +98,6 @@ export function useListKeyboard({
           moveTo(items.length - 1, event.shiftKey)
           return
 
-        case 'Enter': {
-          const item = items[currentIndex]
-          if (item) {
-            event.preventDefault()
-            onActivate(item)
-          }
-          return
-        }
-
         case 'Escape':
           event.preventDefault()
           onClear()
@@ -103,7 +105,10 @@ export function useListKeyboard({
 
         case 'a':
         case 'A':
-          if (event.metaKey || event.ctrlKey) {
+          // Also in the registry, so Cmd+A works with focus outside the list.
+          // Handled here as well because the list is the one place that knows
+          // the display order the selection has to follow.
+          if (accel) {
             event.preventDefault()
             onSelectAll()
           }
@@ -115,11 +120,17 @@ export function useListKeyboard({
 
       // Type-ahead: single printable characters only, and never while a
       // modifier is held (that would hijack shortcuts).
-      if (event.key.length !== 1 || event.metaKey || event.ctrlKey || event.altKey) return
+      if (event.key.length !== 1 || accel || event.altKey) return
 
-      event.preventDefault()
       const now = Date.now()
       const buffer = now - typeahead.current.at > TYPEAHEAD_RESET_MS ? '' : typeahead.current.query
+
+      // A leading space is never the start of a filename search, so Space is
+      // left to the registry, where it toggles the preview panel as it does in
+      // Finder. Mid-buffer it still types — "my doc" is a reasonable search.
+      if (event.key === ' ' && buffer === '') return
+
+      event.preventDefault()
       const query = buffer + event.key
       typeahead.current = { query, at: now }
 
@@ -129,6 +140,6 @@ export function useListKeyboard({
       const found = findByPrefix(names, query, query.length === 1 ? currentIndex : currentIndex - 1)
       if (found >= 0) moveTo(found, false)
     },
-    [items, lead, stride, onSelect, onExtendTo, onSelectAll, onClear, onActivate, onScrollToIndex],
+    [items, lead, stride, onSelect, onExtendTo, onSelectAll, onClear, onScrollToIndex],
   )
 }

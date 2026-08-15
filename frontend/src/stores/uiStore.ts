@@ -1,12 +1,13 @@
 /**
  * Chrome-level UI state that is not navigation and not selection: panel
- * visibility, the show-hidden-files toggle, the modal dialog, and which item is
- * being renamed in place.
+ * visibility, the show-hidden-files toggle, the modal dialog, the open context
+ * menu, and which item is being renamed in place.
  *
  * M5 persists the toggles to SQLite; M12 folds the theme in.
  */
 
 import { create } from 'zustand'
+import type { ContextKind } from '@/constants/contextMenus'
 import type { ConflictPolicy } from '@/types/file'
 
 export interface ConfirmRequest {
@@ -45,12 +46,30 @@ export interface RenameTarget {
   path: string
 }
 
+/**
+ * The open context menu.
+ *
+ * Plain data — a position and what was under the pointer — for the same reason
+ * the dialog resolver above lives outside the store: keeping handlers out leaves
+ * this comparable, serialisable, and cheap to re-render on. The host builds the
+ * actual items from `kind` and the active pane's selection, which the right-click
+ * has already set (right-clicking an unselected item selects it first, as in
+ * Finder), so the menu needs to carry no target of its own.
+ */
+export interface ContextMenuRequest {
+  kind: ContextKind
+  /** Viewport coordinates of the click. */
+  x: number
+  y: number
+}
+
 interface UiState {
   previewOpen: boolean
   sidebarOpen: boolean
   showHiddenFiles: boolean
   dialog: DialogRequest | null
   renaming: RenameTarget | null
+  contextMenu: ContextMenuRequest | null
 
   togglePreview: () => void
   setPreviewOpen: (open: boolean) => void
@@ -59,6 +78,9 @@ interface UiState {
 
   beginRename: (paneId: string, path: string) => void
   endRename: () => void
+
+  openContextMenu: (request: ContextMenuRequest) => void
+  closeContextMenu: () => void
 
   /** Resolves true when confirmed, false when dismissed. */
   askConfirm: (request: Omit<ConfirmRequest, 'kind'>) => Promise<boolean>
@@ -73,6 +95,7 @@ export const useUiStore = create<UiState>()((set) => ({
   showHiddenFiles: false,
   dialog: null,
   renaming: null,
+  contextMenu: null,
 
   togglePreview: () => set((state) => ({ previewOpen: !state.previewOpen })),
   setPreviewOpen: (open) => set({ previewOpen: open }),
@@ -81,6 +104,11 @@ export const useUiStore = create<UiState>()((set) => ({
 
   beginRename: (paneId, path) => set({ renaming: { paneId, path } }),
   endRename: () => set({ renaming: null }),
+
+  // A rename editor and a context menu cannot both own the keyboard, and the
+  // menu is the thing the user just asked for.
+  openContextMenu: (request) => set({ contextMenu: request, renaming: null }),
+  closeContextMenu: () => set({ contextMenu: null }),
 
   // Each request narrows the shared result to its own type, so a dialog that is
   // dismissed — or replaced by another — resolves to a meaningful "no" rather

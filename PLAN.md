@@ -19,9 +19,9 @@ React + TypeScript + Wails file explorer, per the PRD.
 
 The mockup is a **layout and interaction spec**, not code to port line-by-line.
 
-- **Keep:** the full chrome (tab bar → toolbar → sidebar / panes / preview → status bar), the palette, the four view modes, split-pane letters (A/B/C/D), resizable handles, file-type colour categories.
+- **Keep:** the full chrome (tab bar → toolbar → sidebar / panes / preview → status bar), the palette, the five view modes — Details, Large / Medium / Small Icons, and **Photos** (§M13) — split-pane letters (A/B/C/D), resizable handles, file-type colour categories.
 - **Replace:** `parentId` integer tree → real absolute **paths** as identity. `db.files.where('parentId')` → `ReadDirectory(path)`. Dexie → SQLite for app state only. `m.redraw()` → React reactivity. Font Awesome → Lucide. CDN Tailwind → build-time Tailwind.
-- **Add (not in the mockup):** multi-selection, file operations, watcher, search, context menus, keyboard shortcuts, drag & drop, virtualization, error handling.
+- **Add (not in the mockup):** multi-selection, file operations, watcher, search, context menus, keyboard shortcuts, drag & drop, virtualization, error handling, file hashing (§M14).
 
 ---
 
@@ -91,6 +91,10 @@ Tx(stmts []Stmt) error
 
 // backend/thumbs — Thumbs
 Generate(path string, size int) ([]byte, error)                // native image decode only
+
+// backend/hashing — Hasher  → streams "hash:result" / "hash:progress" / "hash:done"
+Hash(req HashRequest) (string, error)                          // returns a job id
+Cancel(id string) error
 ```
 
 No sorting, filtering, selection, navigation, or conflict *decisions* in Go — `Move`/`Copy` take an explicit conflict policy computed in TS.
@@ -325,7 +329,161 @@ Notes from the build:
 Verified in the running app against real files: text preview with its truncation notice, an oversized image refused by code, a full-resolution image inline, and thumbnails rendering at 128×64 from an 800×400 source (JPEG), 128×128 with transparency intact (PNG), a 24×24 icon left unscaled, and a text file named `.png` falling back to its icon in both the grid and the panel.
 
 ### M11 — Menus & shortcuts
-Context menus for file / folder / background with native-feeling styling and keyboard traversal; native app menu (`menu.NewMenu`) mirroring the actions; a central shortcut registry (Cmd+C/V/X/A/N/F, Cmd+Shift+N, Delete, Enter, Space for preview, Cmd+1..4 for view modes, Cmd+T/W for tabs, Cmd+[ / ]) with a `useKeyboard` hook that respects focus context.
+Context menus for file / folder / background with native-feeling styling and keyboard traversal; native app menu (`menu.NewMenu`) mirroring the actions; a central shortcut registry (Cmd+C/V/X/A/N/F, Cmd+Shift+N, Delete, Enter, Space for preview, Cmd+1..5 for view modes, Cmd+T/W for tabs, Cmd+[ / ]) with a `useKeyboard` hook that respects focus context. The registry is also where M13's Left/Right/Home/End stepping is reconciled with `useListKeyboard`'s existing arrow navigation.
+
+### M13 — Photos view
+
+A fifth view mode, `photos`, taken from the mockup's `.photo-viewer` (`frontend/ui-example/index.html` — styles at §"Photo Viewer Styles", behaviour in `renderFileView` / `renderPhotoViewer` / `scrollFilmstripToActive`). It postdates the rest of the mockup, which is why it appears here rather than in M2/M4 with the other view modes.
+
+**Numbered after M12 but built before it.** M12's polish, perf and light-theme passes should cover this surface too; shipping the feature afterwards would mean polishing twice. Its one real dependency is M11's shortcut registry — see decision 8.
+
+What the mockup specifies:
+
+- **Main stage, 70% height** — the image centred and `object-fit: contain` on `--bg-deep`; 40px circular prev/next buttons inset 16px and vertically centred, *absent* at the ends of the list rather than disabled; the filename in a pill at bottom-centre, `pointer-events: none`.
+- **Filmstrip, 30% height** — horizontally scrolling, 80px-wide thumbs with 4px gaps, the active one carrying an accent border and glow, each with its name overlaid along the bottom. Clicking a thumb makes it active; the strip then smooth-scrolls to centre it.
+- **Its own empty state** — "No images in this folder", distinct from "This folder is empty", because the folder may be full of other things.
+
+Decisions taken up front:
+
+1. **Photos is a view mode, not a modal viewer.** The mockup puts it in `viewConfigs` beside Details and the three icon grids, and renders it inside the pane — so it inherits splits, tabs, the breadcrumb, the pane header and the preview panel for free. A full-window lightbox is a different feature and is not this one.
+2. **The active photo *is* the pane selection.** The mockup moves `panel.selectedId` and `state.previewFile` together on every step. Mapping that onto `selectionStore` rather than a viewer-local index means the status bar, preview panel, file operations, drag sources and M11's context menus all keep working with no special case. The consequence is deliberate: Photos is single-select, so Cmd/Shift-click, marquee and Cmd+A have nothing to act on there.
+3. **Photos is the only view that hides files, and the filter stays in TypeScript.** The mockup's `f.type === 'image'` becomes `previewKindFor(item) === 'image'` applied to whatever list the pane is showing — which includes search results, so a search narrows the strip. `backend/` keeps the no-filtering rule; M8's Go-side criteria remain the sole exception.
+4. **The stage shows the 512px thumbnail first and the original second.** `ReadFileBase64` refuses anything over `IMAGE_CAP` (12MB), and a data URL for a 12MB photo is ~16MB of JSON per step. `backend/thumbs` already renders and caches up to `maxSize = 512`, so: paint the cached 512 immediately, swap in the full file once it decodes, and for a file past the cap let the 512 stand — a slightly soft photo beats a `too-large` error in a viewer whose entire job is showing photos. It also makes stepping feel instant instead of round-tripping the disk per keypress.
+5. **Filmstrip thumbs reuse `THUMB_SIZE` (128).** They are 80 CSS px, so a 2× display would prefer 160 — but the icon grids have already cached 128 for these same files, and a second size doubles the cache for one view's benefit. Take the 128.
+6. **The filmstrip virtualizes horizontally.** The mockup mounts every thumb; 5,000 photos would mean 5,000 nodes and 5,000 thumbnail requests. `@tanstack/react-virtual` is already in use and takes `horizontal: true`. Centring then becomes `scrollToIndex(i, { align: 'center' })` rather than the mockup's `offsetLeft` arithmetic — which a virtualizer invalidates anyway, since the target thumb may not be mounted when the scroll is asked for.
+7. **Prefetch one ahead and one behind.** Held arrow keys should not wait on a decode per press, and the two neighbours are the only ones a step can reach.
+8. **Shortcuts register with M11's registry rather than locally.** Left/Right to step, Home/End to jump, Space to toggle the preview panel. Left/Right already mean something in `useListKeyboard`, so both sets have to be resolved in one place — building a second pane-scoped key handler here would recreate exactly the drift M11 exists to prevent.
+9. **The persisted view mode must survive the new value in both directions.** `folder_views` (migration 001) stores the mode as text, so a database written by this build will be opened by one that has never heard of `photos`, and vice versa. Confirm the read path validates against the `ViewMode` union and falls back to `details` before shipping — the failure mode is a pane that renders nothing, which looks like a crash.
+10. **The pane's sort still orders the strip; folders-first stops meaning anything.** The filter has already removed the folders it would have hoisted.
+11. **Thumbs are drag sources; the viewer is a drop target for the pane's own directory** — the same zone the listing offers in M9. There is no drop-onto-photo, because there is no folder to drop into.
+12. **The 70/30 split is fixed.** A resizable filmstrip is a preference to persist per pane, which is more state than this earns.
+
+Files: `features/photos/{PhotosView,PhotoStage,Filmstrip}.tsx`, `hooks/usePhotoNavigation.ts`, plus additions to `types/workspace.ts` (the `ViewMode` union), `constants/viewModes.ts` (the fifth `VIEW_OPTIONS` entry, Lucide `Images`) and `services/thumbs/thumbCache.ts` (a 512 request path alongside `THUMB_SIZE`). **No new Go bindings** — `Thumbnail(path, 512)` and `ReadFileBase64` both already exist.
+
+**Done when:** switching a folder of photos to Photos view shows the first image with the filmstrip centred on it; arrow keys and the nav buttons step through it; the preview panel and status bar follow the active photo; a folder with no images shows its own empty state; and a 2,000-photo folder scrolls the strip without mounting 2,000 thumbs.
+
+### M14 — File hashes
+
+A `#` button in the toolbar opens a modal that calculates hashes for the selected
+files. Algorithms down the left side, one row per file on the right, digest
+shown as soon as each file finishes.
+
+**Algorithms: CRC32, MD5, SHA-1, SHA-224, SHA-256, SHA-384, SHA-512.** Every one
+is in the Go standard library (`hash/crc32`, `crypto/md5`, `crypto/sha1`,
+`crypto/sha256`, `crypto/sha512`) — no new dependency, in a feature where a
+third-party implementation would be the last place to want one.
+
+> **On "SHA128".** The request listed it; it does not exist. SHA-2 has no
+> 128-bit member. The 128-bit digest people mean here is MD5, already on the
+> list, and the algorithm that usually sits beside it in a checksum panel is
+> SHA-1 (160-bit) — which is what the slot is filled with. If the intent was
+> something else, this is the line to change.
+
+**Numbered after M13, built before M12**, for the same reason M13 is: M12's
+polish, light-theme and empty-state passes should cover this surface once rather
+than twice. Its dependency is M11's shortcut and menu registry.
+
+Decisions taken up front:
+
+1. **Hashing streams in Go and never crosses the bridge as bytes.** `io.Copy`
+   from the file into the hash writer with a fixed buffer, so a 20GB disk image
+   costs a constant amount of memory. The bridge carries hex strings — the one
+   thing M10 already learned the hard way is that a Go `[]byte` marshals to a
+   JSON array of numbers.
+2. **The job API mirrors M8's search: `hash(request) → id`, `cancel(id)`,
+   `subscribe({onResult, onProgress, onDone})`.** A checksum over a selection is
+   the same shape of problem as a walk — unbounded duration, results that should
+   appear as they land, and a user who closes the window meaning *stop*. A
+   single blocking call would freeze the modal on the first large file and
+   would give closing it no way to reclaim the disk. Closing the modal cancels;
+   so does changing algorithm mid-run.
+3. **One algorithm at a time, cached per `(path, size, mtime, algorithm)`.**
+   Computing all seven in one pass over the file is tempting — the read is
+   shared — but SHA-512 and CRC32 are not remotely the same CPU cost, and it
+   would mean paying for six columns nobody asked to see. Switching algorithms
+   re-reads the file; the OS page cache absorbs that for anything that fits, and
+   the cache means a given (file, algorithm) is computed at most once per
+   session.
+4. **The digest cache is in memory and dies with the process.** `backend/thumbs`
+   persists keyed on mtime, and copying that here would be wrong: mtime is a
+   claim the filesystem makes and `touch -t` can set it to anything, so a
+   persisted digest could keep asserting a hash for bytes that no longer exist.
+   Recomputing costs seconds; a stale checksum is a wrong answer to the only
+   question the feature exists to answer.
+5. **Progress is measured in bytes, not files.** The common case is one large
+   file, where a count-based bar reads 0/1 for four minutes and then finishes.
+   The row shows a determinate bar from bytes read against the size the listing
+   already carries. Emissions coalesce at 100ms or 64MB, whichever comes first —
+   the same reasoning as the watcher's batching.
+6. **Concurrency is bounded by a small worker pool (4), one file per worker.**
+   Hashing is CPU- and IO-bound at once; handing 200 selected files to 200
+   goroutines thrashes the disk and finishes no sooner. Follows `backend/thumbs`'
+   semaphore.
+7. **A failed file fails its own row.** Permission denied on one file in a
+   selection of forty must not kill the batch — the same rule that keeps one
+   dangling symlink from making a directory unlistable (§M1). The row carries
+   the typed `FsError`.
+8. **Directories are excluded, not errored.** A recursive folder digest is a
+   different feature with its own unanswered question (what tree encoding?).
+   Folders in the selection are dropped from the row list with a line saying how
+   many were skipped, so nothing silently disappears.
+9. **Comparison is the point, so two affordances, both cheap.** Identical
+   digests within the run are grouped and badged ("2 files match") — that answers
+   "are these the same file?" without the user reading 64 hex characters twice.
+   And a *verify* field: paste an expected hash and the matching row highlights.
+   The paste is trimmed, compared case-insensitively, and tolerates the
+   `<hash>  *filename` form that `shasum` and every download page emit, because
+   that is what is actually on the clipboard.
+10. **Copy out in `shasum` format.** Per-row copy for the bare digest, plus a
+    "Copy all" that produces `<hash>  <name>` lines that paste straight into
+    `shasum -c`. Dragging out to Finder remains impossible (§3), so the
+    clipboard is the way across — the same conclusion M9 reached with Copy Path.
+11. **CRC32 is labelled as an integrity check, not a hash, and sits in its own
+    group.** MD5 and SHA-1 are marked as unsuitable for security while staying
+    on the list, because published checksums still use them. A checksum tool that
+    lets someone verify a download with CRC32 believing it proves authenticity is
+    worse than one that omits it.
+12. **The modal gets its own `uiStore` field, not the dialog stack.**
+    `dialog` is a one-shot question with a promise waiting on the answer
+    (`pendingResolve`); this is a long-lived view with internal state that
+    resolves nothing. Routing it through `askConfirm`'s machinery would mean a
+    dialog that settles a promise nobody awaited. `hashJob: { paths } | null`
+    alongside `dialog`, rendered above it.
+13. **The chosen algorithm persists via the existing `settings` table.** The
+    user who verifies SHA-256 downloads verifies SHA-256 downloads. Default is
+    SHA-256.
+14. **The row list virtualizes.** Selecting 5,000 files and hitting `#` is a
+    thing people will do; `@tanstack/react-virtual` is already in use.
+15. **The mock bridge returns synthetic digests, derived from content, of the
+    right length per algorithm — and says so.** Web Crypto has no MD5, no
+    SHA-224 and no CRC32, so a faithful mock would mean shipping a second hash
+    implementation in TypeScript: a second thing to get wrong, and a standing
+    invitation for something to use it for real. Deriving them from the file's
+    bytes keeps equal content producing equal digests, which is what the
+    match-grouping and verify-field tests need. Digest *correctness* is a Go
+    concern, pinned there by published test vectors for every algorithm —
+    including the empty input, which is exactly where a wrong implementation
+    looks right.
+
+Entry points: the toolbar `#` (Lucide `Hash`), disabled when the selection holds
+no files; `file.calculateHashes` in the File menu, the native app menu and the
+file/folder context menus; and `Cmd+Alt+H` in M11's registry (`Cmd+Shift+H` is
+Go → Home).
+
+Files: `backend/hashing/{hashing.go,hashing_test.go}`; `services/hashing/hashService.ts`
+(job subscription + digest cache); `hooks/useHashes.ts`; `features/hashing/{HashModal,AlgorithmList,HashRow,VerifyField}.tsx`;
+`constants/hashAlgorithms.ts`. Additions to `services/bridge/types.ts` (`HashApi`)
+with both implementations, `stores/uiStore.ts` (`hashJob`), `constants/menus.ts`,
+`constants/contextMenus.ts`, `constants/shortcuts.ts`, `backend/appmenu/appmenu.go`,
+`components/toolbar/Toolbar.tsx` and `main.go` (bind the struct).
+
+**Done when:** selecting several files and clicking `#` opens the modal with a
+row per file, each digest appearing as its file finishes rather than all at the
+end; the sidebar switches algorithm and recomputes; two identical files are
+badged as matching; pasting a published checksum highlights its row; a
+multi-gigabyte file shows a moving byte progress bar and stops when the modal is
+closed; an unreadable file shows its error on its own row while the rest
+complete; and the Go test vectors pass for all seven algorithms.
 
 ### M12 — Polish, testing, packaging
 Animations and reduced-motion support; light theme; empty/loading/error states; perf pass on a 10k-file directory; Vitest coverage of services, stores and hooks against the mock bridge; Playwright e2e in the browser against the mock bridge; `wails build` + code-signing/notarization notes.
@@ -343,6 +501,9 @@ Animations and reduced-motion support; light theme; empty/loading/error states; 
 | **Large directories** (100k entries) | Virtualization + chunked `ReadDirectory` streamed over events + a "still loading" indicator |
 | **Watcher storms** on busy folders | Debounce and coalesce in Go before emitting |
 | **Thumbnail CPU cost** | Bounded worker pool in Go, IntersectionObserver-driven requests, persistent cache |
+| **Photos view on a large folder** — full-size decodes per step, thousands of filmstrip thumbs | 512px cached thumbnail as the stage image with the original swapped in behind it, horizontally virtualized filmstrip, ±1 prefetch (§M13) |
+| **Hashing multi-gigabyte files** — a modal that appears frozen, work that outlives the window | Streamed with a fixed buffer, byte-level progress, real cancellation on close, bounded worker pool (§M14) |
+| **A stale digest presented as fact** | Session-scoped cache only, keyed on path + size + mtime; nothing persisted across runs (§M14 decision 4) |
 | **Notarization** for distribution | Deferred to M12; not blocking for local development |
 
 ---

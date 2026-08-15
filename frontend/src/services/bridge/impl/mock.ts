@@ -181,6 +181,7 @@ export function __resetMockFilesystem(): void {
   searchHandlers.clear()
   cancelled.clear()
   dropHandlers.clear()
+  menuHandlers.clear()
 }
 
 /**
@@ -454,6 +455,18 @@ export function __emitFileDrop(drop: ExternalDrop): void {
   for (const handler of dropHandlers) handler(drop)
 }
 
+const menuHandlers = new Set<(id: string) => void>()
+
+/**
+ * Test hook: simulates a pick from the native macOS menu.
+ *
+ * Same reasoning as `__emitFileDrop` — the menu lives outside the webview, so
+ * this is the only way to exercise the dispatch path without a running app.
+ */
+export function __emitMenuCommand(id: string): void {
+  for (const handler of menuHandlers) handler(id)
+}
+
 export const bridge: Bridge = {
   fs: {
     // Async so the not-found throw becomes a rejection. Reading a missing
@@ -581,6 +594,11 @@ export const bridge: Bridge = {
     onFileDrop: (handler) => {
       dropHandlers.add(handler)
       return () => dropHandlers.delete(handler)
+    },
+    // Likewise unreachable without a native menu; driven by `__emitMenuCommand`.
+    onMenuCommand: (handler) => {
+      menuHandlers.add(handler)
+      return () => menuHandlers.delete(handler)
     },
   },
   watcher: {

@@ -65,6 +65,7 @@ beforeEach(() => {
     showHiddenFiles: false,
     dialog: null,
     renaming: null,
+    contextMenu: null,
   })
   __resetIdCounter()
 })

@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 
+	"file-base/backend/appmenu"
 	"file-base/backend/db"
 	"file-base/backend/filesystem"
 	"file-base/backend/search"
@@ -69,6 +70,10 @@ func main() {
 
 		OnStartup: func(ctx context.Context) {
 			app.startup(ctx)
+			// Installed here rather than through the `Menu` option because every
+			// item emits an event, and emitting needs the runtime context that
+			// only exists once the app has started.
+			runtime.MenuSetApplicationMenu(ctx, appmenu.New(ctx))
 			// Opening eagerly surfaces a bad database file in the log at launch
 			// rather than on the first query. Failure is not fatal: the explorer
 			// still browses, it just loses favorites and session restore.

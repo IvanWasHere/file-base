@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useQuery } from '@tanstack/react-query'
 import type { MenuCommandId } from '@/constants/menus'
+import { useFavorites } from '@/hooks/useFavorites'
 import { useFileOperations } from '@/hooks/useFileOperations'
 import { bridge } from '@/services/bridge'
 import { fsKeys, standardPathsQuery } from '@/services/filesystem/queries'
@@ -18,20 +19,28 @@ import {
   useActiveTab,
   useWorkspaceStore,
 } from '@/stores/workspaceStore'
+import { describeFsError, isFsError } from '@/types/errors'
+import type { FileItem } from '@/types/file'
 import type { SplitMode, ViewMode } from '@/types/workspace'
 
 export interface MenuCommandState {
   run: (id: MenuCommandId) => void
   isEnabled: (id: MenuCommandId) => boolean
   isChecked: (id: MenuCommandId) => boolean
+  /**
+   * Whether the command should appear at all. Only the Add/Remove Favorites
+   * pair uses it: they are two spellings of one toggle, and showing both — one
+   * of them always dead — is worse than showing the one that applies.
+   */
+  isVisible: (id: MenuCommandId) => boolean
 }
 
 /**
  * The single implementation of every application command.
  *
- * The in-window menu bar calls into this; M11's native macOS menu will emit the
- * same `MenuCommandId`s over the bridge and land here too, so a command is
- * never implemented twice.
+ * Four routes reach it and none of them owns a command: the in-window menu bar,
+ * the native macOS menu (`backend/appmenu`, over `menu:command`), the context
+ * menus, and the keyboard registry in `constants/shortcuts.ts`.
  */
 export function useMenuCommands(): MenuCommandState {
   const tab = useActiveTab()
@@ -56,9 +65,42 @@ export function useMenuCommands(): MenuCommandState {
   const openSearch = useSearchStore((state) => state.open)
   const clipboardCount = useClipboardStore((state) => state.paths.length)
   const undoDepth = useHistoryStore((state) => state.entries.length)
+  const { isPinned, pin, unpin } = useFavorites()
 
   /** The selection as an array — what every file operation acts on. */
   const targets = [...selected]
+
+  /**
+   * What the listing already knows about a path. Search results and the icon
+   * grids render from the same cache entry the pane read, so this answers for
+   * anything on screen; `file.open` falls back to a stat for the rest.
+   */
+  const cachedItem = (path: string): FileItem | undefined =>
+    queryClient
+      .getQueryData<FileItem[]>(fsKeys.directory(pane?.path ?? '', ui.showHiddenFiles))
+      ?.find((item) => item.path === path)
+
+  const openPath = (path: string, isDirectory: boolean): void => {
+    if (isDirectory) {
+      if (pane) navigate(pane.id, path)
+      return
+    }
+    void bridge.shell.openFile(path).catch((error: unknown) => {
+      toast.error(
+        'Could not open the file',
+        isFsError(error) ? describeFsError(error) : undefined,
+      )
+    })
+  }
+
+  /**
+   * Favourites act on a folder: the selected one, or — with nothing selected,
+   * which is the background context menu's case — the folder being shown.
+   */
+  const favoriteTarget = (): string | undefined => {
+    const selectedFolder = targets.find((path) => cachedItem(path)?.isDirectory)
+    return selectedFolder ?? (targets.length === 0 ? pane?.path : undefined)
+  }
 
   const viewModes: Partial<Record<MenuCommandId, ViewMode>> = {
     'view.details': 'details',
@@ -88,6 +130,39 @@ export function useMenuCommands(): MenuCommandState {
     }
 
     switch (id) {
+      case 'file.open': {
+        const target = lead ?? targets[0]
+        if (!target) return
+        const item = cachedItem(target)
+        if (item) {
+          if (!item.broken) openPath(item.path, item.isDirectory)
+          return
+        }
+        // Not in the listing the pane rendered — a stat is one round trip and
+        // the alternative is a menu item that silently does nothing.
+        void bridge.fs
+          .readFileInfo(target)
+          .then((info) => openPath(info.path, info.isDirectory))
+          .catch(() => toast.error('Could not open the item'))
+        return
+      }
+      case 'file.openInNewTab': {
+        const target = targets.find((path) => cachedItem(path)?.isDirectory)
+        if (target) openTab(target)
+        return
+      }
+
+      case 'file.addToFavorites': {
+        const target = favoriteTarget()
+        if (target) pin(target)
+        return
+      }
+      case 'file.removeFromFavorites': {
+        const target = favoriteTarget()
+        if (target) unpin(target)
+        return
+      }
+
       case 'file.newFolder':
         if (pane) void operations.createFolder(pane.path, pane.id)
         return
@@ -226,7 +301,14 @@ export function useMenuCommands(): MenuCommandState {
       case 'file.duplicate':
       case 'file.moveToTrash':
       case 'file.delete':
+      case 'file.open':
         return selected.size > 0
+      // Only a folder can be opened in a tab, and only a folder can be pinned.
+      case 'file.openInNewTab':
+        return targets.some((path) => cachedItem(path)?.isDirectory === true)
+      case 'file.addToFavorites':
+      case 'file.removeFromFavorites':
+        return favoriteTarget() !== undefined
       case 'edit.paste':
         return clipboardCount > 0
       case 'edit.undo':
@@ -263,5 +345,12 @@ export function useMenuCommands(): MenuCommandState {
     }
   }
 
-  return { run, isEnabled, isChecked }
+  const isVisible = (id: MenuCommandId): boolean => {
+    const target = favoriteTarget()
+    if (id === 'file.addToFavorites') return target === undefined || !isPinned(target)
+    if (id === 'file.removeFromFavorites') return target !== undefined && isPinned(target)
+    return true
+  }
+
+  return { run, isEnabled, isChecked, isVisible }
 }

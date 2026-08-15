@@ -86,6 +86,15 @@ export interface ExternalDrop {
 export interface DesktopApi {
   /** Returns an unsubscribe function. */
   onFileDrop(handler: (drop: ExternalDrop) => void): () => void
+  /**
+   * Picks from the native macOS menu, as raw command-id strings.
+   *
+   * Deliberately untyped here: `MenuCommandId` is a UI constant, and the bridge
+   * describes the wire, not the vocabulary. The consumer validates before
+   * dispatching, which is also what protects against an id from a stale build.
+   * Returns an unsubscribe function.
+   */
+  onMenuCommand(handler: (id: string) => void): () => void
 }
 
 export interface ShellApi {
