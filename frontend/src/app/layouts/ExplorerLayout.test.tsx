@@ -207,6 +207,28 @@ describe('splits', () => {
     ])
   })
 
+  // The control is pictograms end to end: the button prints no name either, so
+  // its width cannot change with the layout and shunt the breadcrumb along.
+  it('shows no text on the button, whatever is selected', async () => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+
+    const button = screen.getByRole('button', { name: /^Split layout:/ })
+    expect(button.textContent).toBe('')
+
+    await chooseSplit(user, 'Split Bottom')
+    await waitFor(() =>
+      expect(useWorkspaceStore.getState().tabs[0]?.splitMode).toBe('split-bottom'),
+    )
+
+    // Still no text, and the name is still reachable — as the accessible name
+    // and the tooltip, and in the status bar.
+    const after = screen.getByRole('button', { name: 'Split layout: Split Bottom' })
+    expect(after.textContent).toBe('')
+    expect(after).toHaveAttribute('title', 'Split layout: Split Bottom')
+    expect(screen.getByText(/Split Bottom \/ Details/)).toBeInTheDocument()
+  })
+
   it('stacks two panes for 2 Rows', async () => {
     const { user } = renderApp()
     await rowFor('Documents')

@@ -1041,13 +1041,12 @@ Decisions taken up front:
 
    **Names still exist, because four other places are text and cannot show a
    picture:** the in-window and native View menus, the status bar's "layout /
-   view" pair, the toolbar button that opens the dropdown, the tooltip on hover,
-   and the accessible name a screen reader reads out — a control whose only
-   content is a drawing is unusable without one. So the names stay in
-   `constants/splitModes.ts` exactly as before, and the *only* thing that
-   changes is that the dropdown's own rows stop rendering them. Nothing outside
-   that one menu is touched. Naming them is therefore a much smaller decision
-   than it was: Split Top /
+   view" pair, the tooltip on hover, and the accessible name a screen reader
+   reads out — a control whose only content is a drawing is unusable without
+   one. So the names stay in `constants/splitModes.ts` exactly as before and
+   simply stop being *rendered* on the control. **Revised during the build:**
+   the toolbar button was to keep its label and does not — see decision 13.
+   Naming them is therefore a much smaller decision than it was: Split Top /
    Split Bottom / Split Left / Split Right, after which part is subdivided,
    because nothing short says "two columns of which the left is split into two
    rows" and nobody has to recognise these at a glance any more.
@@ -1084,9 +1083,21 @@ Decisions taken up front:
     option is visible without scanning downward, and the shapes sit next to each
     other where the differences between them are easiest to see — which is the
     arrangement Windows' snap layouts and every multiview picker converged on
-    for the same reason. **The toolbar button that opens it is unchanged**,
-    keeping the icon-plus-label it has had since M16: the icons-only rule is
-    scoped to the menu that drops down, and nowhere else.
+    for the same reason.
+
+    ~~**The toolbar button that opens it is unchanged**, keeping the
+    icon-plus-label it has had since M16.~~ **Revised after seeing it run:** the
+    button drops its label too, and both widths are pinned. "2 Columns", "Split
+    Bottom" and "2 × 2 Grid" are three different widths, so a button that prints
+    the current layout resizes itself every time the layout changes and shunts
+    the breadcrumb beside it along — which is the sort of thing that only shows
+    up once nine layouts exist to cycle through. With an icon and a chevron it is
+    the same size whatever is selected, and the name moves to the tooltip, which
+    it needs anyway now that nothing on the face of the control says it.
+
+    **Selection on a tile is colour, with no border.** An outline is a second
+    signal saying what the accent colour already says, and around a 44px
+    pictogram it crowds the drawing it is meant to highlight.
 
 Files: changes to `constants/splitModes.ts` (cells, derived tracks, derived
 divider segments, the string ids, the canonical-mode table),
@@ -1099,10 +1110,12 @@ divider segments, the string ids, the canonical-mode table),
 the first nested submenu), and `hooks/useMenuCommands.ts`.
 
 **Done when:** the dropdown is a 3 × 3 grid of nine pictograms with no text in
-it, each drawn from its own cell list, while the toolbar button, both View
-menus and the status bar are untouched and still read as they do today;
-hovering a tile names it, and a screen reader announces that name; Split Top
-shows two panes above one full-width pane and
+it, each drawn from its own cell list, and the button that opens it shows a
+pictogram and a chevron and no text either, at the same width whatever is
+selected; a selected tile is marked by colour alone, with no outline; both View
+menus and the status bar are untouched and still read as they do today; hovering
+a tile or the button names it, and a screen reader announces that name; Split
+Top shows two panes above one full-width pane and
 Split Bottom the reverse; Split Left shows two stacked panes beside one
 full-height pane and Split Right the reverse; the divider between the two top
 panes in Split Top stops at the row boundary rather than crossing into the
