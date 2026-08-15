@@ -23,6 +23,7 @@ import { useNativeMenu } from '@/hooks/useNativeMenu'
 import { hydrate, startPersistence } from '@/services/db/persistence'
 import { standardPathsQuery } from '@/services/filesystem/queries'
 import { startWatchInvalidation } from '@/services/filesystem/watch'
+import { startThemeSync } from '@/services/theme/theme'
 import { usePaneSelection } from '@/stores/selectionStore'
 import { useUiStore } from '@/stores/uiStore'
 import { useActivePane, useActiveTab, useWorkspaceStore } from '@/stores/workspaceStore'
@@ -65,6 +66,11 @@ export function ExplorerLayout() {
 
     return () => stopPersistence?.()
   }, [paths, initialize])
+
+  // Mounted above the loading and error returns, so the "Starting…" splash and
+  // a failed home lookup are drawn in the user's theme rather than in whatever
+  // the document happens to be before hydration (§M12).
+  useEffect(() => startThemeSync(), [])
 
   // Change events are subscribed to once for the whole app, not per pane: the
   // watcher reports directories, and which panes care is the query cache's

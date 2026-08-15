@@ -11,11 +11,12 @@ import {
   isHashAlgorithm,
   type HashAlgorithm,
 } from '@/constants/hashAlgorithms'
+import { DEFAULT_THEME, isThemePreference, type ThemePreference } from '@/constants/themes'
 
 export interface AppSettings {
   showHiddenFiles: boolean
   foldersFirst: boolean
-  theme: 'system' | 'dark' | 'light'
+  theme: ThemePreference
   confirmBeforeDelete: boolean
   sidebarOpen: boolean
   previewOpen: boolean
@@ -33,7 +34,7 @@ export interface AppSettings {
 export const DEFAULT_SETTINGS: AppSettings = {
   showHiddenFiles: false,
   foldersFirst: true,
-  theme: 'dark',
+  theme: DEFAULT_THEME,
   confirmBeforeDelete: true,
   sidebarOpen: true,
   previewOpen: false,
@@ -63,6 +64,9 @@ export async function loadSettings(): Promise<AppSettings> {
   // this one has never heard of, and the backend rejects an unknown one
   // outright — so the modal would open on a job that can never start.
   if (!isHashAlgorithm(stored.hashAlgorithm)) delete stored.hashAlgorithm
+  // Same for the theme: an unrecognised one would be written to `data-theme`
+  // and match no palette, leaving a window with no colours at all (§M12).
+  if (!isThemePreference(stored.theme)) delete stored.theme
   // A template id points at something that may no longer exist — a custom file
   // the user deleted, a built-in a later build renamed. The dialog resolves it
   // against the list it actually has and falls back to none, so only the type

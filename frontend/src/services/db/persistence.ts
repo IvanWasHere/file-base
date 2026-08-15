@@ -61,6 +61,7 @@ export async function hydrate(homePath: string): Promise<HydrationResult> {
     showHiddenFiles: settings.showHiddenFiles,
     sidebarOpen: settings.sidebarOpen,
     previewOpen: settings.previewOpen,
+    theme: settings.theme,
     hashAlgorithm: settings.hashAlgorithm,
     lastTemplate: settings.lastTemplate,
   })
@@ -155,6 +156,7 @@ export function startPersistence(now: () => number = Date.now): () => void {
     }
     if (state.sidebarOpen !== previous.sidebarOpen) changed.sidebarOpen = state.sidebarOpen
     if (state.previewOpen !== previous.previewOpen) changed.previewOpen = state.previewOpen
+    if (state.theme !== previous.theme) changed.theme = state.theme
     if (state.hashAlgorithm !== previous.hashAlgorithm) changed.hashAlgorithm = state.hashAlgorithm
     if (state.lastTemplate !== previous.lastTemplate) changed.lastTemplate = state.lastTemplate
 

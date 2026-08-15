@@ -1515,7 +1515,82 @@ Notes from the build:
   invalidates them.
 
 ### M12 — Polish, testing, packaging
-Animations and reduced-motion support; light theme; empty/loading/error states; perf pass on a 10k-file directory; Vitest coverage of services, stores and hooks against the mock bridge; Playwright e2e in the browser against the mock bridge; `wails build` + code-signing/notarization notes.
+Animations and reduced-motion support; light theme; empty/loading/error states;
+perf pass on a 10k-file directory; Vitest coverage of services, stores and hooks
+against the mock bridge; Playwright e2e in the browser against the mock bridge;
+`wails build` + code-signing/notarization notes.
+
+**Started at last, after five deferrals.** Taken in slices rather than as one
+pass, because the milestone is a list of unrelated jobs and nothing here depends
+on anything else here.
+
+#### Theme toggle ✅ done
+
+A light theme has existed in CSS since M0 and no code could reach it: `theme.css`
+said "the settings store writes that attribute" and no settings store was ever
+written. `AppSettings.theme` was declared, defaulted and persisted, and nothing
+read it.
+
+Decisions taken:
+
+1. **Three values, not a boolean.** `system`, `light`, `dark`. "Follow the OS"
+   is a preference in its own right, and resolving it once at startup would
+   freeze whichever appearance the user happened to launch in — a window that
+   does not come with them at sunset.
+2. **`system` is resolved in TypeScript, not in CSS.** `services/theme` maps the
+   preference to `light` or `dark` and writes `data-theme`, which is the only
+   place that attribute is ever set. This deletes the `prefers-color-scheme`
+   block, and that block was **a live bug rather than a redundancy**: it was a
+   hand-copied subset of the light palette that had already drifted, declaring no
+   `--ft-*` file-type colour and no `--danger`/`--success`/`--info`. A system
+   -light window therefore drew dark-theme icon colours on a light background.
+   One palette, one declaration.
+3. **The store holds the preference; the service owns the DOM.** `uiStore.theme`
+   stays plain data, as every other field there is, and a subscription applies
+   it. The menu needs the preference and not the resolved theme anyway — on
+   `system` in a dark OS the checkmark belongs on Match System, not on Dark.
+4. **A submenu in View, beside Split Layout**, in both the in-window menu bar and
+   the native macOS one. Three checkable rows flattened into View would read as
+   three independent switches rather than one choice. No accelerator: it is a
+   three-way pick, not a toggle, and §M11's rule stands — a binding nobody would
+   guess is clutter in a menu.
+5. **The persisted value is validated on the way out**, as M13 and M14 both
+   learned to do. An unrecognised theme from a later build would reach
+   `data-theme` and match no palette at all — a window with no colours, which is
+   worse than the wrong ones.
+6. **The default stays `dark`, not `system`.** `BackgroundColour` in `main.go` is
+   decided before the frontend exists, and it is dark.
+
+- **Verified in the running app**, against the packaged build rather than the
+  dev server: the native View → Theme submenu carries all three rows, and
+  clicking each one drove the whole chain — native menu → `menu:command` →
+  `useMenuCommands` → store → SQLite — with the `settings` row reading
+  `"light"`, `"system"` and `"dark"` in turn.
+- **Found while testing: a submenu row cannot be clicked with `userEvent`.**
+  Moving the pointer from the parent row into its flyout is dispatched as a
+  `mouseout` with a null `relatedTarget`, so React synthesises a mouseleave on
+  the wrapper that owns the open state and the flyout closes before the click
+  lands. A real pointer names the element being entered, and the flyout is a DOM
+  descendant, so nothing leaves. The menu-bar test uses `fireEvent` for that one
+  click and says why. Worth knowing before the next nested menu is tested — this
+  was the first test ever to drive one, which is why §M17 never hit it.
+
+**Still owed by this slice, and only checkable by eye:** whether the light
+palette actually reads well. macOS window chrome is not themed with it — the
+window is created `NSAppearanceNameDarkAqua` with `WindowIsTranslucent`, and
+Wails v2 has no runtime appearance API — so scrollbars and the translucent
+title-bar strip stay dark under a light window until something is done about it.
+The launch flash has the same root: the preference lives in SQLite, which cannot
+be read synchronously, so the first frame is dark whatever is stored. Go could
+read that one row itself at startup and set `BackgroundColour` from it, which is
+the cheapest fix if it grates.
+
+#### Remaining in M12
+
+Animations and reduced-motion (a `prefers-reduced-motion` block exists in
+`global.css`; nothing else has been audited), empty/loading/error states, the
+10k-file perf pass, the coverage sweep, Playwright — not started, and the
+largest single piece left — and `wails build` + signing/notarization notes.
 
 ---
 

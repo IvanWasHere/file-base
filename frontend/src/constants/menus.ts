@@ -13,6 +13,7 @@
  */
 
 import { splitLabel } from '@/constants/splitModes'
+import { themeLabel } from '@/constants/themes'
 
 export type MenuCommandId =
   // File
@@ -61,6 +62,9 @@ export type MenuCommandId =
   | 'view.splitBottom'
   | 'view.splitLeft'
   | 'view.splitRight'
+  | 'view.themeSystem'
+  | 'view.themeLight'
+  | 'view.themeDark'
   | 'view.toggleHidden'
   | 'view.toggleSidebar'
   | 'view.togglePreview'
@@ -178,6 +182,17 @@ export const APP_MENUS: MenuDefinition[] = [
           { id: 'view.splitLeft', label: splitLabel('split-left'), checkable: true },
           { id: 'view.splitRight', label: splitLabel('split-right'), checkable: true },
           { id: 'view.splitFour', label: splitLabel('grid-2x2'), checkable: true },
+        ],
+      },
+      // Beside Split Layout rather than in the toggle group below it: the three
+      // are one choice, and a checkable row per theme flattened into View would
+      // read as three independent switches (§M12).
+      {
+        label: 'Theme',
+        items: [
+          { id: 'view.themeSystem', label: themeLabel('system'), checkable: true },
+          { id: 'view.themeLight', label: themeLabel('light'), checkable: true },
+          { id: 'view.themeDark', label: themeLabel('dark'), checkable: true },
         ],
       },
       { separator: true },

@@ -5,8 +5,14 @@
  * reference these variables (or the Tailwind tokens mapped from them in
  * global.css) and never hard-code a hex value, so the light theme stays real.
  *
- * Theme selection: [data-theme="dark"|"light"] on <html>. The settings store
- * writes that attribute; "system" resolves via prefers-color-scheme below.
+ * Theme selection: [data-theme="dark"|"light"] on <html>, written by
+ * `services/theme` and by nothing else. "Match System" is resolved there too,
+ * so only the two real palettes exist here.
+ *
+ * Bare `:root` is dark, and that is the pre-hydration state: the preference
+ * lives in SQLite and is not readable synchronously, so the first frame is dark
+ * whatever the stored value is. It matches `BackgroundColour` in main.go, which
+ * Go picks before the frontend exists.
  */
 
 :root,
@@ -64,7 +70,7 @@
 
 /*
  * Light theme — stubbed in M0 so no component can hard-code a dark value.
- * Tuned properly in M12; the accent stays amber for brand continuity.
+ * The accent stays amber for brand continuity.
  */
 [data-theme='light'] {
   color-scheme: light;
@@ -116,27 +122,14 @@
   --grid-dot: rgba(0, 0, 0, 0.03);
 }
 
-/* "System" setting: no explicit data-theme attribute set by the user. */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) {
-    color-scheme: light;
-
-    --bg-deep: #e8e8ec;
-    --bg-base: #f4f4f6;
-    --bg-surface: #ffffff;
-    --bg-elevated: #ffffff;
-    --bg-hover: #eaeaef;
-    --bg-active: #dcdce6;
-    --border: #d8d8e0;
-    --border-subtle: rgba(216, 216, 224, 0.6);
-    --border-focus: #c48820;
-    --text-primary: #1a1a22;
-    --text-secondary: #5a5a72;
-    --text-muted: #8a8a9e;
-    --accent: #b8781c;
-    --accent-dim: #9a6415;
-    --accent-glow: rgba(184, 120, 28, 0.14);
-    --shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.14);
-    --grid-dot: rgba(0, 0, 0, 0.03);
-  }
-}
+/*
+ * There is deliberately no `prefers-color-scheme` block here (§M12).
+ *
+ * "Match System" is resolved in `services/theme` and written to `data-theme`
+ * like any other choice, so each palette is declared exactly once. The block
+ * that used to do it in CSS was a hand-copied subset of the light theme, and it
+ * had already drifted: it declared no `--ft-*` file-type colour and no
+ * `--danger`/`--success`/`--info`, so a system-light window drew dark-theme
+ * icon colours on a light background. A second copy of a palette is a second
+ * palette, however it starts out.
+ */

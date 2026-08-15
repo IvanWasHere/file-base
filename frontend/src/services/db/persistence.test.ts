@@ -14,6 +14,7 @@ import { getFolderPrefs } from './repositories/folderPrefs'
 import { loadSession } from './repositories/session'
 import { __resetIdCounter, useWorkspaceStore } from '@/stores/workspaceStore'
 import { useUiStore } from '@/stores/uiStore'
+import { DEFAULT_THEME } from '@/constants/themes'
 
 const HOME = '/Users/dev'
 
@@ -25,7 +26,12 @@ const now = () => (clock += 1000)
 
 function resetStores() {
   useWorkspaceStore.setState({ tabs: [], panes: {}, activeTabId: null })
-  useUiStore.setState({ previewOpen: false, sidebarOpen: true, showHiddenFiles: false })
+  useUiStore.setState({
+    previewOpen: false,
+    sidebarOpen: true,
+    showHiddenFiles: false,
+    theme: DEFAULT_THEME,
+  })
   __resetIdCounter()
 }
 
@@ -70,6 +76,25 @@ describe('hydrate', () => {
     resetStores()
     await hydrate(HOME)
     expect(useUiStore.getState().showHiddenFiles).toBe(true)
+  })
+
+  // The theme is the one setting a wrong answer is visible in every pixel of,
+  // so it gets its own relaunch (§M12).
+  it('remembers the chosen theme across a relaunch', async () => {
+    await hydrate(HOME)
+    stop = startPersistence(now)
+
+    useUiStore.getState().setTheme('system')
+    await settle()
+
+    expect((await loadSettings()).theme).toBe('system')
+
+    stop()
+    stop = undefined
+
+    resetStores()
+    await hydrate(HOME)
+    expect(useUiStore.getState().theme).toBe('system')
   })
 })
 

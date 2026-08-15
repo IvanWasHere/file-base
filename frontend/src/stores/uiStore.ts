@@ -1,14 +1,15 @@
 /**
  * Chrome-level UI state that is not navigation and not selection: panel
- * visibility, the show-hidden-files toggle, the modal dialog, the open context
- * menu, and which item is being renamed in place.
+ * visibility, the show-hidden-files toggle, the theme, the modal dialog, the
+ * open context menu, and which item is being renamed in place.
  *
- * M5 persists the toggles to SQLite; M12 folds the theme in.
+ * M5 persists the toggles to SQLite; M12 folded the theme in.
  */
 
 import { create } from 'zustand'
 import type { ContextKind } from '@/constants/contextMenus'
 import { DEFAULT_ALGORITHM, type HashAlgorithm } from '@/constants/hashAlgorithms'
+import { DEFAULT_THEME, type ThemePreference } from '@/constants/themes'
 import type { ConflictPolicy } from '@/types/file'
 
 export interface ConfirmRequest {
@@ -133,6 +134,12 @@ interface UiState {
   hashJob: HashJob | null
   newFile: NewFileRequest | null
   compress: CompressRequest | null
+  /**
+   * Persisted. Held here rather than read from the DOM: `system` is a real
+   * value the menu has to be able to show a checkmark against, and
+   * `data-theme` only ever carries the resolved one (§M12).
+   */
+  theme: ThemePreference
   /** Persisted: whoever verifies SHA-256 downloads verifies SHA-256 downloads. */
   hashAlgorithm: HashAlgorithm
   /** Persisted: the template id last used, so the next file starts there. */
@@ -144,6 +151,7 @@ interface UiState {
   setPreviewOpen: (open: boolean) => void
   toggleSidebar: () => void
   toggleHiddenFiles: () => void
+  setTheme: (theme: ThemePreference) => void
 
   openHashes: (paths: string[]) => void
   closeHashes: () => void
@@ -179,6 +187,7 @@ export const useUiStore = create<UiState>()((set) => ({
   hashJob: null,
   newFile: null,
   compress: null,
+  theme: DEFAULT_THEME,
   hashAlgorithm: DEFAULT_ALGORITHM,
   lastTemplate: '',
   renaming: null,
@@ -188,6 +197,9 @@ export const useUiStore = create<UiState>()((set) => ({
   setPreviewOpen: (open) => set({ previewOpen: open }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   toggleHiddenFiles: () => set((state) => ({ showHiddenFiles: !state.showHiddenFiles })),
+  // Nothing here touches the DOM: `services/theme` subscribes and owns
+  // `data-theme`, so the store stays plain data (§M12).
+  setTheme: (theme) => set({ theme }),
 
   // Opening with nothing to hash would be a modal that can only be closed.
   openHashes: (paths) => set(paths.length > 0 ? { hashJob: { paths }, renaming: null } : {}),

@@ -57,9 +57,10 @@ type section struct {
 
 // sections mirrors APP_MENUS in frontend/src/constants/menus.ts, minus Edit.
 //
-// The four split-layout labels originate in frontend/src/constants/splitModes.ts,
-// which is the single source on that side; this is the one copy Go has to keep,
-// because it cannot import a TypeScript constant. Only the ids are pinned by
+// The split-layout labels originate in frontend/src/constants/splitModes.ts and
+// the theme labels in frontend/src/constants/themes.ts, which are the single
+// sources on that side; this is the one copy Go has to keep, because it cannot
+// import a TypeScript constant. Only the ids are pinned by
 // TestCommandIDsExistInFrontend, so a label change has to be made here by hand.
 //
 // The macOS App, Edit and Window menus come from Wails' own roles and are added
@@ -125,6 +126,11 @@ var sections = []section{
 				item{ID: "view.splitLeft", Label: "Split Left"},
 				item{ID: "view.splitRight", Label: "Split Right"},
 				item{ID: "view.splitFour", Label: "2 × 2 Grid"},
+			),
+			submenu("Theme",
+				item{ID: "view.themeSystem", Label: "Match System"},
+				item{ID: "view.themeLight", Label: "Light"},
+				item{ID: "view.themeDark", Label: "Dark"},
 			),
 			separator(),
 			{ID: "view.toggleHidden", Label: "Show Hidden Files"},

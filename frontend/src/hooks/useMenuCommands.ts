@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useQuery } from '@tanstack/react-query'
 import type { MenuCommandId } from '@/constants/menus'
+import type { ThemePreference } from '@/constants/themes'
 import { useFavorites } from '@/hooks/useFavorites'
 import { useArchive } from '@/hooks/useArchive'
 import { useFileOperations } from '@/hooks/useFileOperations'
@@ -124,7 +125,19 @@ export function useMenuCommands(): MenuCommandState {
     'view.splitFour': 'grid-2x2',
   }
 
+  const themes: Partial<Record<MenuCommandId, ThemePreference>> = {
+    'view.themeSystem': 'system',
+    'view.themeLight': 'light',
+    'view.themeDark': 'dark',
+  }
+
   const run = (id: MenuCommandId): void => {
+    const theme = themes[id]
+    if (theme) {
+      ui.setTheme(theme)
+      return
+    }
+
     const viewMode = viewModes[id]
     if (viewMode && pane) {
       setViewMode(pane.id, viewMode)
@@ -374,6 +387,11 @@ export function useMenuCommands(): MenuCommandState {
 
     const splitMode = splitModes[id]
     if (splitMode) return tab?.splitMode === splitMode
+
+    // Against the preference, not the resolved theme: on `system` in a dark OS
+    // the check belongs on Match System, not on Dark (§M12).
+    const theme = themes[id]
+    if (theme) return ui.theme === theme
 
     switch (id) {
       case 'view.toggleHidden':
