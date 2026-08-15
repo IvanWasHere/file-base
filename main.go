@@ -44,7 +44,7 @@ func main() {
 	defer archive.Stop(archives)
 
 	err := wails.Run(&options.App{
-		Title:     "Files",
+		Title:     "File Base",
 		Width:     1280,
 		Height:    820,
 		MinWidth:  760,
@@ -73,7 +73,7 @@ func main() {
 			WebviewIsTransparent: true,
 			WindowIsTranslucent:  true,
 			About: &mac.AboutInfo{
-				Title:   "Files",
+				Title:   "File Base",
 				Message: "A fast, native-feeling file explorer.",
 			},
 		},

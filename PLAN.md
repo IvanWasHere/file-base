@@ -1501,10 +1501,20 @@ Notes from the build:
   listing rows, and row coordinates shift after every navigation, so several
   attempts landed on the wrong row. Green tests are the midpoint of a milestone,
   not the end — these four are the part of the ritual M18 still owes.
-- **RAR is the honest gap.** Nobody can create a rar — the compressor is
-  proprietary — so there is no fixture, no test, and no real-app check. The code
-  path exists and `nwaples/rardecode/v2` claims RAR5; **that claim is still
-  unverified**, and the first real rar file anyone has should be pointed at it.
+- **RAR was the honest gap, and is now closed.** Nobody can create a rar — the
+  compressor is proprietary — so there is no fixture that can live in the repo,
+  and M18 shipped with `nwaples/rardecode/v2`'s RAR5 claim untested.
+
+  **Verified since, against a real 100 MB rar found on the machine**, which is
+  what that note asked for: `Detect` reports `rar` from the content, and the
+  extraction produced 30 files and **100,266,078 bytes with none empty** — the
+  byte count matters, because a decoder emitting the right tree of empty files
+  passes every check that only looks at names. `TestRealRarExtracts` in
+  `backend/archive/realrar_manual_test.go` is that check, kept rather than
+  thrown away: it skips unless `FILEBASE_RAR_FIXTURE` names an archive, so
+  `go test ./...` is unaffected and anyone with a rar can re-run it in one
+  command. **Creation is still impossible and always will be** — that half of
+  the gap is the state of the world, not a to-do.
 - **Note for whoever verifies next: a synthetic double-click needs a shared
   `CGEventSource`.** Posting two down/up pairs with `mouseEventClickState` 1 then
   2 is not enough on its own — with `nil` sources WebKit sees two unrelated

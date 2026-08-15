@@ -9,5 +9,8 @@
   "author": {
     "name": "Ivan Marinkovic",
     "email": "marinkovic2006@gmail.com"
+  },
+  "info": {
+    "productName": "File Base"
   }
 }
