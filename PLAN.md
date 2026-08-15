@@ -1821,15 +1821,41 @@ code-signing/notarization notes"; the notes are
 2. **The full suite runs before the build**, not after: typecheck, lint, ~640
    frontend tests, `go vet`, `go test ./backend/...`. A red build cannot become
    a release.
-3. **Signing is gated on secrets, not on edits.** Every signing step is
-   `if: env.MACOS_… != ''`, so the workflow works today unsigned and starts
-   signing the moment six secrets exist. **`secrets` is not an allowed context
-   in an `if`** — only `env` is — so they are lifted to job-level `env` first,
-   which is the whole reason that block exists.
+3. **Nothing is signed, and the machinery for it was removed rather than left
+   dormant.** It was first written the other way — four steps gated on
+   `if: env.MACOS_… != ''`, inert until six secrets appeared — which is the right
+   shape when signing is coming. It is not: signing needs an Apple Developer
+   membership this project does not have and does not plan to buy, so the steps
+   were dead code pretending to be a feature. They are recorded in
+   `docs/RELEASING.md` and recoverable from history instead.
+
+   Two things learned there are worth keeping even though the code is gone.
+   **`secrets` is not an allowed context in a step's `if`** — only `env` is, so
+   a gate written `if: ${{ secrets.FOO != '' }}` silently never runs. And
+   **signing is not an App Store thing**: *Developer ID Application* exists
+   specifically to distribute outside it, and notarization is a malware scan
+   that returns a ticket, not a review. "We are not going on the App Store" is
+   not a reason to skip it; not having an account is.
 4. **The release is a draft.** Nothing is public until it is read.
 5. **Packaged with `ditto`, not `zip`.** A `.app` is a tree of symlinks and
    permission bits and `zip` flattens both; `--keepParent` keeps the bundle as
    the top-level entry so it unzips as an app rather than as loose `Contents/`.
+6. **A `.dmg` is the headline download, with the `.zip` beside it.** A `.app` is
+   a directory, so it cannot be a release asset on its own — something has to
+   wrap it, and the disk image is the wrapper that carries the install gesture:
+   it mounts to a window holding the app and an `/Applications` symlink to drag
+   it onto. Built with plain `hdiutil` rather than `create-dmg`, which adds a
+   dependency and a Finder-scripted window layout — the part that goes flaky
+   headless. The trade is a plain window rather than a designed one. It is built
+   **after** notarization so the app inside carries its stapled ticket, and
+   signed itself when a certificate exists, because a signed app inside an
+   unsigned image still warns on the image.
+
+**What actually gates a download is not the format.** Two things do, and both
+sit outside the workflow: a **private repository** has no public assets however
+the release is configured, and a **draft** release is invisible to anyone
+without write access. The draft step is deliberate — a tag builds it, a human
+publishes it.
 
 - **Verified locally rather than by burning a tag**: `wails build -platform
   darwin/universal -clean` succeeds in 27s and `lipo -archs` reports

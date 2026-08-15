@@ -11,7 +11,9 @@ git push origin v0.1.0
 ```
 
 That runs the workflow, and if everything passes it creates a **draft** release
-with `FileBase-0.1.0-universal.zip` attached. Draft on purpose — look at it,
+with two downloads attached: `FileBase-0.1.0.dmg` (the one to point people at —
+open it, drag the app onto the Applications shortcut) and
+`FileBase-0.1.0-universal.zip` (the same app, for anyone who prefers it). Draft on purpose — look at it,
 edit the notes, then publish. Nothing is public until you press the button.
 
 To test the pipeline without spending a tag, run the workflow by hand from the
@@ -42,8 +44,8 @@ after `npm run build` or scope it to `./backend/...`.
 
 ## What you get without signing, and what that costs
 
-Nothing below is set up yet, which is a deliberate starting point rather than an
-oversight. As it stands `wails build` **ad-hoc signs** the app:
+Releases are unsigned, deliberately — see the next section for why and for what
+turning it on would take. `wails build` **ad-hoc signs** the app:
 
 ```
 $ codesign -dv build/bin/file-base.app
@@ -55,80 +57,70 @@ build/bin/file-base.app: rejected
 
 An ad-hoc signature identifies nobody. On the machine that built it the app opens
 fine. **Downloaded from GitHub by anyone else it will not**, because the download
-carries a quarantine flag and Gatekeeper refuses anything without a Developer ID:
-macOS says *"file-base.app is damaged and can't be opened"*, which is a lie about
-a real problem — the app is intact, it is unsigned.
+carries a quarantine flag and Gatekeeper refuses anything without a Developer ID.
 
-Two ways round it, both belonging in the release notes if you ship unsigned:
+How a user gets past it depends on their macOS version, and this is worth getting
+right in the release notes because the old advice stopped working:
 
-- **Right-click the app → Open**, then Open again in the dialog. Per app, once.
-- Or from a terminal: `xattr -dr com.apple.quarantine /Applications/file-base.app`
+- **macOS 15 (Sequoia) and later** — including macOS 26, which this was written
+  on — Apple **removed** the Control-click → Open bypass for quarantined
+  unsigned apps. The route now is: try to open it, dismiss the warning, then
+  **System Settings → Privacy & Security → Open Anyway**, once per version.
+- **macOS 14 and earlier:** right-click the app → **Open** → **Open**.
+- Either way, the terminal equivalent is
+  `xattr -dr com.apple.quarantine /Applications/file-base.app`
 
-Both ask a user to override a security warning, which is a bad habit to teach.
-Signing is the fix.
+All of them ask a user to override a security warning, which is a bad habit to
+teach. Signing is the fix.
 
-## Turning signing on
+**Signing is not an App Store thing.** The two are separate programmes with
+separate certificates: *Apple Distribution* is for the App Store, and **Developer
+ID Application** — the one this workflow wants — exists specifically to
+distribute outside it. Notarization is the same: you upload the build, Apple
+scans it for malware and hands back a ticket. Nothing is reviewed, nothing is
+listed, and you keep shipping from GitHub. What it buys is only that the app
+opens on a stranger's Mac without ceremony.
 
-Requires an **Apple Developer Program** membership (99 USD/year). With one, add
-four repository secrets and the workflow starts signing and notarizing on the
-next tag — no edits to the YAML. Every signing step is `if: env.… != ''`, so
-they skip themselves until the secrets exist.
+## Signing: not set up, and what it would take
 
-| Secret | What it is |
-| --- | --- |
-| `MACOS_CERTIFICATE` | Your **Developer ID Application** certificate, exported as `.p12`, base64-encoded |
-| `MACOS_CERTIFICATE_PASSWORD` | The password you set when exporting the `.p12` |
-| `MACOS_SIGNING_IDENTITY` | The identity's full name, e.g. `Developer ID Application: Your Name (TEAMID)` |
-| `MACOS_NOTARY_APPLE_ID` | The Apple ID of the developer account |
-| `MACOS_NOTARY_PASSWORD` | An **app-specific password**, not your Apple ID password |
-| `MACOS_NOTARY_TEAM_ID` | Your 10-character team ID |
+The workflow does **not** sign. There is no certificate, no notarization step and
+no `MACOS_*` secret — they were written first and removed on purpose, because
+signing needs an Apple Developer Program membership (99 USD/year) that this
+project does not have. An unsigned release is a real choice with a real cost, and
+the cost is the Gatekeeper detour above, paid once by every person who downloads
+it.
 
-Signing runs on `MACOS_CERTIFICATE`; notarization runs on
-`MACOS_NOTARY_APPLE_ID`. Setting the first three gets you a signed build that
-Gatekeeper still stops on first launch; all six gets you one that just opens.
+**Signing is not an App Store thing**, which is the usual reason people skip it.
+The two are separate programmes with separate certificates: *Apple Distribution*
+is for the App Store, and **Developer ID Application** exists specifically to
+distribute *outside* it. Notarization is not a review either — you upload a
+build, Apple scans it for malware and returns a ticket. Nothing is listed,
+nothing is approved, you keep shipping from GitHub. All it buys is that the app
+opens on a stranger's Mac without ceremony.
 
-### Getting each of them
+If a membership ever exists, the steps to add back are:
 
-1. **The certificate.** In Xcode: Settings → Accounts → your team → Manage
-   Certificates → **+** → *Developer ID Application*. Then in Keychain Access,
-   find it under *My Certificates*, right-click → Export → `.p12`, and set a
-   password.
+1. **Import the certificate** into a throwaway keychain on the runner, from a
+   base64-encoded `.p12` in a secret. Use a temporary keychain rather than the
+   login one, and run `security set-key-partition-list` afterwards or `codesign`
+   blocks on a GUI prompt nobody can answer.
+2. **`codesign --force --deep --timestamp --options runtime`** the `.app` with a
+   *Developer ID Application* identity. `--options runtime` is the hardened
+   runtime, which notarization requires.
+3. **`xcrun notarytool submit --wait`** the zip, then `xcrun stapler staple` the
+   `.app` and rebuild the zip so it carries the ticket. Staple so the app opens
+   offline instead of needing a Gatekeeper round trip.
+4. **Build the DMG after stapling**, and `codesign` the DMG too — a signed app
+   inside an unsigned image still warns on the image.
 
-   ```bash
-   base64 -i DeveloperID.p12 | pbcopy   # paste as MACOS_CERTIFICATE
-   ```
+One trap worth writing down, because it is not obvious and cost a debugging pass:
+**`secrets` is not an allowed context in a step's `if`.** Gating a step on
+`if: ${{ secrets.FOO != '' }}` does not work; the secrets have to be lifted to
+job-level `env` first and the condition written `if: env.FOO != ''`.
 
-   *Developer ID Application* is the one that matters — "Apple Development" and
-   "Apple Distribution" certificates cannot ship outside the App Store, and using
-   one produces a build that fails notarization at the end rather than at the
-   start.
-
-2. **The identity name**, exactly as `codesign` wants it:
-
-   ```bash
-   security find-identity -v -p codesigning
-   ```
-
-3. **The app-specific password.** appleid.apple.com → Sign-In and Security →
-   App-Specific Passwords. Your real Apple ID password will not work here.
-
-4. **The team ID** is in the same `security find-identity` output, in
-   parentheses, and on developer.apple.com under Membership.
-
-### Checking it worked
-
-The workflow prints the answer before publishing, under **Verify what will be
-published**:
-
-```
---- Gatekeeper assessment ---
-build/bin/file-base.app: accepted
-source=Notarized Developer ID
-```
-
-`rejected` there means the download will be rejected on other people's machines
-too. That step never fails the build — it reports, so the log says plainly what a
-user is going to hit.
+The full working version of all four steps is in this repository's history —
+`git log -- .github/workflows/release.yml` — rather than commented out in the
+file, where it would be dead weight that drifts.
 
 ## Known limits
 
@@ -136,9 +128,15 @@ user is going to hit.
   produce `x86_64 arm64` in one binary. The app is macOS-specific anyway: the
   native menu is `runtime.MenuSetApplicationMenu`, the window options are
   `mac.Options`, and the trash goes through Finder.
-- **The release is a zip, not a DMG.** A zip needs no extra tooling and unzips
-  to a bundle in one double-click; the app is dragged to Applications by hand. A
-  DMG with a drag-to-Applications background is a `create-dmg` step away if it
-  is ever worth the dependency.
+- **The DMG is a plain one.** `hdiutil` gives a window holding the app and an
+  Applications symlink, which is the whole install gesture; it does not have a
+  designed background with positioned icons. That needs `create-dmg` or
+  Finder-scripting the window, which is the part that goes flaky on a headless
+  runner.
+- **A private repository has no public downloads.** Release assets follow the
+  repository: while it is private, only people with access can download them,
+  however the release is configured. Making it public is a repository setting
+  (Settings → General → Danger Zone → Change visibility), and it publishes the
+  full commit history along with the code.
 - **No auto-update.** Every version is a manual download. Sparkle is the usual
   answer and would need an appcast feed and a signing key of its own.

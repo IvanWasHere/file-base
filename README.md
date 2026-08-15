@@ -40,15 +40,21 @@
 
 ## Install
 
-Grab the latest zip from [Releases](https://github.com/IvanWasHere/file-base/releases),
-unzip it, and drag **file-base.app** to Applications. Universal — Apple silicon
-and Intel — and needs macOS 10.13 or later.
+Download the **`.dmg`** from [Releases](https://github.com/IvanWasHere/file-base/releases),
+open it, and drag **file-base.app** onto the Applications shortcut inside. (A
+`.zip` of the same app is attached too, if you prefer that.) Universal — Apple
+silicon and Intel — and needs macOS 10.13 or later.
 
-> ⚠️ **Builds are not signed yet.** macOS will say the app "is damaged and can't
-> be opened", which is a lie about a real thing: the app is intact, it just has
-> no Developer ID, and downloads carry a quarantine flag. Right-click it →
-> **Open** → **Open**, once, and it will launch from then on. Signing removes
-> this entirely — see [docs/RELEASING.md](docs/RELEASING.md).
+> ⚠️ **Builds are not signed yet**, so macOS blocks the first launch. The app is
+> intact — it just has no Developer ID, and anything downloaded carries a
+> quarantine flag.
+>
+> - **macOS 15 and later:** double-click the app, dismiss the warning, then open
+>   **System Settings → Privacy & Security**, scroll to the bottom, and click
+>   **Open Anyway**. Once per version.
+> - **macOS 14 and earlier:** right-click the app → **Open** → **Open**.
+>
+> Signing removes this entirely — see [docs/RELEASING.md](docs/RELEASING.md).
 
 ---
 

@@ -4,12 +4,13 @@
 # `workflow_dispatch` runs the same build without publishing, which is how to
 # check the pipeline works before spending a tag on it.
 #
-# Signing is **optional and gated on secrets**. With none set the app is
-# ad-hoc signed by `wails build`, which runs fine on the machine that built it
-# and is stopped by Gatekeeper on anyone else's — see docs/RELEASING.md for what
-# that looks like and how to add the four secrets that fix it. Every signing
-# step below is skipped rather than failed when they are absent, so this
-# workflow works on day one and upgrades itself the moment the secrets exist.
+# **There is no code signing here, on purpose.** Signing needs an Apple
+# Developer Program membership (99 USD/year), and this project does not have one.
+# `wails build` ad-hoc signs, which identifies nobody: the app runs on the
+# machine that built it and Gatekeeper stops it on everyone else's, so each
+# downloader clears it once through System Settings → Privacy & Security. The
+# release notes say so. docs/RELEASING.md records what adding signing would take
+# if that ever changes.
 
 name: Release
 
@@ -26,18 +27,6 @@ jobs:
     # A macOS runner is not optional: `wails build` links against WebKit, and
     # the universal binary needs the macOS SDK for both architectures.
     runs-on: macos-latest
-
-    # Lifted to `env` because **`secrets` is not one of the contexts allowed in
-    # an `if`** — only `env` is. Reading them here is what lets each signing step
-    # below skip itself when the repository has no certificate configured.
-    # Values are still masked in the log.
-    env:
-      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-      MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-      MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
-      MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
-      MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
 
     steps:
       - uses: actions/checkout@v4
@@ -108,44 +97,6 @@ jobs:
       - name: Build
         run: wails build -platform darwin/universal -clean
 
-      # ---- Signing. Every step here is skipped when the secrets are absent. ----
-
-      - name: Import the signing certificate
-        if: env.MACOS_CERTIFICATE != ''
-        env:
-          CERTIFICATE: ${{ env.MACOS_CERTIFICATE }}
-          CERTIFICATE_PASSWORD: ${{ env.MACOS_CERTIFICATE_PASSWORD }}
-        run: |
-          # A throwaway keychain, unlocked for this job only. Importing into the
-          # runner's login keychain would leave the key readable by later steps.
-          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
-          KEYCHAIN_PASSWORD="$(uuidgen)"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-
-          echo "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
-          security import "$RUNNER_TEMP/certificate.p12" \
-            -k "$KEYCHAIN" -P "$CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign -T /usr/bin/security
-          rm "$RUNNER_TEMP/certificate.p12"
-
-          # Without this, codesign blocks on a GUI prompt no one can answer.
-          security set-key-partition-list -S apple-tool:,apple:,codesign: \
-            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
-          security list-keychain -d user -s "$KEYCHAIN" login.keychain-db
-
-      - name: Sign
-        if: env.MACOS_CERTIFICATE != ''
-        env:
-          IDENTITY: ${{ env.MACOS_SIGNING_IDENTITY }}
-        run: |
-          # `--options runtime` is the hardened runtime, which notarization
-          # requires; `--deep` covers the frameworks inside the bundle.
-          codesign --force --deep --timestamp --options runtime \
-            --sign "$IDENTITY" build/bin/file-base.app
-          codesign --verify --strict --verbose=2 build/bin/file-base.app
-
       # Zipped with ditto, not `zip`: a .app is a directory of symlinks and
       # permission bits, and `zip` flattens both. `--keepParent` keeps the
       # bundle as the top-level entry so it unzips as an app, not as loose
@@ -156,50 +107,53 @@ jobs:
             build/bin/file-base.app \
             "build/bin/FileBase-${{ steps.version.outputs.version }}-universal.zip"
 
-      # Notarizing the *zip* rather than the app: Apple's service takes an
-      # archive, and stapling afterwards writes the ticket into the .app — which
-      # is why the zip is rebuilt below.
-      - name: Notarize
-        if: env.MACOS_NOTARY_APPLE_ID != ''
+      # The download most people want: mount it, drag the app onto the
+      # Applications shortcut beside it, done.
+      #
+      # Plain `hdiutil`, not `create-dmg`: this needs no dependency and no
+      # Finder-scripted window layout, which is the part that goes flaky on a
+      # headless runner. The trade is a plain window rather than a designed one.
+      - name: Build the disk image
         env:
-          APPLE_ID: ${{ env.MACOS_NOTARY_APPLE_ID }}
-          APPLE_PASSWORD: ${{ env.MACOS_NOTARY_PASSWORD }}
-          TEAM_ID: ${{ env.MACOS_NOTARY_TEAM_ID }}
-          ZIP: build/bin/FileBase-${{ steps.version.outputs.version }}-universal.zip
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          xcrun notarytool submit "$ZIP" \
-            --apple-id "$APPLE_ID" \
-            --password "$APPLE_PASSWORD" \
-            --team-id "$TEAM_ID" \
-            --wait --timeout 30m
-          # Stapling means the app opens on a machine that is offline, rather
-          # than depending on a Gatekeeper round trip at first launch.
-          xcrun stapler staple build/bin/file-base.app
-          rm "$ZIP"
-          ditto -c -k --sequesterRsrc --keepParent build/bin/file-base.app "$ZIP"
+          STAGE="$RUNNER_TEMP/dmg"
+          rm -rf "$STAGE" && mkdir -p "$STAGE"
+          cp -R build/bin/file-base.app "$STAGE/"
+          # The half of "drag to install" that people actually drag onto.
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "File Base" -srcfolder "$STAGE" \
+            -ov -format UDZO "build/bin/FileBase-${VERSION}.dmg"
 
       - name: Verify what will be published
         run: |
-          echo "--- signature ---"
+          # Kept even though nothing here signs: `adhoc` and `rejected` are the
+          # expected answers, and printing them each run is what stops the
+          # unsigned state from being a surprise later. Neither fails the build.
+          echo "--- signature (expect: adhoc) ---"
           codesign -dv --verbose=4 build/bin/file-base.app 2>&1 || true
-          echo "--- Gatekeeper assessment ---"
-          # Fails loudly for an unsigned build, which is expected and not fatal:
-          # it is the one place the log says plainly what a user will hit.
+          echo "--- Gatekeeper assessment (expect: rejected) ---"
           spctl -a -vv -t exec build/bin/file-base.app 2>&1 || true
           echo "--- architectures ---"
           lipo -archs build/bin/file-base.app/Contents/MacOS/file-base
+          echo "--- what will be attached ---"
+          ls -lh build/bin/*.zip build/bin/*.dmg
 
       - uses: actions/upload-artifact@v4
         with:
           name: FileBase-${{ steps.version.outputs.version }}-universal
-          path: build/bin/*.zip
+          path: |
+            build/bin/*.zip
+            build/bin/*.dmg
           if-no-files-found: error
 
       - name: Publish the release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          files: build/bin/*.zip
+          files: |
+            build/bin/*.dmg
+            build/bin/*.zip
           generate_release_notes: true
           draft: true
           body: |
@@ -207,5 +161,14 @@ jobs:
 
             **Requires macOS 10.13 or later.** Universal — Apple silicon and Intel.
 
-            Download the zip, unzip it, and drag **file-base.app** to
-            Applications.
+            **Download `FileBase-${{ steps.version.outputs.version }}.dmg`**, open
+            it, and drag **file-base.app** onto the Applications shortcut. The
+            `.zip` is the same app if you prefer it.
+
+            The app is not signed yet, so macOS blocks the first launch. It is
+            intact — it just has no Developer ID.
+
+            - **macOS 15 and later:** double-click it, dismiss the warning, then
+              open **System Settings → Privacy & Security**, scroll to the
+              bottom, and click **Open Anyway**. Once per version.
+            - **macOS 14 and earlier:** right-click it → **Open** → **Open**.
