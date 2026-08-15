@@ -90,7 +90,8 @@ export const bridge: Bridge = {
 
     createFolder: (parent, name) =>
       guard(async () => toFileItem(await CreateFolder(parent, name))),
-    createFile: (parent, name) => guard(async () => toFileItem(await CreateFile(parent, name))),
+    createFile: (parent, name, content = '', executable = false) =>
+      guard(async () => toFileItem(await CreateFile(parent, name, content, executable))),
     rename: (path, newName) => guard(async () => toFileItem(await Rename(path, newName))),
     // The conflict policy is decided in TS and applied in Go — Go never picks a
     // winner (PLAN.md §1). `OpResult` is structurally `OperationResult`, so it

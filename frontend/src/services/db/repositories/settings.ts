@@ -20,6 +20,14 @@ export interface AppSettings {
   sidebarOpen: boolean
   previewOpen: boolean
   hashAlgorithm: HashAlgorithm
+  /**
+   * The template last used, by id. Empty means none — the dialog then starts on
+   * whatever the typed name implies, which is usually nothing.
+   *
+   * Only the id is stored, never the content: a built-in's content belongs to
+   * the build, and a custom one's belongs to its file.
+   */
+  lastTemplate: string
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -30,6 +38,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   sidebarOpen: true,
   previewOpen: false,
   hashAlgorithm: DEFAULT_ALGORITHM,
+  lastTemplate: '',
 }
 
 export async function loadSettings(): Promise<AppSettings> {
@@ -54,6 +63,11 @@ export async function loadSettings(): Promise<AppSettings> {
   // this one has never heard of, and the backend rejects an unknown one
   // outright — so the modal would open on a job that can never start.
   if (!isHashAlgorithm(stored.hashAlgorithm)) delete stored.hashAlgorithm
+  // A template id points at something that may no longer exist — a custom file
+  // the user deleted, a built-in a later build renamed. The dialog resolves it
+  // against the list it actually has and falls back to none, so only the type
+  // needs guarding here.
+  if (typeof stored.lastTemplate !== 'string') delete stored.lastTemplate
 
   return { ...DEFAULT_SETTINGS, ...stored }
 }

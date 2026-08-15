@@ -4,7 +4,7 @@ import {filesystem} from '../models';
 
 export function Copy(arg1:Array<string>,arg2:string,arg3:string):Promise<filesystem.OpResult>;
 
-export function CreateFile(arg1:string,arg2:string):Promise<filesystem.FileItem>;
+export function CreateFile(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<filesystem.FileItem>;
 
 export function CreateFolder(arg1:string,arg2:string):Promise<filesystem.FileItem>;
 

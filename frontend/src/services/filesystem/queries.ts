@@ -8,7 +8,9 @@
  */
 
 import { queryOptions } from '@tanstack/react-query'
+import type { FileTemplate } from '@/constants/fileTemplates'
 import { bridge } from '@/services/bridge'
+import { ensureTemplatesFolder, loadCustomTemplates } from '@/services/templates/templateService'
 import type { FileItem, StandardPaths, Volume } from '@/types/file'
 
 export const fsKeys = {
@@ -22,6 +24,7 @@ export const fsKeys = {
   infos: (paths: readonly string[]) => [...fsKeys.all, 'infos', [...paths].sort()] as const,
   volumes: () => [...fsKeys.all, 'volumes'] as const,
   standardPaths: () => [...fsKeys.all, 'standardPaths'] as const,
+  templates: (folder: string) => [...fsKeys.all, 'templates', folder] as const,
 }
 
 export function directoryQuery(path: string, includeHidden: boolean) {
@@ -55,6 +58,25 @@ export function fileInfosQuery(paths: readonly string[]) {
     enabled: paths.length > 0,
     staleTime: 0,
     gcTime: 0,
+  })
+}
+
+/**
+ * The custom templates on disk (M15).
+ *
+ * `staleTime: 0` on purpose: someone who just dropped a file into the folder
+ * expects to see it the next time the dialog opens, and the read is one
+ * directory of small files.
+ */
+export function templatesQuery(folder: string) {
+  return queryOptions<FileTemplate[]>({
+    queryKey: fsKeys.templates(folder),
+    queryFn: async () => {
+      await ensureTemplatesFolder(folder)
+      return loadCustomTemplates(folder)
+    },
+    enabled: folder.length > 0,
+    staleTime: 0,
   })
 }
 

@@ -56,7 +56,7 @@ func TestCreateFile(t *testing.T) {
 	fs := New()
 	dir := t.TempDir()
 
-	item, err := fs.CreateFile(dir, "notes.txt")
+	item, err := fs.CreateFile(dir, "notes.txt", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,9 +67,88 @@ func TestCreateFile(t *testing.T) {
 		t.Errorf("mimeType = %q, want text/plain", item.MimeType)
 	}
 
-	_, err = fs.CreateFile(dir, "notes.txt")
+	_, err = fs.CreateFile(dir, "notes.txt", "", false)
 	if payload := decodeError(t, err); payload.Code != codeAlreadyExists {
 		t.Errorf("second create: code = %q, want %q", payload.Code, codeAlreadyExists)
+	}
+}
+
+func TestCreateFileWritesContentVerbatim(t *testing.T) {
+	fs := New()
+	dir := t.TempDir()
+
+	// Deliberately awkward: a shebang that a BOM would break, a trailing
+	// newline, a tab, and a non-ASCII character that must survive as UTF-8.
+	content := "#!/bin/sh\n\techo 'héllo'\n"
+	item, err := fs.CreateFile(dir, "run.sh", content, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	written, err := os.ReadFile(filepath.Join(dir, "run.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(written) != content {
+		t.Errorf("wrote %q, want %q", written, content)
+	}
+	if item.Size != int64(len(content)) {
+		t.Errorf("size = %d, want %d", item.Size, len(content))
+	}
+}
+
+// A shell script that comes out non-executable is the most annoying way this
+// feature can fail, and the mode has to be right the moment the file exists.
+func TestCreateFileHonoursTheExecutableBit(t *testing.T) {
+	fs := New()
+	dir := t.TempDir()
+
+	if _, err := fs.CreateFile(dir, "run.sh", "#!/bin/sh\n", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fs.CreateFile(dir, "notes.md", "# Notes\n", false); err != nil {
+		t.Fatal(err)
+	}
+
+	script, err := os.Stat(filepath.Join(dir, "run.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if script.Mode().Perm()&0o111 == 0 {
+		t.Errorf("script mode = %v, want the executable bits set", script.Mode().Perm())
+	}
+
+	plain, err := os.Stat(filepath.Join(dir, "notes.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain.Mode().Perm()&0o111 != 0 {
+		t.Errorf("plain file mode = %v, want no executable bits", plain.Mode().Perm())
+	}
+}
+
+// The whole reason this is a create rather than a write: it must be incapable
+// of destroying a file that is already there, whatever it is asked to do.
+func TestCreateFileNeverOverwrites(t *testing.T) {
+	fs := New()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "precious.txt")
+
+	if err := os.WriteFile(path, []byte("do not lose me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := fs.CreateFile(dir, "precious.txt", "replacement content", false)
+	if payload := decodeError(t, err); payload.Code != codeAlreadyExists {
+		t.Errorf("code = %q, want %q", payload.Code, codeAlreadyExists)
+	}
+
+	survived, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(survived) != "do not lose me" {
+		t.Errorf("the existing file was modified: %q", survived)
 	}
 }
 

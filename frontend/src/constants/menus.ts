@@ -20,6 +20,7 @@ export type MenuCommandId =
   | 'file.openInNewTab'
   | 'file.newFolder'
   | 'file.newFile'
+  | 'file.newFromTemplate'
   | 'file.newTab'
   | 'file.closeTab'
   | 'file.rename'
@@ -109,6 +110,7 @@ export const APP_MENUS: MenuDefinition[] = [
       { separator: true },
       { id: 'file.newFolder', label: 'New Folder' },
       { id: 'file.newFile', label: 'New File' },
+      { id: 'file.newFromTemplate', label: 'New File from Template…' },
       { separator: true },
       { id: 'file.newTab', label: 'New Tab' },
       { id: 'file.closeTab', label: 'Close Tab' },

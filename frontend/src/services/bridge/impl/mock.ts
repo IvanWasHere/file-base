@@ -43,6 +43,8 @@ interface Node {
   createdAt: number
   modifiedAt: number
   content?: string
+  /** Reflected in `permissions`, so the x bit survives a read (M15). */
+  executable?: boolean
 }
 
 /** 1×1 transparent PNG, shared by the image preview and the thumbnailer. */
@@ -221,7 +223,11 @@ function toFileItem(node: Node): FileItem {
     isDirectory: node.isDirectory,
     createdAt: node.createdAt,
     modifiedAt: node.modifiedAt,
-    permissions: node.isDirectory ? 'drwxr-xr-x' : '-rw-r--r--',
+    permissions: node.isDirectory
+      ? 'drwxr-xr-x'
+      : node.executable
+        ? '-rwxr-xr-x'
+        : '-rw-r--r--',
     hidden: isHiddenName(name),
     symlink: false,
     mimeType: node.isDirectory ? 'inode/directory' : 'application/octet-stream',
@@ -337,20 +343,31 @@ function transfer(
   return result
 }
 
-function create(parent: string, name: string, isDirectory: boolean): FileItem {
+function create(
+  parent: string,
+  name: string,
+  isDirectory: boolean,
+  content = '',
+  executable = false,
+): FileItem {
   const parentPath = normalize(parent)
   assertValidName(name, parentPath)
   requireNode(parentPath)
   const path = join(parentPath, name)
+  // Mirrors the backend's O_EXCL: creation never overwrites, whatever content
+  // it was handed (M15 decision 3). A mock that replaced the node would let a
+  // test pass against behaviour the real filesystem refuses.
   if (nodes.has(path)) {
     throw new FsError('already-exists', `${name} already exists`, path)
   }
   const node: Node = {
     path,
     isDirectory,
-    size: 0,
+    size: content.length,
     createdAt: FIXED_NOW,
     modifiedAt: FIXED_NOW,
+    ...(content ? { content } : {}),
+    ...(executable ? { executable: true } : {}),
   }
   nodes.set(path, node)
   emit('create', path)
@@ -564,6 +581,10 @@ export const bridge: Bridge = {
         music: join(HOME, 'Music'),
         pictures: join(HOME, 'Pictures'),
         trash: join(HOME, '.Trash'),
+        // Mirrors the backend: beside the database, not in the home tree. Not
+        // seeded — the folder starts absent here exactly as it does on a fresh
+        // install, so the "create it on first open" path is the one tests take.
+        templates: join(HOME, 'Library/Application Support/MacFileExplorer/Templates'),
       }),
     exists: (path) => Promise.resolve(nodes.has(normalize(path))),
     readFileInfos: async (paths) =>
@@ -572,7 +593,8 @@ export const bridge: Bridge = {
         .filter((node): node is Node => node !== undefined)
         .map(toFileItem),
     createFolder: async (parent, name) => create(parent, name, true),
-    createFile: async (parent, name) => create(parent, name, false),
+    createFile: async (parent, name, content, executable) =>
+      create(parent, name, false, content, executable),
     rename: async (path, newName) => {
       assertValidName(newName, normalize(path))
       const node = requireNode(path)

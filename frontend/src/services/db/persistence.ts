@@ -62,6 +62,7 @@ export async function hydrate(homePath: string): Promise<HydrationResult> {
     sidebarOpen: settings.sidebarOpen,
     previewOpen: settings.previewOpen,
     hashAlgorithm: settings.hashAlgorithm,
+    lastTemplate: settings.lastTemplate,
   })
 
   folderPrefs = await loadAllFolderPrefs()
@@ -155,6 +156,7 @@ export function startPersistence(now: () => number = Date.now): () => void {
     if (state.sidebarOpen !== previous.sidebarOpen) changed.sidebarOpen = state.sidebarOpen
     if (state.previewOpen !== previous.previewOpen) changed.previewOpen = state.previewOpen
     if (state.hashAlgorithm !== previous.hashAlgorithm) changed.hashAlgorithm = state.hashAlgorithm
+    if (state.lastTemplate !== previous.lastTemplate) changed.lastTemplate = state.lastTemplate
 
     if (Object.keys(changed).length > 0) detach(saveSettings(changed), 'settings save')
   })

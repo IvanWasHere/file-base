@@ -80,14 +80,32 @@ export interface HashJob {
   paths: string[]
 }
 
+/**
+ * The open new-file dialog, and where it will create (PLAN.md §M15).
+ *
+ * Its own field rather than a `DialogRequest`, for the reason `hashJob` has
+ * one: `DialogResult` is `boolean | ConflictPolicy | null`, and this resolves a
+ * name and a template. Widening that union so every existing dialog's result
+ * type is looser, for one caller's benefit, is the wrong trade (decision 12).
+ */
+export interface NewFileRequest {
+  /** The folder to create in — the pane's, at the moment it was opened. */
+  parent: string
+  /** So the created file can be selected and put straight into rename. */
+  paneId: string
+}
+
 interface UiState {
   previewOpen: boolean
   sidebarOpen: boolean
   showHiddenFiles: boolean
   dialog: DialogRequest | null
   hashJob: HashJob | null
+  newFile: NewFileRequest | null
   /** Persisted: whoever verifies SHA-256 downloads verifies SHA-256 downloads. */
   hashAlgorithm: HashAlgorithm
+  /** Persisted: the template id last used, so the next file starts there. */
+  lastTemplate: string
   renaming: RenameTarget | null
   contextMenu: ContextMenuRequest | null
 
@@ -98,7 +116,11 @@ interface UiState {
 
   openHashes: (paths: string[]) => void
   closeHashes: () => void
+
+  openNewFile: (parent: string, paneId: string) => void
+  closeNewFile: () => void
   setHashAlgorithm: (algorithm: HashAlgorithm) => void
+  setLastTemplate: (id: string) => void
 
   beginRename: (paneId: string, path: string) => void
   endRename: () => void
@@ -119,7 +141,9 @@ export const useUiStore = create<UiState>()((set) => ({
   showHiddenFiles: false,
   dialog: null,
   hashJob: null,
+  newFile: null,
   hashAlgorithm: DEFAULT_ALGORITHM,
+  lastTemplate: '',
   renaming: null,
   contextMenu: null,
 
@@ -131,7 +155,13 @@ export const useUiStore = create<UiState>()((set) => ({
   // Opening with nothing to hash would be a modal that can only be closed.
   openHashes: (paths) => set(paths.length > 0 ? { hashJob: { paths }, renaming: null } : {}),
   closeHashes: () => set({ hashJob: null }),
+
+  // A rename editor and a dialog cannot both own the keyboard, and the dialog
+  // is the thing the user just asked for.
+  openNewFile: (parent, paneId) => set({ newFile: { parent, paneId }, renaming: null }),
+  closeNewFile: () => set({ newFile: null }),
   setHashAlgorithm: (algorithm) => set({ hashAlgorithm: algorithm }),
+  setLastTemplate: (id) => set({ lastTemplate: id }),
 
   beginRename: (paneId, path) => set({ renaming: { paneId, path } }),
   endRename: () => set({ renaming: null }),

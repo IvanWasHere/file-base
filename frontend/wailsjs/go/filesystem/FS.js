@@ -6,8 +6,8 @@ export function Copy(arg1, arg2, arg3) {
   return window['go']['filesystem']['FS']['Copy'](arg1, arg2, arg3);
 }
 
-export function CreateFile(arg1, arg2) {
-  return window['go']['filesystem']['FS']['CreateFile'](arg1, arg2);
+export function CreateFile(arg1, arg2, arg3, arg4) {
+  return window['go']['filesystem']['FS']['CreateFile'](arg1, arg2, arg3, arg4);
 }
 
 export function CreateFolder(arg1, arg2) {

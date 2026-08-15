@@ -139,6 +139,7 @@ export namespace filesystem {
 	    music: string;
 	    pictures: string;
 	    trash: string;
+	    templates: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new StandardPaths(source);
@@ -155,6 +156,7 @@ export namespace filesystem {
 	        this.music = source["music"];
 	        this.pictures = source["pictures"];
 	        this.trash = source["trash"];
+	        this.templates = source["templates"];
 	    }
 	}
 	export class TrashedItem {

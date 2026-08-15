@@ -84,17 +84,55 @@ func (f *FS) CreateFolder(parent string, name string) (FileItem, error) {
 	return Describe(path, false), nil
 }
 
-// CreateFile creates an empty file inside parent.
-func (f *FS) CreateFile(parent string, name string) (FileItem, error) {
+// CreateFile creates a file inside parent, optionally with content.
+//
+// This is the only way anything in this app puts bytes on disk, and it is
+// deliberately not a write API (PLAN.md §M15 decision 3). `O_EXCL` makes the
+// exists-check atomic — a separate Lstat first would race — and it is also what
+// makes the operation safe to expose at all: it creates or it fails, and can
+// never truncate a file that is already there. A `WriteFile(path, content)`
+// would be able to destroy anything, forever, for every future caller.
+//
+// One method rather than a second `CreateFileWithContent`, so `O_EXCL` and the
+// file mode are decided in one place (decision 4). M6's empty-file path passes
+// "" and false.
+//
+// `executable` is a parameter rather than a follow-up chmod because a shell
+// script that comes out non-executable is the single most annoying way this can
+// fail, and a second call could fail on its own and leave a half-made file
+// (decision 5).
+//
+// Content is a string: templates are text by definition, and a Go []byte would
+// cross the bridge as a JSON array of numbers (decision 6). It is written as
+// given — UTF-8, no BOM, whatever line endings it carries — because a BOM
+// breaks a shebang and re-encoding someone's template is not this function's
+// business.
+func (f *FS) CreateFile(parent string, name string, content string, executable bool) (FileItem, error) {
 	path, err := childPath(parent, name)
 	if err != nil {
 		return FileItem{}, err
 	}
-	// O_EXCL makes the exists-check atomic; a separate Lstat first would race.
-	handle, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o644)
+
+	mode := os.FileMode(0o644)
+	if executable {
+		mode = 0o755
+	}
+
+	handle, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, mode)
 	if err != nil {
 		return FileItem{}, wrap(path, err)
 	}
+
+	if content != "" {
+		if _, err := handle.WriteString(content); err != nil {
+			_ = handle.Close()
+			// A file that exists but holds half a template is worse than none:
+			// the name is taken, and retrying would now fail on O_EXCL.
+			_ = os.Remove(path)
+			return FileItem{}, wrap(path, err)
+		}
+	}
+
 	if err := handle.Close(); err != nil {
 		return FileItem{}, wrap(path, err)
 	}

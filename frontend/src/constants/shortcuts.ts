@@ -47,6 +47,9 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'file.open', accelerator: 'Cmd+ArrowDown' },
   { id: 'file.newFile', accelerator: 'Cmd+N' },
   { id: 'file.newFolder', accelerator: 'Cmd+Shift+N' },
+  // Cmd+N stays the one-keystroke empty file and Cmd+Shift+N is New Folder, so
+  // the templated one takes the Option spelling (PLAN.md §M15 decision 1).
+  { id: 'file.newFromTemplate', accelerator: 'Cmd+Alt+N' },
   { id: 'file.newTab', accelerator: 'Cmd+T' },
   { id: 'file.closeTab', accelerator: 'Cmd+W' },
   // Finder's binding. M4 shipped Enter as "open" and M6 flagged the change as

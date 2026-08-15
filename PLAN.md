@@ -623,7 +623,7 @@ Notes from the build:
   subsequent read must happen in the *same* `osascript` process to observe
   anything mid-run.
 
-### M15 — Quick file creation
+### M15 — Quick file creation ✅ complete
 
 Create a file of any type immediately, either empty or from a template —
 predefined ones that ship with the app, and custom ones the user writes
@@ -758,7 +758,68 @@ real skeleton; a shell script template produces a file that runs without
 untouched; a file dropped into the Templates folder appears in the list on the
 next open, with its own extension and executable bit; a name that already exists
 is refused in the field rather than renamed; typing an extension no template
-claims still creates an empty file of that type; and undo removes it.
+claims still creates an empty file of that type; and undo removes it. ✅
+
+Notes from the build:
+
+- **All fifteen decisions held**, and decision 3 is the one worth restating:
+  after M15 there is still no way to overwrite a file from this app. `CreateFile`
+  grew content and a mode and kept its `O_EXCL`, so the only thing that puts
+  bytes on disk creates or fails. A Go test writes a file, asks the app to
+  create over it, and checks both that the call is refused and that the original
+  bytes are untouched.
+- **Decision 7 cut the built-in list roughly in half, and that was the rule
+  working.** The plan sketched thirteen templates "roughly"; applying its own
+  test — a template earns its place only if the empty file would be wrong —
+  leaves eight. An empty `.css`, `.ts`, `.sql` or `.yml` is a perfectly good
+  place to start, so a template for one could only hold filler the user deletes
+  first, which is worse than no template. What survives is where the empty file
+  is invalid (JSON), inert (a shell script with no shebang and no executable
+  bit), or missing boilerplate nobody wants to retype. Everything else is still
+  one keystroke away by typing its extension, which is decision 2's whole point.
+- **Templates needed a `filename`, not just an extension.** `Dockerfile` and
+  `.gitignore` are files with names, not types — the plan's "picking a template
+  fills in the extension" does not describe either. A template may name a whole
+  file instead, and matching tries the full name before the extension, so typing
+  `Dockerfile` finds it rather than being read as an extensionless stem.
+- **A bug the tests did not catch and running the app did.** With a template
+  already selected — picked from the list, or restored from last time — typing
+  an extension it does not claim wrote that template's content into the new file
+  anyway: `readings.opml` came out as 104 bytes of Markdown boilerplate. The
+  original rule was "typing picks a template but never unpicks one", which
+  protects against a mid-word deletion dropping a deliberate choice; the fix is
+  that a template survives only a name that does not *contradict* it. An
+  extensionless name contradicts nothing, so picking Markdown and typing
+  `LICENSE` still uses it. Both halves now have a regression test.
+- **`ReadTextFile` does not fail on binary, so the check had to be for the
+  damage.** It replaces invalid UTF-8 with U+FFFD rather than erroring, which is
+  right for a preview and means a PNG dropped into the templates folder arrives
+  as a string full of replacement characters. Detection is those characters plus
+  a NUL byte, which survives the replacement because it is valid UTF-8. A real
+  text file containing U+FFFD is a false positive, and worth it: the cost is one
+  template refused with a reason on screen, against pasting a binary into a
+  source file.
+- **Verified in the running app against real files.** The Templates folder was
+  created empty on first open, exactly as decision 9 says. Cmd+Alt+N opened the
+  dialog on the pane's folder with the eight built-ins listed, the shell script
+  marked executable and Dockerfile and Git Ignore showing whole filenames.
+  Typing `release notes.md` selected Markdown on its own and Enter produced a
+  file containing `# release notes` — `{{name}}` as the stem, not the filename.
+  **A shell script created from the template came out `-rwxr-xr-x` and ran, with
+  no `chmod`.** Two files dropped into the real Templates folder appeared under
+  "Yours" on the next open, `task.sh` carrying its own executable bit; the
+  Markdown one produced `# MIT` and `Copyright (c) 2026` while leaving
+  `{{user.name}}` and `{{#if admin}}yes{{/if}}` **exactly as written**, which is
+  decision 10's whole reason for existing. Retyping an existing name reported it
+  in the field and disabled Create.
+- **Note for whoever verifies next: a webview text field *can* be typed into
+  after all, if it has focus.** M14 recorded that synthetic keystrokes reach
+  nothing but the document-level shortcut registry, and its verify field could
+  not be driven. The difference is that this dialog focuses its name field on
+  mount, and with focus already there `keystroke` lands normally — as does
+  `Cmd+A` to replace what is in it. So the M14 limitation is narrower than it
+  looked: the problem was never typing, it was that AX cannot *move* focus into
+  a webview input. Anything auto-focused is drivable.
 
 ### M16 — Split layout: a dropdown, and a real 2 × 2 grid ✅ complete
 

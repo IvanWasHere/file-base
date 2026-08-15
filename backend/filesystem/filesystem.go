@@ -68,6 +68,11 @@ type StandardPaths struct {
 	Music        string `json:"music"`
 	Pictures     string `json:"pictures"`
 	Trash        string `json:"trash"`
+	// Templates is where custom file templates live (PLAN.md §M15 decision 8).
+	// Resolved here rather than string-built in TypeScript, like every other
+	// well-known location — it is the only new thing M15 needed from Go besides
+	// CreateFile's content.
+	Templates string `json:"templates"`
 }
 
 // ReadDirectory lists every entry in path, hidden ones included and flagged.
@@ -208,6 +213,15 @@ func (f *FS) StandardPaths() (StandardPaths, error) {
 	if err != nil {
 		return StandardPaths{}, wrap("", err)
 	}
+	// Beside the database rather than in the home directory: it is app data the
+	// user may edit, not a place they browse to. os.UserConfigDir is
+	// ~/Library/Application Support on macOS, and backend/db already puts the
+	// app folder there.
+	config, err := os.UserConfigDir()
+	if err != nil {
+		return StandardPaths{}, wrap("", err)
+	}
+
 	return StandardPaths{
 		Home:         home,
 		Desktop:      filepath.Join(home, "Desktop"),
@@ -218,6 +232,7 @@ func (f *FS) StandardPaths() (StandardPaths, error) {
 		Music:        filepath.Join(home, "Music"),
 		Pictures:     filepath.Join(home, "Pictures"),
 		Trash:        filepath.Join(home, ".Trash"),
+		Templates:    filepath.Join(config, "MacFileExplorer", "Templates"),
 	}, nil
 }
 

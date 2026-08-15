@@ -175,6 +175,9 @@ export function useMenuCommands(): MenuCommandState {
       case 'file.newFile':
         if (pane) void operations.createFile(pane.path, pane.id)
         return
+      case 'file.newFromTemplate':
+        if (pane) ui.openNewFile(pane.path, pane.id)
+        return
       case 'file.newTab':
         openTab(pane?.path ?? paths?.home ?? '/')
         return
@@ -334,6 +337,7 @@ export function useMenuCommands(): MenuCommandState {
         return undoDepth > 0
       case 'file.newFolder':
       case 'file.newFile':
+      case 'file.newFromTemplate':
         return pane !== undefined
       case 'go.home':
       case 'go.documents':

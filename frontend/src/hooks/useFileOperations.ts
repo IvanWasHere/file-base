@@ -59,6 +59,19 @@ export interface FileOperations {
   /** Creates "untitled folder" and opens its inline rename editor. */
   createFolder: (parent: string, paneId: string) => Promise<void>
   createFile: (parent: string, paneId: string) => Promise<void>
+  /**
+   * Creates a named file, optionally from a template (M15).
+   *
+   * Unlike `createFile`, the name is the user's — so a collision is reported
+   * rather than auto-numbered, and the caller learns whether it worked.
+   */
+  createFromTemplate: (
+    parent: string,
+    paneId: string,
+    name: string,
+    content: string,
+    executable: boolean,
+  ) => Promise<FileItem | null>
   /** Resolves true when the rename was applied. */
   rename: (path: string, newName: string) => Promise<boolean>
   duplicate: (paths: readonly string[]) => Promise<void>
@@ -163,6 +176,45 @@ export function useFileOperations(): FileOperations {
       // "untitled folder" an acceptable default rather than a chore.
       useSelectionStore.getState().select(paneId, created.path)
       useUiStore.getState().beginRename(paneId, created.path)
+    },
+    [queryClient, optimistically],
+  )
+
+  /**
+   * The M15 path: a name the user typed, and content from a template.
+   *
+   * Everything else matches `createEntry` — the optimistic patch, the undoable
+   * `create` entry, and landing in the inline rename editor so the name is
+   * still adjustable. What differs is that the name is not ours to change: a
+   * collision comes back as a failure for the dialog to show, because quietly
+   * creating `notes copy.md` answers a question nobody asked (decision 11).
+   */
+  const createFromTemplate = useCallback(
+    async (
+      parent: string,
+      paneId: string,
+      name: string,
+      content: string,
+      executable: boolean,
+    ): Promise<FileItem | null> => {
+      const created = await optimistically(
+        [parent],
+        () =>
+          patchDirectory(queryClient, parent, (items) =>
+            withItem(items, placeholderItem(parent, name, false)),
+          ),
+        () => bridge.fs.createFile(parent, name, content, executable),
+        'Could not create the file',
+      )
+
+      if (!created) return null
+
+      useHistoryStore.getState().push({ kind: 'create', label: 'New File', path: created.path })
+      useSelectionStore.getState().select(paneId, created.path)
+      // As with Cmd+N: the name is open for editing straight away, which is what
+      // makes a typed-in-a-hurry name cheap to fix.
+      useUiStore.getState().beginRename(paneId, created.path)
+      return created
     },
     [queryClient, optimistically],
   )
@@ -401,6 +453,7 @@ export function useFileOperations(): FileOperations {
       [createEntry],
     ),
     createFile: useCallback((parent, paneId) => createEntry(parent, paneId, false), [createEntry]),
+    createFromTemplate,
     rename,
     duplicate: useCallback(
       async (paths) => {

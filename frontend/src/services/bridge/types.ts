@@ -46,7 +46,20 @@ export interface FilesystemApi {
   readFileInfos(paths: string[]): Promise<FileItem[]>
 
   createFolder(parent: string, name: string): Promise<FileItem>
-  createFile(parent: string, name: string): Promise<FileItem>
+  /**
+   * Creates a file, optionally with content.
+   *
+   * The only way anything here puts bytes on disk, and deliberately not a write
+   * API: it creates or it fails, and can never truncate a file that already
+   * exists (M15 decision 3). `executable` is passed in the same call rather than
+   * chmod'd afterwards, so a shell script is never briefly unrunnable.
+   */
+  createFile(
+    parent: string,
+    name: string,
+    content?: string,
+    executable?: boolean,
+  ): Promise<FileItem>
   rename(path: string, newName: string): Promise<FileItem>
   move(sources: string[], destDir: string, policy: ConflictPolicy): Promise<OperationResult>
   copy(sources: string[], destDir: string, policy: ConflictPolicy): Promise<OperationResult>

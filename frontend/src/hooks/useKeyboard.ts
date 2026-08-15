@@ -19,8 +19,8 @@ import { useUiStore } from '@/stores/uiStore'
  *    reconciles the two, and the one M13's Left/Right photo stepping will use:
  *    it registers with `useListKeyboard`, and the global Cmd+Left stays clear of
  *    it because the two never claim the same combination.
- * 2. **A modal owns the keyboard.** While a dialog, a context menu or the hash
- *    modal is open, nothing global fires.
+ * 2. **A modal owns the keyboard.** While a dialog, a context menu, the hash
+ *    modal or the new-file dialog is open, nothing global fires.
  * 3. **Typing is typing.** Inside an input, textarea or contenteditable — the
  *    rename editor, the search box — every shortcut is inert, so Cmd+C copies
  *    the text the user selected rather than the files behind it.
@@ -44,7 +44,7 @@ export function useKeyboard(): void {
       if (event.defaultPrevented) return
 
       const ui = useUiStore.getState()
-      if (ui.dialog || ui.contextMenu || ui.hashJob) return
+      if (ui.dialog || ui.contextMenu || ui.hashJob || ui.newFile) return
 
       const target = event.target as HTMLElement | null
       if (isEditable(target)) return

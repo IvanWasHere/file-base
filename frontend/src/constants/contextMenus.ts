@@ -41,7 +41,7 @@ export const CONTEXT_MENUS: Record<ContextKind, MenuCommandId[][]> = {
   // No selection to act on, so this is about the folder being shown: what can be
   // created in it, what can be pasted into it, and where it is.
   background: [
-    ['file.newFolder', 'file.newFile'],
+    ['file.newFolder', 'file.newFile', 'file.newFromTemplate'],
     ['edit.paste', 'edit.selectAll'],
     ['view.refresh', 'view.toggleHidden'],
     ['file.addToFavorites', 'file.removeFromFavorites'],

@@ -58,6 +58,8 @@ export interface StandardPaths {
   music: string
   pictures: string
   trash: string
+  /** Where custom file templates live (M15). Beside the database, not in home. */
+  templates: string
 }
 
 export interface ReadDirectoryOptions {

@@ -83,6 +83,7 @@ var sections = []section{
 			separator(),
 			{ID: "file.newFolder", Label: "New Folder"},
 			{ID: "file.newFile", Label: "New File"},
+			{ID: "file.newFromTemplate", Label: "New File from Template…"},
 			separator(),
 			{ID: "file.newTab", Label: "New Tab"},
 			{ID: "file.closeTab", Label: "Close Tab"},
