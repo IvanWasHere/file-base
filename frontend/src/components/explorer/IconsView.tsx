@@ -14,7 +14,7 @@ import { useCutPaths } from '@/stores/clipboardStore'
 import { useDragStore } from '@/stores/dragStore'
 import { useUiStore } from '@/stores/uiStore'
 import type { FileItem } from '@/types/file'
-import type { ViewMode } from '@/types/workspace'
+import type { IconViewMode } from '@/types/workspace'
 import type { Rect } from '@/utils/selection'
 
 /**
@@ -36,7 +36,7 @@ interface GridSpec {
   padding: number
 }
 
-const SPECS: Record<Exclude<ViewMode, 'details'>, GridSpec> = {
+const SPECS: Record<IconViewMode, GridSpec> = {
   'large-icons': {
     minTile: 108,
     rowHeight: 110,
@@ -167,7 +167,7 @@ interface IconsViewProps {
   paneId: string
   /** The folder being shown — the drop target when the pointer is not on a tile. */
   path: string
-  mode: Exclude<ViewMode, 'details'>
+  mode: IconViewMode
   items: FileItem[]
   onActivate: (item: FileItem) => void
   onFocus: () => void

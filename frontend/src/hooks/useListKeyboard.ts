@@ -25,6 +25,15 @@ interface UseListKeyboardOptions {
   items: readonly FileItem[]
   lead: string | null
   stride?: number
+  /**
+   * Which axis steps through the list. `vertical` is the list and the grids:
+   * Up/Down move by `stride`, Left/Right by one. `horizontal` is the Photos
+   * filmstrip, where Left/Right step and Up/Down mean nothing — this is where
+   * M13's stepping is reconciled with the existing arrow handling rather than
+   * by a second pane-scoped key handler, which is exactly the drift M11's
+   * registry exists to prevent (PLAN.md §M13 decision 8).
+   */
+  orientation?: 'vertical' | 'horizontal'
   onSelect: (path: string) => void
   onExtendTo: (path: string) => void
   onSelectAll: () => void
@@ -36,6 +45,7 @@ export function useListKeyboard({
   items,
   lead,
   stride = 1,
+  orientation = 'vertical',
   onSelect,
   onExtendTo,
   onSelectAll,
@@ -64,26 +74,32 @@ export function useListKeyboard({
       const accel = event.metaKey || event.ctrlKey
       if (accel && event.key.startsWith('Arrow')) return
 
+      const horizontal = orientation === 'horizontal'
+
       switch (event.key) {
         case 'ArrowDown':
+          // A filmstrip has one row, so Down is not "the next photo" — it is
+          // nothing. Declining leaves it unhandled rather than pretending.
+          if (horizontal) return
           event.preventDefault()
           moveTo(stepIndex(currentIndex, 1, items.length, stride), event.shiftKey)
           return
 
         case 'ArrowUp':
+          if (horizontal) return
           event.preventDefault()
           moveTo(stepIndex(currentIndex, -1, items.length, stride), event.shiftKey)
           return
 
         case 'ArrowRight':
           // In a list, stride is 1 and horizontal movement is meaningless.
-          if (stride === 1) return
+          if (!horizontal && stride === 1) return
           event.preventDefault()
           moveTo(stepIndex(currentIndex, 1, items.length, 1), event.shiftKey)
           return
 
         case 'ArrowLeft':
-          if (stride === 1) return
+          if (!horizontal && stride === 1) return
           event.preventDefault()
           moveTo(stepIndex(currentIndex, -1, items.length, 1), event.shiftKey)
           return
@@ -140,6 +156,6 @@ export function useListKeyboard({
       const found = findByPrefix(names, query, query.length === 1 ? currentIndex : currentIndex - 1)
       if (found >= 0) moveTo(found, false)
     },
-    [items, lead, stride, onSelect, onExtendTo, onSelectAll, onClear, onScrollToIndex],
+    [items, lead, stride, orientation, onSelect, onExtendTo, onSelectAll, onClear, onScrollToIndex],
   )
 }

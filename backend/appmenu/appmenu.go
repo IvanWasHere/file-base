@@ -93,6 +93,7 @@ var sections = []section{
 			{ID: "view.largeIcons", Label: "as Large Icons"},
 			{ID: "view.mediumIcons", Label: "as Medium Icons"},
 			{ID: "view.smallIcons", Label: "as Small Icons"},
+			{ID: "view.photos", Label: "as Photos"},
 			separator(),
 			{ID: "view.splitSingle", Label: "Single Pane"},
 			{ID: "view.splitTwo", Label: "Two Panes"},

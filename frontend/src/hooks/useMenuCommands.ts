@@ -107,6 +107,7 @@ export function useMenuCommands(): MenuCommandState {
     'view.largeIcons': 'large-icons',
     'view.mediumIcons': 'medium-icons',
     'view.smallIcons': 'small-icons',
+    'view.photos': 'photos',
   }
 
   const splitModes: Partial<Record<MenuCommandId, SplitMode>> = {

@@ -4,6 +4,7 @@ import { DetailsView } from '@/components/explorer/DetailsView'
 import { IconsView } from '@/components/explorer/IconsView'
 import { DirectoryError } from '@/components/common/DirectoryError'
 import { Breadcrumb } from '@/components/toolbar/Breadcrumb'
+import { PhotosView } from '@/features/photos/PhotosView'
 import { SearchBar } from '@/features/search/SearchBar'
 import { SearchStatusBar } from '@/features/search/SearchStatusBar'
 import { useDirectory } from '@/hooks/useDirectory'
@@ -112,7 +113,13 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
     <section
       aria-label={`Pane ${LETTERS[index] ?? index + 1}`}
       onMouseDown={onFocus}
-      className="flex min-w-0 flex-col overflow-hidden"
+      // `flex-1 min-h-0` so the pane fills the slot PaneGroup gave it. Without
+      // it the section is content-sized on the main axis, which the listing
+      // views hid by accident — a directory long enough to overflow shrinks back
+      // to the available height and looks right. Photos has no intrinsic height
+      // (the stage is absolutely-positioned images), so it collapsed to the
+      // filmstrip and made the omission visible.
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
     >
       <div
         className={`bg-elevated border-edge flex shrink-0 items-center gap-2 border-b px-2.5 py-1 text-[11px] ${
@@ -167,6 +174,17 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
             onActivate={handleActivate}
             onFocus={onFocus}
             onRename={handleRename}
+          />
+        ) : pane.viewMode === 'photos' ? (
+          // No `onRename`: renaming is a text field over a filename, and the
+          // filmstrip's label is 9px of overlay. Cmd+Enter still renames through
+          // the registry, which acts on the selection.
+          <PhotosView
+            paneId={pane.id}
+            path={pane.path}
+            items={shown}
+            onActivate={handleActivate}
+            onFocus={onFocus}
           />
         ) : (
           <IconsView

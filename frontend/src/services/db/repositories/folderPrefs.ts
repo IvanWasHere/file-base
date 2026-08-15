@@ -3,6 +3,7 @@
  * sorted by date" memory that Finder has.
  */
 
+import { isViewMode } from '@/constants/viewModes'
 import { bridge } from '@/services/bridge'
 import {
   DEFAULT_SORT,
@@ -25,7 +26,6 @@ interface FolderPrefsRow {
   folders_first: number
 }
 
-const VIEW_MODES: ViewMode[] = ['details', 'large-icons', 'medium-icons', 'small-icons']
 const SORT_KEYS: SortKey[] = ['name', 'modified', 'size', 'type']
 
 /**
@@ -34,9 +34,7 @@ const SORT_KEYS: SortKey[] = ['name', 'modified', 'size', 'type']
  * one no longer has — falling back beats rendering nothing.
  */
 function toPrefs(row: FolderPrefsRow): FolderPrefs {
-  const viewMode = VIEW_MODES.includes(row.view_mode as ViewMode)
-    ? (row.view_mode as ViewMode)
-    : 'details'
+  const viewMode = isViewMode(row.view_mode) ? row.view_mode : 'details'
 
   const key = SORT_KEYS.includes(row.sort_key as SortKey) ? (row.sort_key as SortKey) : 'name'
   const direction: SortDirection = row.sort_dir === 'desc' ? 'desc' : 'asc'

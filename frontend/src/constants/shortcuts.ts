@@ -38,8 +38,6 @@ export interface Shortcut {
  *
  * Deliberately absent:
  * - `Escape` — clearing the selection belongs to the focused list.
- * - `Cmd+5` — reserved for M13's Photos view, so the numbering does not shuffle
- *   when it lands.
  * - `file.openInNewTab`, `file.addToFavorites`, `file.removeFromFavorites` —
  *   context-menu commands. A binding nobody would guess is clutter in a menu.
  */
@@ -77,6 +75,7 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'view.largeIcons', accelerator: 'Cmd+2' },
   { id: 'view.mediumIcons', accelerator: 'Cmd+3' },
   { id: 'view.smallIcons', accelerator: 'Cmd+4' },
+  { id: 'view.photos', accelerator: 'Cmd+5' },
   { id: 'view.toggleHidden', accelerator: 'Cmd+Shift+Period' },
   { id: 'view.toggleSidebar', accelerator: 'Cmd+Alt+S' },
   // Finder's Quick Look key. `useListKeyboard` gives it up rather than treating

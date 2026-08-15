@@ -9,7 +9,15 @@
 
 import type { SortSpec } from '@/services/filesystem/sort'
 
-export type ViewMode = 'details' | 'large-icons' | 'medium-icons' | 'small-icons'
+export type ViewMode = 'details' | 'large-icons' | 'medium-icons' | 'small-icons' | 'photos'
+
+/**
+ * The three grids. Photos is a view mode but not a grid — it shows one image at
+ * a time and hides everything that is not one — so the icon views are typed
+ * against this rather than `Exclude<ViewMode, 'details'>`, which would have
+ * silently accepted `photos` the moment it was added to the union.
+ */
+export type IconViewMode = 'large-icons' | 'medium-icons' | 'small-icons'
 
 /** How many panes a tab shows side by side. */
 export type SplitMode = 1 | 2 | 3 | 4

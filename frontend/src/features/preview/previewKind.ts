@@ -18,6 +18,18 @@ export const IMAGE_CAP = 12 * 1024 * 1024
 export const PDF_CAP = 40 * 1024 * 1024
 
 /**
+ * The React Query key for a file's decoded contents.
+ *
+ * Shared rather than private to the preview panel because M13's photo stage
+ * reads the same bytes for the same file: with one key, opening the preview on
+ * the photo already on the stage is a cache hit instead of a second base64 of
+ * the same image. `mtime` is part of the key, so an edited file is a different
+ * entry rather than something to invalidate.
+ */
+export const previewKey = (path: string, kind: string, mtime: number) =>
+  ['preview', kind, path, mtime] as const
+
+/**
  * Image extensions and the mime type each actually has.
  *
  * A map rather than `image/${extension}`, which produces `image/jpg` — not a

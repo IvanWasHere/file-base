@@ -20,6 +20,21 @@ import type { FileItem } from '@/types/file'
 /** The size grids ask for. One size keeps the cache from multiplying by view. */
 export const THUMB_SIZE = 128
 
+/**
+ * The size the Photos stage asks for, and `backend/thumbs`' own `maxSize`.
+ *
+ * A second cached size exists only because the stage is a *viewer*: it fills 70%
+ * of a pane, where a 128px thumbnail stretched up is visibly mush. The filmstrip
+ * deliberately does not use it — those thumbs are 80 CSS px and the grids have
+ * already cached 128 for the same files (PLAN.md §M13 decision 5).
+ *
+ * It is also the reason stepping feels instant. `ReadFileBase64` refuses
+ * anything over `IMAGE_CAP`, and a data URL for a 12MB photo is ~16MB of JSON
+ * per keypress; the cached 512 paints immediately and the original swaps in
+ * behind it.
+ */
+export const STAGE_SIZE = 512
+
 /** Formats the Go decoder handles — asking for anything else only fails. */
 const RENDERABLE = new Set(['jpg', 'jpeg', 'png', 'gif'])
 

@@ -202,6 +202,14 @@ describe('folder prefs', () => {
     expect(prefs?.sort.direction).toBe('asc')
   })
 
+  // M13 decision 9: `photos` has to survive a round trip through both stores, or
+  // a pane restored into it silently drops back to Details — which looks like the
+  // view mode simply not sticking.
+  it('round-trips the Photos view mode', async () => {
+    await saveFolderPrefs('/gallery', 'photos', DEFAULT_SORT)
+    expect((await getFolderPrefs('/gallery'))?.viewMode).toBe('photos')
+  })
+
   it('loads every folder at once', async () => {
     await saveFolderPrefs('/a', 'details', DEFAULT_SORT)
     await saveFolderPrefs('/b', 'medium-icons', DEFAULT_SORT)
@@ -238,6 +246,16 @@ describe('session', () => {
     expect(restored?.panes['pane-1']?.path).toBe('/Users/dev/Documents')
     expect(restored?.panes['pane-1']?.historyIndex).toBe(1)
     expect(restored?.activeTabId).toBe('tab-1')
+  })
+
+  // The second of the two places a view mode is validated on the way out. This
+  // one had spelled the union out by hand, so Photos would have been restored as
+  // Details without a word (M13 decision 9).
+  it('restores a pane left in the Photos view', async () => {
+    const photos: Pane = { ...pane, viewMode: 'photos' }
+    await saveSession({ tabs: [tab], panes: { 'pane-1': photos }, activeTabId: 'tab-1' }, 1)
+
+    expect((await loadSession())?.panes['pane-1']?.viewMode).toBe('photos')
   })
 
   it('keeps only one session row', async () => {

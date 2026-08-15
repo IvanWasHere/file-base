@@ -6,7 +6,14 @@ import { bridge } from '@/services/bridge'
 import type { FileItem } from '@/types/file'
 import { describeFsError, isFsError } from '@/types/errors'
 import { formatSize } from '@/utils/format'
-import { IMAGE_CAP, PDF_CAP, TEXT_CAP, imageMimeFor, previewKindFor } from './previewKind'
+import {
+  IMAGE_CAP,
+  PDF_CAP,
+  TEXT_CAP,
+  imageMimeFor,
+  previewKey,
+  previewKindFor,
+} from './previewKind'
 
 /**
  * The content half of the preview panel (PLAN.md M10).
@@ -19,9 +26,6 @@ import { IMAGE_CAP, PDF_CAP, TEXT_CAP, imageMimeFor, previewKindFor } from './pr
  * truncated (a partial log is still readable), images and PDFs are refused
  * (half an image is a broken image, not a preview).
  */
-
-const previewKey = (path: string, kind: string, mtime: number) =>
-  ['preview', kind, path, mtime] as const
 
 function Frame({ children }: { children: React.ReactNode }) {
   return (

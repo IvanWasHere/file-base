@@ -41,6 +41,7 @@ export type MenuCommandId =
   | 'view.largeIcons'
   | 'view.mediumIcons'
   | 'view.smallIcons'
+  | 'view.photos'
   | 'view.splitSingle'
   | 'view.splitTwo'
   | 'view.splitThree'
@@ -125,6 +126,7 @@ export const APP_MENUS: MenuDefinition[] = [
       { id: 'view.largeIcons', label: 'as Large Icons', checkable: true },
       { id: 'view.mediumIcons', label: 'as Medium Icons', checkable: true },
       { id: 'view.smallIcons', label: 'as Small Icons', checkable: true },
+      { id: 'view.photos', label: 'as Photos', checkable: true },
       { separator: true },
       { id: 'view.splitSingle', label: 'Single Pane', checkable: true },
       { id: 'view.splitTwo', label: 'Two Panes', checkable: true },

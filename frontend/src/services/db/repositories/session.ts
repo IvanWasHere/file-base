@@ -7,6 +7,7 @@
  * schema to the shape of the workspace store.
  */
 
+import { isViewMode } from '@/constants/viewModes'
 import { bridge } from '@/services/bridge'
 import { DEFAULT_SORT } from '@/services/filesystem/sort'
 import type { Pane, SplitMode, Tab } from '@/types/workspace'
@@ -99,12 +100,11 @@ function parsePane(id: string, raw: unknown): Pane | null {
     path: record.path,
     history: history.length > 0 ? history : [record.path],
     historyIndex,
-    viewMode:
-      record.viewMode === 'large-icons' ||
-      record.viewMode === 'medium-icons' ||
-      record.viewMode === 'small-icons'
-        ? record.viewMode
-        : 'details',
+    // Through the shared guard rather than a chain written out here: this was
+    // the second of the two places a new view mode has to be taught about, and
+    // the one that would have dropped a pane restored into Photos back to
+    // Details without saying anything (PLAN.md §M13 decision 9).
+    viewMode: isViewMode(record.viewMode) ? record.viewMode : 'details',
     sort: parseSort(record.sort),
   }
 }
