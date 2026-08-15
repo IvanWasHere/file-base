@@ -17,21 +17,21 @@
   <tr>
     <td width="50%">
       <img src="docs/screenshots/screen1.png" alt="Details view with the sidebar and preview panel">
-      <p align="center"><b>🗂️ Browse</b><br>Tabs, places, and a live preview panel.</p>
+      <p align="center"><b>🗂️ Browse</b><br>Tabs, places, photo view and a live preview panel.</p>
     </td>
     <td width="50%">
       <img src="docs/screenshots/screen2.png" alt="Four panes in a 2 × 2 grid, each in a different folder">
-      <p align="center"><b>🪟 Split</b><br>Nine layouts, up to four folders at once.</p>
+            <p align="center"><b>🗜️ Archive</b><br>Open twenty-odd formats, create eight.</p>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/screen3.png" alt="Photos view with the stage image and filmstrip">
-      <p align="center"><b>🖼️ Look</b><br>A photo browser built into the explorer.</p>
+      <img src="docs/screenshots/screen3.png" alt="Paste a published checksum and it tells you which algorithm it is and whether it matches">
+     <p align="center"><b>🔐 Checksums</b><br>Paste a published checksum and it tells you which algorithm it is and whether it matches.</p>
     </td>
     <td width="50%">
-      <img src="docs/screenshots/screen4.png" alt="The compress dialog with format, splitting and password options">
-      <p align="center"><b>🗜️ Archive</b><br>Open twenty-odd formats, create eight.</p>
+      <img src="docs/screenshots/screen4.png" alt="Define and use templates for new files.<">
+      <p align="center"><b>💾 New File Templates</b><br>Define and use templates for new files.</p>
     </td>
   </tr>
 </table>
