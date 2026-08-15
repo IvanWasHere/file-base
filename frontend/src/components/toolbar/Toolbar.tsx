@@ -7,6 +7,7 @@ import {
   Eye,
   FolderPlus,
   Grid2x2,
+  Hash,
   RefreshCw,
   Search,
   Square,
@@ -17,6 +18,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Breadcrumb } from './Breadcrumb'
 import { ViewMenu } from './ViewMenu'
 import { useFileOperations } from '@/hooks/useFileOperations'
+import { useMenuCommands } from '@/hooks/useMenuCommands'
 import { useSearchStore } from '@/stores/searchStore'
 import {
   canGoBack,
@@ -94,6 +96,10 @@ export function Toolbar() {
   const { isPinned, pin, unpin } = useFavorites()
   const pinned = pane ? isPinned(pane.path) : false
   const operations = useFileOperations()
+  // Through the command registry rather than the store directly: a toolbar
+  // button is a fourth route to a command, never a fourth implementation of one
+  // — which is also where its enablement rule already lives.
+  const commands = useMenuCommands()
   const openSearch = useSearchStore((state) => state.open)
   const closeSearch = useSearchStore((state) => state.close)
   const searchOpen = useSearchStore((state) => state.byPane[pane?.id ?? '']?.open ?? false)
@@ -139,6 +145,12 @@ export function Toolbar() {
         icon={Search}
         active={searchOpen}
         onClick={() => (searchOpen ? closeSearch(pane.id) : openSearch(pane.id))}
+      />
+      <ToolbarButton
+        label="Calculate Hashes"
+        icon={Hash}
+        disabled={!commands.isEnabled('file.calculateHashes')}
+        onClick={() => commands.run('file.calculateHashes')}
       />
 
       <Breadcrumb path={pane.path} onNavigate={(path) => navigate(pane.id, path)} />

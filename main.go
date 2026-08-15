@@ -7,6 +7,7 @@ import (
 	"file-base/backend/appmenu"
 	"file-base/backend/db"
 	"file-base/backend/filesystem"
+	"file-base/backend/hashing"
 	"file-base/backend/search"
 	"file-base/backend/shell"
 	"file-base/backend/thumbs"
@@ -32,6 +33,9 @@ func main() {
 
 	finder := search.New()
 	defer search.Stop(finder)
+
+	hasher := hashing.New()
+	defer hashing.Stop(hasher)
 
 	err := wails.Run(&options.App{
 		Title:     "Files",
@@ -89,6 +93,8 @@ func main() {
 			// Search only needs the context to stream results back; there is
 			// nothing to fail.
 			search.Start(finder, ctx)
+			// Same for hashing: digests, progress and completion are all events.
+			hashing.Start(hasher, ctx)
 
 			// Files dragged in from Finder. The coordinates matter: the drop
 			// happens in the native layer, above the webview, so the frontend
@@ -110,6 +116,7 @@ func main() {
 			database,
 			watch,
 			finder,
+			hasher,
 			thumbs.New(),
 		},
 	})

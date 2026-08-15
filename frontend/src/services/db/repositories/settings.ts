@@ -6,6 +6,11 @@
  */
 
 import { bridge } from '@/services/bridge'
+import {
+  DEFAULT_ALGORITHM,
+  isHashAlgorithm,
+  type HashAlgorithm,
+} from '@/constants/hashAlgorithms'
 
 export interface AppSettings {
   showHiddenFiles: boolean
@@ -14,6 +19,7 @@ export interface AppSettings {
   confirmBeforeDelete: boolean
   sidebarOpen: boolean
   previewOpen: boolean
+  hashAlgorithm: HashAlgorithm
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -23,6 +29,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   confirmBeforeDelete: true,
   sidebarOpen: true,
   previewOpen: false,
+  hashAlgorithm: DEFAULT_ALGORITHM,
 }
 
 export async function loadSettings(): Promise<AppSettings> {
@@ -41,6 +48,12 @@ export async function loadSettings(): Promise<AppSettings> {
       // A corrupt value falls back to its default rather than failing startup.
     }
   }
+
+  // The enum is validated on the way out, the way M13 learned a persisted view
+  // mode has to be: a database written by a later build can name an algorithm
+  // this one has never heard of, and the backend rejects an unknown one
+  // outright — so the modal would open on a job that can never start.
+  if (!isHashAlgorithm(stored.hashAlgorithm)) delete stored.hashAlgorithm
 
   return { ...DEFAULT_SETTINGS, ...stored }
 }

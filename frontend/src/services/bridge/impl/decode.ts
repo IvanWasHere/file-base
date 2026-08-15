@@ -21,6 +21,7 @@ import type {
   SearchBatch,
   SearchDone,
 } from '@/types/file'
+import type { HashDone, HashProgress, HashResult } from '@/types/hashing'
 import type { FsErrorCode } from '@/types/errors'
 import { FsError } from '@/types/errors'
 import type { ExternalDrop } from '../types'
@@ -167,6 +168,63 @@ export function toSearchDone(payload: unknown): SearchDone | null {
     truncated: wire.truncated === true,
     cancelled: wire.cancelled === true,
     error: typeof wire.error === 'string' ? wire.error : '',
+  }
+}
+
+/** Must match backend/hashing. */
+export const hashResultEvent = 'hash:result'
+export const hashProgressEvent = 'hash:progress'
+export const hashDoneEvent = 'hash:done'
+
+/**
+ * Validates one file's digest.
+ *
+ * A failed row carries the same `fs-error:` envelope a rejected call would, so
+ * it decodes through `toFsError` and reaches the UI as a typed error rather than
+ * as Go's prose — which is the whole point of M14 decision 7: permission denied
+ * on one file must be *that* failure on *that* row, not a dead batch.
+ */
+export function toHashResult(payload: unknown): HashResult | null {
+  if (typeof payload !== 'object' || payload === null) return null
+  const wire = payload as Record<string, unknown>
+  if (typeof wire.id !== 'string' || !wire.id) return null
+  if (typeof wire.path !== 'string' || !wire.path) return null
+
+  const raw = typeof wire.error === 'string' ? wire.error : ''
+  return {
+    id: wire.id,
+    path: wire.path,
+    digest: typeof wire.digest === 'string' ? wire.digest : '',
+    bytes: numberOr(wire.bytes, 0),
+    // `exactOptionalPropertyTypes` forbids an explicit undefined here.
+    ...(raw ? { error: toFsError(raw) } : {}),
+  }
+}
+
+export function toHashProgress(payload: unknown): HashProgress | null {
+  if (typeof payload !== 'object' || payload === null) return null
+  const wire = payload as Record<string, unknown>
+  if (typeof wire.id !== 'string' || !wire.id) return null
+  if (typeof wire.path !== 'string' || !wire.path) return null
+
+  return {
+    id: wire.id,
+    path: wire.path,
+    bytesRead: numberOr(wire.bytesRead, 0),
+    total: numberOr(wire.total, 0),
+  }
+}
+
+export function toHashDone(payload: unknown): HashDone | null {
+  if (typeof payload !== 'object' || payload === null) return null
+  const wire = payload as Record<string, unknown>
+  if (typeof wire.id !== 'string' || !wire.id) return null
+
+  return {
+    id: wire.id,
+    completed: numberOr(wire.completed, 0),
+    failed: numberOr(wire.failed, 0),
+    cancelled: wire.cancelled === true,
   }
 }
 

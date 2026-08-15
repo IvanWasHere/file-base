@@ -26,6 +26,7 @@ import type {
   TrashedItem,
   Volume,
 } from '@/types/file'
+import type { HashDone, HashProgress, HashRequest, HashResult } from '@/types/hashing'
 
 export interface FilesystemApi {
   readDirectory(path: string, options?: Partial<ReadDirectoryOptions>): Promise<FileItem[]>
@@ -154,6 +155,29 @@ export interface ThumbsApi {
   generate(path: string, size: number): Promise<string>
 }
 
+export interface HashHandlers {
+  onResult: (result: HashResult) => void
+  onProgress: (progress: HashProgress) => void
+  onDone: (done: HashDone) => void
+}
+
+/**
+ * Checksums (M14), shaped like `SearchApi` for the same reasons: the work is
+ * unbounded, the answers should appear as they land, and closing the window has
+ * to stop it rather than leave it reading a disk image nobody is waiting for.
+ *
+ * Digests cross as hex strings. A Go []byte marshals to a JSON array of numbers,
+ * which M10 learned the hard way, and hex is the form a published checksum is
+ * written in anyway.
+ */
+export interface HashApi {
+  /** Starts a job and resolves to its id; digests arrive on the subscription. */
+  hash(request: HashRequest): Promise<string>
+  cancel(id: string): Promise<void>
+  /** Returns an unsubscribe function. */
+  subscribe(handlers: HashHandlers): () => void
+}
+
 export interface Bridge {
   fs: FilesystemApi
   search: SearchApi
@@ -163,4 +187,5 @@ export interface Bridge {
   dialogs: DialogsApi
   db: DatabaseApi
   thumbs: ThumbsApi
+  hashing: HashApi
 }

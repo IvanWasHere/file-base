@@ -8,6 +8,7 @@
 
 import { create } from 'zustand'
 import type { ContextKind } from '@/constants/contextMenus'
+import { DEFAULT_ALGORITHM, type HashAlgorithm } from '@/constants/hashAlgorithms'
 import type { ConflictPolicy } from '@/types/file'
 
 export interface ConfirmRequest {
@@ -63,11 +64,30 @@ export interface ContextMenuRequest {
   y: number
 }
 
+/**
+ * The open hash modal, and the paths it was opened on (PLAN.md M14).
+ *
+ * A field of its own rather than a `DialogRequest`: `dialog` is a one-shot
+ * question with a promise waiting on the answer, and this is a long-lived view
+ * with internal state that resolves nothing. Routing it through `askConfirm`'s
+ * machinery would mean a dialog settling a promise nobody awaited.
+ *
+ * The paths are the selection as it was when the modal opened — folders and all.
+ * Filtering them is the modal's job, because deciding what is a folder means
+ * stat'ing them, and it reports how many it dropped.
+ */
+export interface HashJob {
+  paths: string[]
+}
+
 interface UiState {
   previewOpen: boolean
   sidebarOpen: boolean
   showHiddenFiles: boolean
   dialog: DialogRequest | null
+  hashJob: HashJob | null
+  /** Persisted: whoever verifies SHA-256 downloads verifies SHA-256 downloads. */
+  hashAlgorithm: HashAlgorithm
   renaming: RenameTarget | null
   contextMenu: ContextMenuRequest | null
 
@@ -75,6 +95,10 @@ interface UiState {
   setPreviewOpen: (open: boolean) => void
   toggleSidebar: () => void
   toggleHiddenFiles: () => void
+
+  openHashes: (paths: string[]) => void
+  closeHashes: () => void
+  setHashAlgorithm: (algorithm: HashAlgorithm) => void
 
   beginRename: (paneId: string, path: string) => void
   endRename: () => void
@@ -94,6 +118,8 @@ export const useUiStore = create<UiState>()((set) => ({
   sidebarOpen: true,
   showHiddenFiles: false,
   dialog: null,
+  hashJob: null,
+  hashAlgorithm: DEFAULT_ALGORITHM,
   renaming: null,
   contextMenu: null,
 
@@ -101,6 +127,11 @@ export const useUiStore = create<UiState>()((set) => ({
   setPreviewOpen: (open) => set({ previewOpen: open }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   toggleHiddenFiles: () => set((state) => ({ showHiddenFiles: !state.showHiddenFiles })),
+
+  // Opening with nothing to hash would be a modal that can only be closed.
+  openHashes: (paths) => set(paths.length > 0 ? { hashJob: { paths }, renaming: null } : {}),
+  closeHashes: () => set({ hashJob: null }),
+  setHashAlgorithm: (algorithm) => set({ hashAlgorithm: algorithm }),
 
   beginRename: (paneId, path) => set({ renaming: { paneId, path } }),
   endRename: () => set({ renaming: null }),

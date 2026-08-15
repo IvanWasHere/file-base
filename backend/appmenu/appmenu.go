@@ -79,6 +79,8 @@ var sections = []section{
 			{ID: "file.moveToTrash", Label: "Move to Trash"},
 			{ID: "file.delete", Label: "Delete Immediately…"},
 			separator(),
+			{ID: "file.calculateHashes", Label: "Calculate Hashes…"},
+			separator(),
 			{ID: "file.revealInFinder", Label: "Reveal in Finder"},
 			{ID: "file.copyPath", Label: "Copy Path"},
 			separator(),

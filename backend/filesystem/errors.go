@@ -54,6 +54,17 @@ func wrap(path string, err error) error {
 	return errors.New(errorPrefix + string(encoded))
 }
 
+// Wrap classifies an OS error and encodes it for the bridge.
+//
+// Exported for the sibling backend packages that touch the filesystem without
+// going through FS — backend/hashing opens files directly, and a permission
+// denial there has to reach the UI as `permission-denied`, not as prose. The
+// alternative was a third copy of classify(), which is exactly how the three
+// would start disagreeing about what an EACCES means.
+func Wrap(path string, err error) error {
+	return wrap(path, err)
+}
+
 func newError(code, path, message string) error {
 	encoded, err := json.Marshal(errorPayload{Code: code, Path: path, Message: message})
 	if err != nil {

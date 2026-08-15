@@ -196,6 +196,25 @@ export namespace filesystem {
 
 }
 
+export namespace hashing {
+	
+	export class Request {
+	    paths: string[];
+	    algorithm: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Request(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.paths = source["paths"];
+	        this.algorithm = source["algorithm"];
+	    }
+	}
+
+}
+
 export namespace search {
 	
 	export class Criteria {

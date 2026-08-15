@@ -24,6 +24,7 @@ export type MenuCommandId =
   | 'file.duplicate'
   | 'file.moveToTrash'
   | 'file.delete'
+  | 'file.calculateHashes'
   | 'file.revealInFinder'
   | 'file.copyPath'
   | 'file.addToFavorites'
@@ -94,6 +95,8 @@ export const APP_MENUS: MenuDefinition[] = [
       { separator: true },
       { id: 'file.moveToTrash', label: 'Move to Trash' },
       { id: 'file.delete', label: 'Delete Immediately…' },
+      { separator: true },
+      { id: 'file.calculateHashes', label: 'Calculate Hashes…' },
       { separator: true },
       { id: 'file.revealInFinder', label: 'Reveal in Finder' },
       { id: 'file.copyPath', label: 'Copy Path' },

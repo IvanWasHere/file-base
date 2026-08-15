@@ -18,6 +18,8 @@ export const fsKeys = {
   /** Matches every variant of a directory, whatever the hidden-files setting. */
   directoryRoot: (path: string) => [...fsKeys.all, 'dir', path] as const,
   info: (path: string) => [...fsKeys.all, 'info', path] as const,
+  /** A batch stat of an arbitrary set — the selection, in M14's case. */
+  infos: (paths: readonly string[]) => [...fsKeys.all, 'infos', [...paths].sort()] as const,
   volumes: () => [...fsKeys.all, 'volumes'] as const,
   standardPaths: () => [...fsKeys.all, 'standardPaths'] as const,
 }
@@ -35,6 +37,24 @@ export function fileInfoQuery(path: string) {
     queryKey: fsKeys.info(path),
     queryFn: () => bridge.fs.readFileInfo(path),
     enabled: path.length > 0,
+  })
+}
+
+/**
+ * Describes many paths in one call. Paths that no longer exist are omitted,
+ * which is how a caller learns what went away while it was not looking.
+ *
+ * `staleTime: 0` on purpose: a checksum is about the bytes on disk right now,
+ * and a cached size or mtime would key the digest cache to a file that has
+ * since changed.
+ */
+export function fileInfosQuery(paths: readonly string[]) {
+  return queryOptions<FileItem[]>({
+    queryKey: fsKeys.infos(paths),
+    queryFn: () => bridge.fs.readFileInfos([...paths]),
+    enabled: paths.length > 0,
+    staleTime: 0,
+    gcTime: 0,
   })
 }
 

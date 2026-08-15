@@ -186,6 +186,13 @@ export function useMenuCommands(): MenuCommandState {
       case 'file.duplicate':
         void operations.duplicate(targets)
         return
+      // The whole selection goes across, folders included. Deciding what is a
+      // folder means stat'ing it, and the modal has to do that anyway for the
+      // names and sizes it shows — so it drops them there and reports how many
+      // (PLAN.md M14 decision 8).
+      case 'file.calculateHashes':
+        ui.openHashes(targets)
+        return
       case 'file.moveToTrash':
         void operations.moveToTrash(targets)
         return
@@ -304,6 +311,12 @@ export function useMenuCommands(): MenuCommandState {
       case 'file.delete':
       case 'file.open':
         return selected.size > 0
+      // Enabled when the selection could hold a file. An item the pane's cache
+      // cannot classify counts as one: the alternative is a dead button
+      // wherever the selection came from somewhere the cache does not cover,
+      // and the modal reports an empty result honestly.
+      case 'file.calculateHashes':
+        return targets.some((path) => cachedItem(path)?.isDirectory !== true)
       // Only a folder can be opened in a tab, and only a folder can be pinned.
       case 'file.openInNewTab':
         return targets.some((path) => cachedItem(path)?.isDirectory === true)

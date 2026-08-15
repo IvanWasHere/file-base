@@ -16,11 +16,17 @@ import type { Bridge } from '../types'
 import {
   fileDropEvent,
   guard,
+  hashDoneEvent,
+  hashProgressEvent,
+  hashResultEvent,
   menuCommandEvent,
   searchBatchEvent,
   searchDoneEvent,
   toFileItem,
   toFileSystemEvent,
+  toHashDone,
+  toHashProgress,
+  toHashResult,
   toOperationResult,
   toExternalDrop,
   toSearchBatch,
@@ -45,6 +51,9 @@ import {
   Trash,
 } from '../../../../wailsjs/go/filesystem/FS'
 import { Cancel, Find } from '../../../../wailsjs/go/search/Search'
+// Aliased: both packages bind a `Cancel`, and importing them under one name
+// would silently give whichever came last.
+import { Cancel as CancelHash, Hash } from '../../../../wailsjs/go/hashing/Hashing'
 import { Generate } from '../../../../wailsjs/go/thumbs/Thumbs'
 import { OpenFile, OpenWith, RevealInFinder } from '../../../../wailsjs/go/shell/Shell'
 import { Exec, Query, Tx } from '../../../../wailsjs/go/db/DB'
@@ -164,5 +173,31 @@ export const bridge: Bridge = {
   },
   thumbs: {
     generate: (path, size) => guard(() => Generate(path, size)),
+  },
+  hashing: {
+    hash: (request) => guard(() => Hash(request)),
+    cancel: (id) => guard(() => CancelHash(id)),
+    // All three streams are subscribed and torn down together, as in search: a
+    // completion listener that outlived its result listener would report a job
+    // finishing with digests nobody collected.
+    subscribe: (handlers) => {
+      const offResult = EventsOn(hashResultEvent, (payload: unknown) => {
+        const result = toHashResult(payload)
+        if (result) handlers.onResult(result)
+      })
+      const offProgress = EventsOn(hashProgressEvent, (payload: unknown) => {
+        const progress = toHashProgress(payload)
+        if (progress) handlers.onProgress(progress)
+      })
+      const offDone = EventsOn(hashDoneEvent, (payload: unknown) => {
+        const done = toHashDone(payload)
+        if (done) handlers.onDone(done)
+      })
+      return () => {
+        offResult()
+        offProgress()
+        offDone()
+      }
+    },
   },
 }

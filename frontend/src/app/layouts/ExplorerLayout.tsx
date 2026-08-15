@@ -7,6 +7,7 @@ import { Sidebar } from '@/components/sidebar/Sidebar'
 import { StatusBar } from '@/components/common/StatusBar'
 import { Toaster } from '@/components/common/Toaster'
 import { DialogHost } from '@/components/dialogs/DialogHost'
+import { HashModal } from '@/features/hashing/HashModal'
 import { ContextMenuHost } from '@/components/menus/ContextMenuHost'
 import { MenuBar } from '@/components/toolbar/MenuBar'
 import { TabBar } from '@/components/toolbar/TabBar'
@@ -118,6 +119,9 @@ export function ExplorerLayout() {
 
       <Toaster />
       <DialogHost />
+      {/* Above the dialog host, so a confirmation raised from behind it — a
+          delete started before the modal opened — is still readable. */}
+      <HashModal />
       <ContextMenuHost />
     </div>
   )

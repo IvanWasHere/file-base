@@ -400,7 +400,7 @@ Notes from the build:
 
 Verified in the running app against real files: a folder of six images plus a text file and a subfolder opening on the first photo with the other two filtered out; the nav buttons stepping through all seven images with Previous absent on the first and Next absent on the last; the preview panel and the status bar's "1 selected" both following the active photo; a text file named `.png` degrading to its error state rather than a broken frame; "No images in this folder" in a folder full of documents; switching Photos → Details → Photos keeping the active photo; and a relaunch restoring the pane into Photos view. Layout measured in the running app: the pane filling its 559px slot, the strip at 30% above its floor and pinned to 150px below it, always flush to the bottom, thumbs never under 50px, and the stage image centred on both axes at three different aspect ratios.
 
-### M14 — File hashes
+### M14 — File hashes ✅ complete
 
 A `#` button in the toolbar opens a modal that calculates hashes for the selected
 files. Algorithms down the left side, one row per file on the right, digest
@@ -515,13 +515,112 @@ with both implementations, `stores/uiStore.ts` (`hashJob`), `constants/menus.ts`
 `constants/contextMenus.ts`, `constants/shortcuts.ts`, `backend/appmenu/appmenu.go`,
 `components/toolbar/Toolbar.tsx` and `main.go` (bind the struct).
 
+Also touched, none of it foreseen: `types/hashing.ts` (the wire model — it is a
+domain of its own, and `types/file.ts` is the *filesystem* data model);
+`backend/filesystem/errors.go` (exporting `Wrap`, see the notes below);
+`services/filesystem/queries.ts` (`fileInfosQuery`, so the selection stat goes
+through React Query like every other filesystem read); `db/repositories/settings.ts`
+and `db/persistence.ts` (`hashAlgorithm`, validated on the way out);
+`hooks/useKeyboard.ts` (the modal joins `dialog` and `contextMenu` in owning the
+keyboard).
+
 **Done when:** selecting several files and clicking `#` opens the modal with a
 row per file, each digest appearing as its file finishes rather than all at the
 end; the sidebar switches algorithm and recomputes; two identical files are
 badged as matching; pasting a published checksum highlights its row; a
 multi-gigabyte file shows a moving byte progress bar and stops when the modal is
 closed; an unreadable file shows its error on its own row while the rest
-complete; and the Go test vectors pass for all seven algorithms.
+complete; and the Go test vectors pass for all seven algorithms. ✅
+
+Notes from the build:
+
+- **All fifteen decisions held**, as M13's did. Two grew a consequence worth
+  recording rather than changing: decision 3's cache turned out to need the
+  *size and mtime* in its key as well as the path, or a file edited while the
+  modal is open answers with the digest of what it used to be; and decision 8's
+  "folders are dropped" needed a second line for items that were *gone* by the
+  time the modal asked, which is a different disappearance with the same
+  symptom.
+- **The published vectors were computed by `shasum`, `md5(1)` and zlib, not by
+  Go.** A table of expected digests generated with the implementation under test
+  is a test that cannot fail. The million-byte input earns its place separately:
+  it is the only case that crosses the 256KB read buffer, several times, so a
+  streaming bug that drops or double-counts a buffer shows up there and nowhere
+  else.
+- **`classify()` was exported rather than copied.** `backend/hashing` opens
+  files directly, and a permission denial there has to reach the UI as
+  `permission-denied` rather than as prose. `backend/search` and `backend/thumbs`
+  each carry their own small error encoder because their failures are their own
+  judgement; a real errno is not, so `filesystem.Wrap` is now exported and this
+  package uses it. A third copy of `classify` is how three packages start
+  disagreeing about what EACCES means.
+- **A second drift test, on the same principle as M11's.**
+  `TestAlgorithmsMatchFrontend` reads `constants/hashAlgorithms.ts` and fails if
+  either side names an algorithm the other does not have — an algorithm offered
+  in the sidebar that Go cannot compute would be a row failing for a reason
+  nobody can act on. It has to be scoped to the `HashAlgorithm` union: run over
+  the whole file it also matches `AlgorithmGroup`'s members and reports "secure"
+  as a missing algorithm. It caught the half-wired state twice during the build,
+  as did M11's when `file.calculateHashes` reached the native menu first.
+- **The state is derived during render, not assigned from an effect.** The first
+  shape of `useHashes` reset four pieces of state inside an effect and tripped
+  `react-hooks/set-state-in-effect` — which was right: that is the pattern M10's
+  thumbnail bug came from, a frame showing the *previous* answer under the new
+  label. It is now one `Run` object rebuilt when its key changes, and the
+  selection stat moved to React Query, where a filesystem read belongs anyway.
+- **The digest is read in tests by matching an element whose *whole* text is
+  hex.** Scanning the row's text instead finds "df" — the last two characters of
+  `Resume.pdf` — glued to the front of the digest, and five assertions failed
+  identically for a reason that had nothing to do with hashing.
+- **Row height is one decision per algorithm, not a measurement per row.** Every
+  row in a run shows the same algorithm's digest, so the height follows from the
+  digest length: past ~88 hex characters it wraps to a second line, which is
+  SHA-384 and SHA-512. `measureElement` would be the general answer and is the
+  wrong one here — jsdom reports every element as the full viewport height, so
+  it would render exactly one row in every test.
+- **Cancelling before the id exists had to work.** `startHashJob` returns its
+  cancel function synchronously, and the modal can be closed before the promise
+  carrying the job id has resolved — at which point the job exists in Go and
+  nothing has been told to stop it. The cancel is deferred into the `then`
+  instead. Same family as M8's subscribe-before-you-ask race, which is also
+  handled here: the mock delivers its first result on a microtask, before the id
+  is known, deliberately.
+- **The mock says so in the console rather than in the digest.** Decision 15's
+  "and says so" cannot be the digest string itself — the UI has to receive
+  something of the right shape or none of it is exercised — so the mock logs
+  once per session that its digests are synthetic. What it does preserve is the
+  property the UI is written against: a mock file is its size plus its content,
+  a copy keeps both, so duplicating a file really does badge the two as matching.
+- **Verified in the running app against real files**, with the fixtures' digests
+  computed independently by `shasum`, `md5(1)` and zlib beforehand: the empty
+  file, `"abc"`, and a million `a`s all matched the published vectors under
+  SHA-224, SHA-256, SHA-512, MD5 and CRC32 — including CRC32 of the empty file
+  rendering as `00000000` with its leading zeros intact, and a 2.5GB and a 16GB
+  file matching `shasum` exactly. Two files with identical content were badged
+  "2 files match"; a `chmod 000` file showed "macOS blocked access to this
+  location" on its own row while every other row completed; a folder in the
+  selection produced "1 folder skipped". **Copy All was pasted straight into
+  `shasum -a 256 -c`, which reported OK for every line.** The 16GB file's bar
+  climbed 268MB → 10.9GB against a 16.00GB total over about four seconds, and
+  closing the modal mid-read took the process from ~100% CPU to 0.1% within a
+  second and left it there. The chosen algorithm survived a quit and relaunch
+  through the `settings` table.
+- **Note for whoever verifies next.** M13's warning about synthetic keystrokes
+  is worse than it reads: they reach the document-level shortcut registry, and
+  *nothing else*. A text input cannot be typed into through the accessibility
+  API at all — focusing it and sending keystrokes leaves it empty, and setting
+  `AXValue` does not fire React's `onChange` — so the verify field is the one
+  surface here that could only be exercised in tests. What does work, and worked
+  well: `Cmd+A` and `Cmd+Alt+H` through the registry, `key code 18` for Cmd+1,
+  AX `click` on every button and radio, and reading the whole modal out of the
+  AX tree. JXA (`osascript -l JavaScript`) is markedly better than AppleScript
+  for this — `entire contents` on a webview subtree throws `-1700` partway
+  through, while a hand-written recursive walk in JXA is reliable. Two things
+  cost time: `drive.js` matched radio labels exactly, so `SHA-1` and `MD5` —
+  whose labels carry their security note — silently matched nothing; and a full
+  AX walk takes several seconds, which is long enough that a click and a
+  subsequent read must happen in the *same* `osascript` process to observe
+  anything mid-run.
 
 ### M12 — Polish, testing, packaging
 Animations and reduced-motion support; light theme; empty/loading/error states; perf pass on a 10k-file directory; Vitest coverage of services, stores and hooks against the mock bridge; Playwright e2e in the browser against the mock bridge; `wails build` + code-signing/notarization notes.

@@ -4,6 +4,7 @@ import { afterEach, beforeEach } from 'vitest'
 import { __resetMockFilesystem } from '@/services/bridge/impl/mock'
 import { resetMockDatabase } from '@/services/bridge/impl/mockDb'
 import { __resetFolderPrefsCache } from '@/services/db/persistence'
+import { __resetDigestCache } from '@/services/hashing/hashService'
 import { __resetWatchCounts } from '@/services/filesystem/watch'
 
 /**
@@ -50,6 +51,9 @@ beforeEach(() => {
   // Watch reference counts are module state too: a count left behind by an
   // unmounted pane would stop the next test's first acquire from watching.
   __resetWatchCounts()
+  // Digests are cached for the session, so without this a file hashed by one
+  // test would answer instantly in the next and never exercise the job at all.
+  __resetDigestCache()
 
   globalThis.ResizeObserver = ResizeObserverStub
 

@@ -61,6 +61,8 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'file.delete', accelerator: 'Shift+Delete' },
   { id: 'file.revealInFinder', accelerator: 'Cmd+Shift+R' },
   { id: 'file.copyPath', accelerator: 'Cmd+Alt+C' },
+  // Cmd+Shift+H is Go → Home, so the checksum modal takes the Option spelling.
+  { id: 'file.calculateHashes', accelerator: 'Cmd+Alt+H' },
 
   // Edit
   { id: 'edit.undo', accelerator: 'Cmd+Z' },

@@ -9,8 +9,10 @@
  * hierarchy onto real-looking absolute paths under /Users/dev.
  */
 
-import type { Bridge, ExternalDrop, SearchHandlers } from '../types'
+import type { Bridge, ExternalDrop, HashHandlers, SearchHandlers } from '../types'
 import { mockDb } from './mockDb'
+import { algorithmSpec } from '@/constants/hashAlgorithms'
+import type { HashResult } from '@/types/hashing'
 import type {
   ConflictPolicy,
   FileChangeKind,
@@ -180,6 +182,8 @@ export function __resetMockFilesystem(): void {
   watched.clear()
   searchHandlers.clear()
   cancelled.clear()
+  hashHandlers.clear()
+  hashCancelled.clear()
   dropHandlers.clear()
   menuHandlers.clear()
 }
@@ -455,6 +459,45 @@ export function __emitFileDrop(drop: ExternalDrop): void {
   for (const handler of dropHandlers) handler(drop)
 }
 
+const hashHandlers = new Set<HashHandlers>()
+const hashCancelled = new Set<string>()
+let hashCounter = 0
+let saidSoAboutDigests = false
+
+/**
+ * A stand-in digest, derived from what the mock knows a file's bytes to be.
+ *
+ * Web Crypto has no MD5, no SHA-224 and no CRC32, so a faithful mock would mean
+ * shipping a second hash implementation in TypeScript: a second thing to get
+ * wrong, and a standing invitation for something to use it for real. Digest
+ * *correctness* is a Go concern, pinned there by published test vectors for
+ * every algorithm (PLAN.md M14 decision 15).
+ *
+ * What this does preserve is the property the UI is written against: equal
+ * content produces an equal digest, so match-grouping and the verify field have
+ * something true to work with. A mock file is defined by its size and its
+ * content, and a copy keeps both — so duplicating a file and hashing both really
+ * does badge them as matching.
+ */
+function syntheticDigest(seed: string, length: number): string {
+  // FNV-1a for the seed, xorshift32 to expand it. Neither is a hash anybody
+  // should mistake for one, which is rather the point.
+  let state = 0x811c9dc5
+  for (let index = 0; index < seed.length; index += 1) {
+    state = Math.imul(state ^ seed.charCodeAt(index), 0x01000193) >>> 0
+  }
+  if (state === 0) state = 0x9e3779b9
+
+  let hex = ''
+  while (hex.length < length) {
+    state = (state ^ (state << 13)) >>> 0
+    state = (state ^ (state >>> 17)) >>> 0
+    state = (state ^ (state << 5)) >>> 0
+    hex += state.toString(16).padStart(8, '0')
+  }
+  return hex.slice(0, length)
+}
+
 const menuHandlers = new Set<(id: string) => void>()
 
 /**
@@ -644,6 +687,109 @@ export const bridge: Bridge = {
       const node = requireNode(path)
       if (node.isDirectory) throw new FsError('unknown', 'a folder has no thumbnail', path)
       return `data:image/png;base64,${TRANSPARENT_PIXEL}`
+    },
+  },
+  hashing: {
+    hash: async (request) => {
+      hashCounter += 1
+      const id = `mock-hash-${hashCounter}`
+      const { digestLength } = algorithmSpec(request.algorithm)
+
+      // Said once per session, plainly, because a synthetic digest that looks
+      // like a real one is exactly the kind of thing someone copies into a
+      // ticket. Nothing marks the string itself: the UI has to receive digests
+      // of the right shape or none of it is being exercised.
+      if (!saidSoAboutDigests) {
+        saidSoAboutDigests = true
+        console.info(
+          '[mock] hash digests are synthetic — derived from the mock filesystem, ' +
+            'not computed. Real digests come from backend/hashing.',
+        )
+      }
+
+      const deliver = (result: HashResult) => {
+        for (const handler of hashHandlers) handler.onResult(result)
+      }
+
+      // Deferred to a microtask per file, which means the first result can be
+      // delivered before the caller has the id — the same ordering the real
+      // Wails IPC has, and the race M8 was bitten by. The service subscribes
+      // first and buffers; delivering synchronously here would hide that.
+      void (async () => {
+        let completed = 0
+        let failed = 0
+
+        for (const path of request.paths) {
+          await Promise.resolve()
+
+          if (hashCancelled.has(id)) {
+            hashCancelled.delete(id)
+            for (const handler of hashHandlers) {
+              handler.onDone({ id, completed, failed, cancelled: true })
+            }
+            return
+          }
+
+          const node = nodes.get(normalize(path))
+          if (!node) {
+            failed += 1
+            deliver({
+              id,
+              path,
+              digest: '',
+              bytes: 0,
+              error: new FsError('not-found', `No such file or directory: ${path}`, path),
+            })
+            continue
+          }
+          if (node.isDirectory) {
+            failed += 1
+            deliver({
+              id,
+              path: node.path,
+              digest: '',
+              bytes: 0,
+              error: new FsError('unknown', 'a folder has no checksum', node.path),
+            })
+            continue
+          }
+
+          // One tick per file, so the progress path is exercised rather than
+          // going straight from queued to done.
+          for (const handler of hashHandlers) {
+            handler.onProgress({
+              id,
+              path: node.path,
+              bytesRead: Math.floor(node.size / 2),
+              total: node.size,
+            })
+          }
+
+          completed += 1
+          deliver({
+            id,
+            path: node.path,
+            digest: syntheticDigest(
+              `${request.algorithm} ${node.size} ${node.content ?? ''}`,
+              digestLength,
+            ),
+            bytes: node.size,
+          })
+        }
+
+        for (const handler of hashHandlers) {
+          handler.onDone({ id, completed, failed, cancelled: false })
+        }
+      })()
+
+      return id
+    },
+    cancel: async (id) => {
+      hashCancelled.add(id)
+    },
+    subscribe: (handlers) => {
+      hashHandlers.add(handlers)
+      return () => hashHandlers.delete(handlers)
     },
   },
 }

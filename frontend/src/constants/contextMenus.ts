@@ -21,13 +21,19 @@ export const CONTEXT_MENUS: Record<ContextKind, MenuCommandId[][]> = {
     ['file.open'],
     ['edit.cut', 'edit.copy', 'file.copyPath'],
     ['file.rename', 'file.duplicate'],
+    ['file.calculateHashes'],
     ['file.moveToTrash', 'file.delete'],
     ['file.revealInFinder'],
   ],
+  // Offered on a folder too, because a right-click inside a multi-selection
+  // acts on the whole selection (M11) — and a selection of forty files that
+  // happens to include one folder is exactly when this is reached for. The
+  // command drops the folders itself and says how many.
   folder: [
     ['file.open', 'file.openInNewTab'],
     ['edit.cut', 'edit.copy', 'file.copyPath'],
     ['file.rename', 'file.duplicate'],
+    ['file.calculateHashes'],
     ['file.addToFavorites', 'file.removeFromFavorites'],
     ['file.moveToTrash', 'file.delete'],
     ['file.revealInFinder'],
