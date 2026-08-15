@@ -84,7 +84,7 @@ describe('menu bar', () => {
 
     await user.click(screen.getByRole('menuitemcheckbox', { name: 'as Large Icons' }))
     // Scoped to the status bar — the toolbar's view button says this too.
-    await waitFor(() => expect(screen.getByText(/Single \/ Large Icons/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Single Pane \/ Large Icons/)).toBeInTheDocument())
 
     await user.click(screen.getByRole('menuitem', { name: 'View' }))
     expect(await screen.findByRole('menuitemcheckbox', { name: 'as Large Icons' })).toHaveAttribute(

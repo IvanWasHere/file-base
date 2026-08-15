@@ -11,6 +11,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ExplorerPane } from '@/features/explorer/ExplorerPane'
 import { createQueryClient } from '@/app/providers/queryClient'
+import { evenLayout } from '@/constants/splitModes'
 import { DEFAULT_SORT } from '@/services/filesystem/sort'
 import { useSelectionStore } from '@/stores/selectionStore'
 import { useUiStore } from '@/stores/uiStore'
@@ -38,7 +39,7 @@ function renderGrid(viewMode: ViewMode = 'large-icons', path = DOWNLOADS) {
 
   useWorkspaceStore.setState({
     tabs: [
-      { id: 'tab-1', paneIds: [PANE_ID], activePaneId: PANE_ID, splitMode: 1, paneSizes: [1] },
+      { id: 'tab-1', paneIds: [PANE_ID], activePaneId: PANE_ID, splitMode: 1, layout: evenLayout(1) },
     ],
     panes: { [PANE_ID]: pane },
     activeTabId: 'tab-1',

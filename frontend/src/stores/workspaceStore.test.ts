@@ -175,11 +175,36 @@ describe('splits', () => {
     }
   })
 
-  it('distributes sizes evenly and keeps them summing to 1', () => {
+  it('distributes sizes evenly and keeps each axis summing to 1', () => {
+    store().setSplitMode(activeTab().id, 3)
+    const { columns, rows } = activeTab().layout
+
+    expect(columns).toHaveLength(3)
+    expect(rows).toEqual([1])
+    expect(columns.reduce((sum, size) => sum + size, 0)).toBeCloseTo(1)
+  })
+
+  // The point of §M16: four panes are two rows of two, not four columns.
+  it('lays four panes out as a 2 × 2 grid', () => {
     store().setSplitMode(activeTab().id, 4)
-    const sizes = activeTab().paneSizes
-    expect(sizes).toHaveLength(4)
-    expect(sizes.reduce((sum, size) => sum + size, 0)).toBeCloseTo(1)
+    const tab = activeTab()
+
+    expect(tab.paneIds).toHaveLength(4)
+    expect(tab.layout.columns).toHaveLength(2)
+    expect(tab.layout.rows).toHaveLength(2)
+    expect(tab.layout.columns.reduce((sum, size) => sum + size, 0)).toBeCloseTo(1)
+    expect(tab.layout.rows.reduce((sum, size) => sum + size, 0)).toBeCloseTo(1)
+  })
+
+  // A layout dragged in one mode must not be carried into another, where its
+  // fractions would describe an arrangement that no longer exists.
+  it('resets the layout when the mode changes', () => {
+    const tabId = activeTab().id
+    store().setSplitMode(tabId, 2)
+    store().setLayout(tabId, { columns: [0.8, 0.2], rows: [1] })
+
+    store().setSplitMode(tabId, 4)
+    expect(activeTab().layout).toEqual({ columns: [0.5, 0.5], rows: [0.5, 0.5] })
   })
 
   it('removes panes and their state when collapsing', () => {

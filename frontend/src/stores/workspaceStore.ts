@@ -11,8 +11,9 @@
  */
 
 import { create } from 'zustand'
+import { evenLayout, paneCount } from '@/constants/splitModes'
 import { DEFAULT_SORT, type SortSpec } from '@/services/filesystem/sort'
-import type { Pane, SplitMode, Tab, ViewMode } from '@/types/workspace'
+import type { Pane, PaneLayout, SplitMode, Tab, ViewMode } from '@/types/workspace'
 import { dirname, normalize } from '@/utils/path'
 
 /** Monotonic ids. A counter rather than random so tests stay deterministic. */
@@ -49,11 +50,6 @@ function createPane(path: string): Pane {
   }
 }
 
-/** Equal fractions; used whenever the pane count changes. */
-function evenSizes(count: number): number[] {
-  return Array.from({ length: count }, () => 1 / count)
-}
-
 interface WorkspaceState {
   tabs: Tab[]
   panes: Record<string, Pane>
@@ -74,7 +70,7 @@ interface WorkspaceState {
 
   setActivePane: (tabId: string, paneId: string) => void
   setSplitMode: (tabId: string, mode: SplitMode) => void
-  setPaneSizes: (tabId: string, sizes: number[]) => void
+  setLayout: (tabId: string, layout: PaneLayout) => void
 
   navigate: (paneId: string, path: string) => void
   goBack: (paneId: string) => void
@@ -112,7 +108,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       paneIds: [pane.id],
       activePaneId: pane.id,
       splitMode: 1,
-      paneSizes: [1],
+      layout: evenLayout(1),
     }
     set((state) => ({
       tabs: [...state.tabs, tab],
@@ -168,22 +164,26 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     const tab = tabs.find((candidate) => candidate.id === tabId)
     if (!tab || tab.splitMode === mode) return
 
+    // How many panes the mode holds comes from its grid, not from the mode's
+    // own number. They agree today for all four; asking the grid is what keeps
+    // them agreeing when a 3 × 2 is added.
+    const wanted = paneCount(mode)
     const current = tab.paneIds.length
     const nextPanes = { ...panes }
     let paneIds = [...tab.paneIds]
 
-    if (mode > current) {
+    if (wanted > current) {
       // New panes open at the active pane's location, which is what makes
       // "split to compare" useful — you get two views of where you already are.
       const source = panes[tab.activePaneId]
-      for (let index = current; index < mode; index += 1) {
+      for (let index = current; index < wanted; index += 1) {
         const pane = createPane(source?.path ?? '/')
         nextPanes[pane.id] = pane
         paneIds.push(pane.id)
       }
     } else {
-      for (const paneId of paneIds.slice(mode)) delete nextPanes[paneId]
-      paneIds = paneIds.slice(0, mode)
+      for (const paneId of paneIds.slice(wanted)) delete nextPanes[paneId]
+      paneIds = paneIds.slice(0, wanted)
     }
 
     set({
@@ -194,7 +194,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
               ...candidate,
               splitMode: mode,
               paneIds,
-              paneSizes: evenSizes(paneIds.length),
+              // Sizes reset on every mode change. Restoring a 20/20/60 split
+              // someone set up for three columns, into two, is not obviously a
+              // kindness — and remembering one layout per mode is more state
+              // than the feature earns (§M16 decision 10).
+              layout: evenLayout(mode),
               activePaneId: paneIds.includes(candidate.activePaneId)
                 ? candidate.activePaneId
                 : (paneIds[0] ?? candidate.activePaneId),
@@ -204,9 +208,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     })
   },
 
-  setPaneSizes: (tabId, sizes) =>
+  setLayout: (tabId, layout) =>
     set((state) => ({
-      tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, paneSizes: sizes } : tab)),
+      tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, layout } : tab)),
     })),
 
   navigate: (paneId, path) =>

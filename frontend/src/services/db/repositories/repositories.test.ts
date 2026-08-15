@@ -235,7 +235,7 @@ describe('session', () => {
     paneIds: ['pane-1'],
     activePaneId: 'pane-1',
     splitMode: 1,
-    paneSizes: [1],
+    layout: { columns: [1], rows: [1] },
   }
 
   it('round-trips tabs, panes and history', async () => {
@@ -291,28 +291,102 @@ describe('session', () => {
     expect(await loadSession()).toBeNull()
   })
 
-  it('repairs pane sizes that do not match the pane count', async () => {
+  /** Writes one tab straight into the session row, bypassing `saveSession`. */
+  async function storeRawTab(tabRecord: Record<string, unknown>, paneIds: string[]) {
+    const panes = Object.fromEntries(paneIds.map((id) => [id, { ...pane, id }]))
     await bridge.db.exec('insert into sessions (id, payload, updated_at) values (1, ?, ?)', [
-      JSON.stringify({
-        tabs: [
-          {
-            id: 'tab-1',
-            paneIds: ['pane-1', 'pane-2'],
-            activePaneId: 'pane-1',
-            splitMode: 2,
-            paneSizes: [1], // one size for two panes
-          },
-        ],
-        panes: { 'pane-1': pane, 'pane-2': { ...pane, id: 'pane-2' } },
-        activeTabId: 'tab-1',
-      }),
+      JSON.stringify({ tabs: [tabRecord], panes, activeTabId: tabRecord.id }),
       0,
     ])
+    return (await loadSession())?.tabs[0]
+  }
 
-    const restored = await loadSession()
-    const sizes = restored?.tabs[0]?.paneSizes ?? []
-    expect(sizes).toHaveLength(2)
-    expect(sizes.reduce((sum, size) => sum + size, 0)).toBeCloseTo(1)
+  it('repairs a layout that does not match the pane count', async () => {
+    const restored = await storeRawTab(
+      {
+        id: 'tab-1',
+        paneIds: ['pane-1', 'pane-2'],
+        activePaneId: 'pane-1',
+        splitMode: 2,
+        layout: { columns: [1], rows: [1] }, // one column for two panes
+      },
+      ['pane-1', 'pane-2'],
+    )
+
+    expect(restored?.layout.columns).toHaveLength(2)
+    expect(restored?.layout.columns.reduce((sum, size) => sum + size, 0)).toBeCloseTo(1)
+  })
+
+  // §M16 changed the stored *shape*, not just a value. A tab written by the
+  // previous build carries `paneSizes` and no `layout`.
+  it('lifts a pre-M16 single-row tab onto the grid', async () => {
+    const restored = await storeRawTab(
+      {
+        id: 'tab-1',
+        paneIds: ['pane-1', 'pane-2'],
+        activePaneId: 'pane-1',
+        splitMode: 2,
+        paneSizes: [0.7, 0.3],
+      },
+      ['pane-1', 'pane-2'],
+    )
+
+    // The dragged proportions survive; they only ever described columns.
+    expect(restored?.layout).toEqual({ columns: [0.7, 0.3], rows: [1] })
+  })
+
+  // Four fractions along one axis cannot be turned into a 2 × 2 — they never
+  // meant anything on a second axis — so the grid starts even.
+  it('starts a pre-M16 four-column tab as an even grid', async () => {
+    const ids = ['pane-1', 'pane-2', 'pane-3', 'pane-4']
+    const restored = await storeRawTab(
+      {
+        id: 'tab-1',
+        paneIds: ids,
+        activePaneId: 'pane-1',
+        splitMode: 4,
+        paneSizes: [0.4, 0.2, 0.2, 0.2],
+      },
+      ids,
+    )
+
+    expect(restored?.splitMode).toBe(4)
+    expect(restored?.layout).toEqual({ columns: [0.5, 0.5], rows: [0.5, 0.5] })
+  })
+
+  it('round-trips a dragged 2 × 2 layout', async () => {
+    const ids = ['pane-1', 'pane-2', 'pane-3', 'pane-4']
+    const restored = await storeRawTab(
+      {
+        id: 'tab-1',
+        paneIds: ids,
+        activePaneId: 'pane-1',
+        splitMode: 4,
+        layout: { columns: [0.65, 0.35], rows: [0.3, 0.7] },
+      },
+      ids,
+    )
+
+    expect(restored?.layout).toEqual({ columns: [0.65, 0.35], rows: [0.3, 0.7] })
+  })
+
+  // A mode that outlives its panes would leave the grid with an empty cell, or
+  // a pane with no cell to sit in.
+  it('falls back to the mode the surviving panes fit', async () => {
+    const restored = await storeRawTab(
+      {
+        id: 'tab-1',
+        paneIds: ['pane-1', 'pane-2', 'missing-pane', 'also-missing'],
+        activePaneId: 'pane-1',
+        splitMode: 4,
+        layout: { columns: [0.5, 0.5], rows: [0.5, 0.5] },
+      },
+      ['pane-1', 'pane-2'],
+    )
+
+    expect(restored?.splitMode).toBe(2)
+    expect(restored?.paneIds).toEqual(['pane-1', 'pane-2'])
+    expect(restored?.layout).toEqual({ columns: [0.5, 0.5], rows: [1] })
   })
 
   it('clamps a history index past the end of the history', async () => {

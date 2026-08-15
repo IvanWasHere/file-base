@@ -7,18 +7,23 @@
  * schema to the shape of the workspace store.
  */
 
+import {
+  SPLIT_GRIDS,
+  evenLayout,
+  isSplitMode,
+  paneCount,
+  splitModeForPaneCount,
+} from '@/constants/splitModes'
 import { isViewMode } from '@/constants/viewModes'
 import { bridge } from '@/services/bridge'
 import { DEFAULT_SORT } from '@/services/filesystem/sort'
-import type { Pane, SplitMode, Tab } from '@/types/workspace'
+import type { Pane, PaneLayout, SplitMode, Tab } from '@/types/workspace'
 
 export interface SessionSnapshot {
   tabs: Tab[]
   panes: Record<string, Pane>
   activeTabId: string | null
 }
-
-const SPLIT_MODES: SplitMode[] = [1, 2, 3, 4]
 
 export async function saveSession(snapshot: SessionSnapshot, now: number): Promise<void> {
   await bridge.db.exec(
@@ -125,16 +130,72 @@ function parseSort(raw: unknown) {
   }
 }
 
+/** Positive numbers only, renormalised to sum to 1, or null if unusable. */
+function parseFractions(raw: unknown, expected: number): number[] | null {
+  if (!Array.isArray(raw)) return null
+  const values = raw.filter((size): size is number => typeof size === 'number' && size > 0)
+  if (values.length !== expected) return null
+
+  const total = values.reduce((sum, size) => sum + size, 0)
+  if (total <= 0) return null
+  return values.map((size) => size / total)
+}
+
+/**
+ * The layout, from either shape a stored tab can be in.
+ *
+ * §M16 replaced `paneSizes: number[]` — a flat list along one axis — with a
+ * grid, and a persisted *shape* change is harder than M13's persisted value
+ * change: there is no guard that can turn four column fractions into a 2 × 2,
+ * because the four numbers never meant anything on a second axis. So a
+ * single-row mode is lifted as-is and an old four-column tab starts even.
+ *
+ * The other direction needs no code here and is worth stating: an older build
+ * reading a tab written by this one finds no `paneSizes`, and its existing
+ * "sizes must match the pane count, or use even ones" fallback already handles
+ * that. A downgrade loses a dragged split, not the session.
+ */
+function parseLayout(record: Record<string, unknown>, mode: SplitMode): PaneLayout {
+  const grid = SPLIT_GRIDS[mode]
+
+  const stored = record.layout
+  if (typeof stored === 'object' && stored !== null) {
+    const layout = stored as Record<string, unknown>
+    const columns = parseFractions(layout.columns, grid.columns)
+    const rows = parseFractions(layout.rows, grid.rows)
+    if (columns && rows) return { columns, rows }
+  }
+
+  // The pre-§M16 shape. It only means anything where the grid is one row deep.
+  if (grid.rows === 1) {
+    const columns = parseFractions(record.paneSizes, grid.columns)
+    if (columns) return { columns, rows: [1] }
+  }
+
+  return evenLayout(mode)
+}
+
 function parseTab(raw: unknown, panes: Record<string, Pane>): Tab | null {
   if (typeof raw !== 'object' || raw === null) return null
   const record = raw as Record<string, unknown>
   if (typeof record.id !== 'string') return null
 
   // Drop pane ids with no surviving pane, or the layout would render gaps.
-  const paneIds = Array.isArray(record.paneIds)
+  const found = Array.isArray(record.paneIds)
     ? record.paneIds.filter((id): id is string => typeof id === 'string' && id in panes)
     : []
-  if (paneIds.length === 0) return null
+  if (found.length === 0) return null
+
+  // The mode and the pane count have to agree, or the grid renders an empty
+  // cell — or worse, a pane with no cell to sit in. A stored mode is only kept
+  // when it holds exactly the panes that survived; otherwise the count wins,
+  // because the panes are the thing with content in them.
+  const stored = isSplitMode(record.splitMode) ? record.splitMode : null
+  const splitMode =
+    stored !== null && paneCount(stored) === found.length
+      ? stored
+      : splitModeForPaneCount(Math.min(found.length, 4))
+  const paneIds = found.slice(0, paneCount(splitMode))
 
   const activePaneId =
     typeof record.activePaneId === 'string' && paneIds.includes(record.activePaneId)
@@ -142,19 +203,5 @@ function parseTab(raw: unknown, panes: Record<string, Pane>): Tab | null {
       : paneIds[0]
   if (!activePaneId) return null
 
-  const splitMode = SPLIT_MODES.includes(record.splitMode as SplitMode)
-    ? (record.splitMode as SplitMode)
-    : (Math.min(paneIds.length, 4) as SplitMode)
-
-  // Sizes must match the pane count and sum to 1, or flexGrow misbehaves.
-  const rawSizes = Array.isArray(record.paneSizes)
-    ? record.paneSizes.filter((size): size is number => typeof size === 'number' && size > 0)
-    : []
-  const total = rawSizes.reduce((sum, size) => sum + size, 0)
-  const paneSizes =
-    rawSizes.length === paneIds.length && total > 0
-      ? rawSizes.map((size) => size / total)
-      : paneIds.map(() => 1 / paneIds.length)
-
-  return { id: record.id, paneIds, activePaneId, splitMode, paneSizes }
+  return { id: record.id, paneIds, activePaneId, splitMode, layout: parseLayout(record, splitMode) }
 }

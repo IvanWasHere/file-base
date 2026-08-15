@@ -235,7 +235,9 @@ describe('dropping between panes', () => {
   it('moves a file from one pane into the other', async () => {
     const { user } = renderApp()
     await rowFor('Documents')
-    await user.click(screen.getByRole('button', { name: 'Two panes' }))
+    // The split control is a dropdown since §M16.
+    await user.click(screen.getByRole('button', { name: /^Split layout:/ }))
+    await user.click(await screen.findByRole('menuitemradio', { name: '2 Columns' }))
 
     const paneA = await screen.findByRole('region', { name: 'Pane A' })
     const paneB = await screen.findByRole('region', { name: 'Pane B' })

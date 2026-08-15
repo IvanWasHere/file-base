@@ -372,7 +372,9 @@ describe('live updates', () => {
   it('updates every pane showing the changed folder', async () => {
     const { user } = renderApp()
     await goToDocuments(user)
-    await user.click(screen.getByRole('button', { name: 'Two panes' }))
+    // The split control is a dropdown since §M16.
+    await user.click(screen.getByRole('button', { name: /^Split layout:/ }))
+    await user.click(await screen.findByRole('menuitemradio', { name: '2 Columns' }))
 
     // A new pane opens on the active pane's folder, so both are on Documents.
     const paneA = await screen.findByRole('region', { name: 'Pane A' })

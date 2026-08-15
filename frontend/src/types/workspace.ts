@@ -19,8 +19,30 @@ export type ViewMode = 'details' | 'large-icons' | 'medium-icons' | 'small-icons
  */
 export type IconViewMode = 'large-icons' | 'medium-icons' | 'small-icons'
 
-/** How many panes a tab shows side by side. */
+/**
+ * Which split layout a tab is in. The *shape* each one means — how many columns
+ * and rows — lives in `constants/splitModes.ts`, so this stays the name of the
+ * thing the user picked rather than a pane count that happens to match.
+ */
 export type SplitMode = 1 | 2 | 3 | 4
+
+/**
+ * How big each part of the split currently is.
+ *
+ * Fractions rather than pixels so a window resize redistributes space on its
+ * own — the mockup wrote fixed widths onto the DOM and did not survive one.
+ *
+ * Two axes rather than one fraction per pane, because a grid cannot be said in
+ * a flat list: 2 × 2 needs a column split *and* a row split, and the two rows
+ * share the column split so the dividers line up into a cross (§M16 decision 1).
+ * Panes fill the grid in reading order — `paneIds[row * columns.length + column]`.
+ */
+export interface PaneLayout {
+  /** One per column, summing to 1. */
+  columns: number[]
+  /** One per row, summing to 1. `[1]` for every single-row mode. */
+  rows: number[]
+}
 
 export interface Pane {
   id: string
@@ -37,9 +59,5 @@ export interface Tab {
   paneIds: string[]
   activePaneId: string
   splitMode: SplitMode
-  /**
-   * Fractional widths, one per pane, summing to 1. Fractions rather than pixels
-   * so a window resize redistributes space proportionally on its own.
-   */
-  paneSizes: number[]
+  layout: PaneLayout
 }

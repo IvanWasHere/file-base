@@ -24,6 +24,8 @@ function renderApp() {
   }
 }
 
+type User = ReturnType<typeof userEvent.setup>
+
 const rowFor = (name: string) => screen.findByRole('row', { name: new RegExp(`^${name}\\b`) })
 
 beforeEach(() => {
@@ -39,9 +41,9 @@ describe('chrome', () => {
 
     expect(await screen.findByRole('tablist', { name: 'Open tabs' })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Places' })).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Split layout' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Split layout:/ })).toBeInTheDocument()
     expect(await rowFor('Documents')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByText(/Single \/ Details/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Single Pane \/ Details/)).toBeInTheDocument())
   })
 
   it('starts at the home directory', async () => {
@@ -136,32 +138,66 @@ describe('tabs', () => {
 })
 
 describe('splits', () => {
+  /** The split control is a dropdown since §M16, not four buttons. */
+  async function chooseSplit(user: User, label: string) {
+    await user.click(screen.getByRole('button', { name: /^Split layout:/ }))
+    await user.click(await screen.findByRole('menuitemradio', { name: label }))
+  }
+
   it('creates panes and labels them', async () => {
     const { user } = renderApp()
     await rowFor('Documents')
 
-    await user.click(screen.getByRole('button', { name: 'Two panes' }))
+    await chooseSplit(user, '2 Columns')
 
     expect(await screen.findByRole('region', { name: 'Pane A' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Pane B' })).toBeInTheDocument()
-    expect(screen.getByRole('separator', { name: 'Resize pane 1' })).toBeInTheDocument()
+    expect(screen.getByRole('separator', { name: 'Resize columns' })).toBeInTheDocument()
   })
 
-  it('supports four panes with three dividers', async () => {
+  // The heart of §M16: four panes are two rows of two, so there is one column
+  // divider spanning both rows and one row divider — not three column dividers.
+  it('lays four panes out as a 2 × 2 grid', async () => {
     const { user } = renderApp()
     await rowFor('Documents')
 
-    await user.click(screen.getByRole('button', { name: 'Four panes' }))
+    await chooseSplit(user, '2 × 2 Grid')
 
-    await waitFor(() => expect(screen.getAllByRole('separator')).toHaveLength(3))
-    expect(screen.getByRole('region', { name: 'Pane D' })).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByText(/4-Way/)).toBeInTheDocument())
+    expect(await screen.findByRole('region', { name: 'Pane D' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByRole('separator')).toHaveLength(2))
+
+    const columnDivider = screen.getByRole('separator', { name: 'Resize columns' })
+    const rowDivider = screen.getByRole('separator', { name: 'Resize rows' })
+    expect(columnDivider).toHaveAttribute('aria-orientation', 'vertical')
+    expect(rowDivider).toHaveAttribute('aria-orientation', 'horizontal')
+
+    const layout = useWorkspaceStore.getState().tabs[0]?.layout
+    expect(layout?.columns).toHaveLength(2)
+    expect(layout?.rows).toHaveLength(2)
+
+    // Scoped to the status bar's "split / view" pair: the dropdown button now
+    // prints the same name, which is the single-source change working.
+    await waitFor(() => expect(screen.getByText(/2 × 2 Grid \/ Details/)).toBeInTheDocument())
+  })
+
+  // Three columns still means three columns; only the fourth mode changed.
+  it('keeps three columns in one row', async () => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+
+    await chooseSplit(user, '3 Columns')
+
+    await screen.findByRole('region', { name: 'Pane C' })
+    expect(useWorkspaceStore.getState().tabs[0]?.layout.rows).toEqual([1])
+    // Two dividers between three columns, and no row divider at all.
+    await waitFor(() => expect(screen.getAllByRole('separator')).toHaveLength(2))
+    expect(screen.queryByRole('separator', { name: 'Resize rows' })).toBeNull()
   })
 
   it('navigates panes independently', async () => {
     const { user } = renderApp()
     await rowFor('Documents')
-    await user.click(screen.getByRole('button', { name: 'Two panes' }))
+    await chooseSplit(user, '2 Columns')
 
     const paneA = await screen.findByRole('region', { name: 'Pane A' })
     await user.dblClick(await within(paneA).findByRole('row', { name: /^Downloads/ }))
@@ -177,28 +213,50 @@ describe('splits', () => {
     const { user } = renderApp()
     await rowFor('Documents')
 
-    await user.click(screen.getByRole('button', { name: 'Three panes' }))
+    await chooseSplit(user, '3 Columns')
     await screen.findByRole('region', { name: 'Pane C' })
 
-    await user.click(screen.getByRole('button', { name: 'Single pane' }))
+    await chooseSplit(user, 'Single Pane')
 
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Pane B' })).toBeNull())
     expect(await rowFor('Documents')).toBeInTheDocument()
   })
 
-  it('resizes with the divider keyboard controls', async () => {
+  it('resizes columns with the divider keyboard controls', async () => {
     const { user } = renderApp()
     await rowFor('Documents')
-    await user.click(screen.getByRole('button', { name: 'Two panes' }))
+    await chooseSplit(user, '2 Columns')
 
-    const before = [...(useWorkspaceStore.getState().tabs[0]?.paneSizes ?? [])]
-    const divider = await screen.findByRole('separator', { name: 'Resize pane 1' })
+    const before = [...(useWorkspaceStore.getState().tabs[0]?.layout.columns ?? [])]
+    const divider = await screen.findByRole('separator', { name: 'Resize columns' })
     divider.focus()
     await user.keyboard('{ArrowRight}')
 
-    const after = useWorkspaceStore.getState().tabs[0]?.paneSizes ?? []
+    const after = useWorkspaceStore.getState().tabs[0]?.layout.columns ?? []
     expect(after[0]).toBeGreaterThan(before[0] ?? 0)
     expect(after.reduce((sum, size) => sum + size, 0)).toBeCloseTo(1)
+  })
+
+  // A horizontal divider that answered to Left/Right would be the kind of
+  // detail that makes keyboard support feel bolted on (§M16 decision 5).
+  it('resizes rows with Up and Down, and ignores Left and Right', async () => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+    await chooseSplit(user, '2 × 2 Grid')
+
+    const divider = await screen.findByRole('separator', { name: 'Resize rows' })
+    divider.focus()
+
+    await user.keyboard('{ArrowRight}')
+    expect(useWorkspaceStore.getState().tabs[0]?.layout.rows).toEqual([0.5, 0.5])
+
+    await user.keyboard('{ArrowDown}')
+    const rows = useWorkspaceStore.getState().tabs[0]?.layout.rows ?? []
+    expect(rows[0]).toBeGreaterThan(0.5)
+    expect(rows.reduce((sum, size) => sum + size, 0)).toBeCloseTo(1)
+
+    // The columns were not touched by a row drag.
+    expect(useWorkspaceStore.getState().tabs[0]?.layout.columns).toEqual([0.5, 0.5])
   })
 })
 
@@ -214,7 +272,7 @@ describe('view modes', () => {
     await waitFor(() => expect(screen.queryByRole('columnheader')).toBeNull())
     expect(await rowFor('Documents')).toBeInTheDocument()
     // Scoped to the status bar — "Large Icons" also labels the menu button.
-    await waitFor(() => expect(screen.getByText(/Single \/ Large Icons/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Single Pane \/ Large Icons/)).toBeInTheDocument())
   })
 
   it('closes the view menu on Escape', async () => {

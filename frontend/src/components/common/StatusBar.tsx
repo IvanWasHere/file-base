@@ -1,15 +1,15 @@
+import { splitLabel } from '@/constants/splitModes'
 import { viewLabel } from '@/constants/viewModes'
 import type { SplitMode, ViewMode } from '@/types/workspace'
 import { formatCount, formatSize } from '@/utils/format'
 
-/** The mockup's `.status-bar`, ported. */
-
-const SPLIT_LABEL: Record<SplitMode, string> = {
-  1: 'Single',
-  2: 'Split',
-  3: '3-Column',
-  4: '4-Way',
-}
+/**
+ * The mockup's `.status-bar`, ported.
+ *
+ * The split names come from `constants/splitModes.ts` rather than a table here.
+ * This file used to keep its own — "Split", "4-Way" — while the menus said "Two
+ * Panes" and "Four Panes", which was not a decision anyone took (§M16).
+ */
 
 export function StatusBar({
   itemCount,
@@ -38,7 +38,7 @@ export function StatusBar({
       </div>
       <div className="flex items-center gap-4">
         <span>
-          {SPLIT_LABEL[splitMode]} / {viewLabel(viewMode)}
+          {splitLabel(splitMode)} / {viewLabel(viewMode)}
         </span>
       </div>
     </div>

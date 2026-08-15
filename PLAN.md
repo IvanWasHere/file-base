@@ -20,6 +20,7 @@ React + TypeScript + Wails file explorer, per the PRD.
 The mockup is a **layout and interaction spec**, not code to port line-by-line.
 
 - **Keep:** the full chrome (tab bar → toolbar → sidebar / panes / preview → status bar), the palette, the five view modes — Details, Large / Medium / Small Icons, and **Photos** (§M13) — split-pane letters (A/B/C/D), resizable handles, file-type colour categories.
+- **Correct:** the mockup's four-pane layout is four columns; it becomes two rows of two, which is what its own icon has always drawn (§M16).
 - **Replace:** `parentId` integer tree → real absolute **paths** as identity. `db.files.where('parentId')` → `ReadDirectory(path)`. Dexie → SQLite for app state only. `m.redraw()` → React reactivity. Font Awesome → Lucide. CDN Tailwind → build-time Tailwind.
 - **Add (not in the mockup):** multi-selection, file operations, watcher, search, context menus, keyboard shortcuts, drag & drop, virtualization, error handling, file hashing (§M14), quick file creation from templates (§M15).
 
@@ -759,6 +760,202 @@ next open, with its own extension and executable bit; a name that already exists
 is refused in the field rather than renamed; typing an extension no template
 claims still creates an empty file of that type; and undo removes it.
 
+### M16 — Split layout: a dropdown, and a real 2 × 2 grid ✅ complete
+
+Four changes to what M2+M3 shipped: the toolbar's segmented split control becomes
+a dropdown; four panes become two rows of two rather than four columns; and
+"Two Panes" / "Three Panes" are renamed to **2 Columns** / **3 Columns**, which
+is what they actually are.
+
+**The icon was already right.** Four panes has been drawn with Lucide's
+`Grid2x2` since M2 — the control has been promising a 2 × 2 grid and the layout
+has been handing back four columns. Four 320px-wide slivers in a 1280px window
+is not a layout anyone uses twice; two rows of two is.
+
+**Numbered after M15, built before M12**, for the same reason the last three
+were. It has no dependency on M14 or M15 and can be built before either.
+
+Decisions taken up front:
+
+1. **The grid is a cross, not an H.** One full-height vertical divider and one
+   full-width horizontal divider, meeting in the middle — dragging the vertical
+   one moves the column split in *both* rows together. The alternative, a
+   divider per row moving independently, is more flexible and is not what
+   "cross" means: the two rows stop lining up, and the layout reads as two
+   unrelated splits stacked. It is also twice the state for a freedom nobody
+   asked for.
+2. **`paneSizes` becomes `layout: { columns: number[]; rows: number[] }`.** The
+   current model is a flat list of fractions along one axis, one per pane, and a
+   grid cannot be said in it. Every mode is expressible in the new one — 1 is
+   `{columns:[1], rows:[1]}`, 3 Columns is `{columns:[⅓,⅓,⅓], rows:[1]}`, the
+   grid is `{columns:[½,½], rows:[½,½]}` — and panes fill it in reading order,
+   so `paneIds[row * columns.length + column]`. Bolting a `rowSizes` field
+   beside `paneSizes` would leave a field whose name promises one entry per pane
+   and no longer delivers it, which is also what its persistence validation
+   checks.
+3. **Shape is a constant; only the fractions are state.** `SPLIT_GRIDS: Record<SplitMode,
+   {columns: number, rows: number}>` — `1: 1×1, 2: 2×1, 3: 3×1, 4: 2×2`. The
+   store never invents a shape, the layout never guesses one, and a future 6-up
+   (3 × 2) is one row in that table rather than a new branch everywhere.
+   `splitMode` stays as the *named* thing the user picked, which is what the menu
+   checkmarks and the status bar are keyed on; `layout` is only how big each part
+   currently is.
+4. **`useSplitResize` gains an axis instead of a twin.** The maths is identical
+   on both — a delta over the container's extent, redistributed between two
+   neighbours, floored at `MIN_FRACTION` — and only the coordinate (`clientX` vs
+   `clientY`) and the dimension (width vs height) differ. One hook taking
+   `axis: 'x' | 'y'`, instantiated twice, rather than a `useSplitResizeVertical`
+   that starts identical and drifts.
+5. **Arrow keys follow the divider they are on.** Left/Right nudge a vertical
+   divider, Up/Down a horizontal one. The dividers are already focusable with
+   `role="separator"`; a horizontal one that answered to Left/Right would be
+   the sort of detail that makes keyboard support feel like an afterthought.
+6. **Four spellings of four modes collapse into one.** The labels live in
+   `Toolbar.tsx`, in `constants/menus.ts`, in `backend/appmenu/appmenu.go` and —
+   differently — in `StatusBar.tsx`, which says "Split" and "4-Way" while the
+   menu says "Two Panes" and "Four Panes". That is not a naming decision anyone
+   took; it is two places that were written months apart. A
+   `constants/splitModes.ts`, mirroring the `constants/viewModes.ts` that
+   already exists for view modes, becomes the single source for label and icon,
+   and the status bar loses its private vocabulary. Go keeps its own copy
+   because it must, pinned by `TestCommandIDsExistInFrontend` as it already is.
+7. **The names say the shape: Single Pane, 2 Columns, 3 Columns, 2 × 2 Grid.**
+   Renaming two of them and leaving "Four Panes" would make the odd one out the
+   only one that does not describe what you get. "1 Column" for the single view
+   is the consistency too far — it is not a column, it is the whole pane.
+8. **The command ids do not change.** `view.splitFour` keeps its name even
+   though it no longer means four columns. Ids are internal, they are pinned
+   across the Go/TS boundary by a drift test, and renaming them touches three
+   files to change a string nobody sees. Stated here so the next reader knows it
+   was a decision rather than something missed.
+9. **The dropdown is `ViewMenu`'s pattern, not a new one.** Closes on outside
+   pointerdown and Escape, unbinds when shut, `role="menu"` with
+   `menuitemradio` children — the same component shape, sitting beside it in the
+   toolbar. It replaces the segmented group outright rather than joining it,
+   which also gives back about 136px of a toolbar that has been getting crowded.
+10. **Switching mode still resets the sizes to even.** That is today's behaviour
+    and it stays: remembering that the user had dragged the 3-column split to
+    20/20/60 and trying to honour it when they come back from the grid means
+    storing a layout per mode, and restoring a lopsided split someone set up for
+    a different arrangement is not obviously a kindness.
+11. **A session written by this build must survive an older one, and the
+    reverse.** M13's decision 9, one step harder, because the *shape* changes
+    rather than a value: `parseTab` reads old `paneSizes` and lifts it —
+    `columns = paneSizes, rows = [1]` for modes 1–3, and for an old four-column
+    tab it falls back to an even 2 × 2, because four fractions along one axis do
+    not mean anything in a grid. In the other direction an older build finds no
+    `paneSizes`, and its existing "sizes must match the pane count or use even
+    ones" fallback already handles that — a downgrade loses a dragged split, not
+    the session. Both directions get a regression test, and the round trip is
+    confirmed against a real database before shipping.
+12. **The grid halves the height every pane gets, and M13 already measured what
+    that costs.** With `MinHeight: 480` a 2 × 2 leaves each pane around 200px —
+    the smallest size the Photos view was verified at, where the filmstrip sits
+    on its 150px floor and stays flush to the bottom. `MIN_FRACTION` (0.12) now
+    applies on both axes, and the per-view floors M13 established do the rest.
+    Nothing new to build; it does need re-checking in the running app, since
+    every view was verified in a single row of panes.
+13. **M9's drop hit-testing needs re-verifying, not rewriting.** External Finder
+    drops are routed by hit-testing window coordinates against `data-drop-path`,
+    which is geometry and does not care how the panes are arranged. But it was
+    only ever verified against one row of them, and a pane in the bottom row is
+    the first case where a drop's Y coordinate has to pick between two panes.
+
+Files: `constants/splitModes.ts` (labels, icons, `SPLIT_GRIDS`);
+`components/toolbar/SplitMenu.tsx`. Changes to `types/workspace.ts`
+(`Tab.layout` replacing `Tab.paneSizes`), `stores/workspaceStore.ts`
+(`setLayout` replacing `setPaneSizes`, and `setSplitMode` building from
+`SPLIT_GRIDS`), `features/explorer/PaneGroup.tsx` (rows of columns, two divider
+kinds), `hooks/useSplitResize.ts` (the axis option),
+`components/toolbar/Toolbar.tsx` (the segmented group goes),
+`components/common/StatusBar.tsx` (read the shared label),
+`constants/menus.ts` and `backend/appmenu/appmenu.go` (labels only), and
+`services/db/repositories/session.ts` (the lift, and its fallbacks).
+
+**Done when:** the toolbar shows one Split Layout dropdown in place of the four
+buttons, listing Single Pane / 2 Columns / 3 Columns / 2 × 2 Grid with the mode
+in use checked; picking the grid lays four panes out as two rows of two, letters
+A B above C D; the vertical divider runs the full height and moves both rows'
+columns together while the horizontal one moves both rows; both are draggable
+and nudgeable by the arrow keys that match their orientation; the status bar and
+all three menus print the same four names; a session saved in the grid comes back
+in the grid with its dragged proportions, and a session saved by the previous
+build still opens; and a Finder drop onto a bottom-row pane lands in that pane's
+folder. ✅ (all but the last — see the note below)
+
+Notes from the build:
+
+- **All thirteen decisions held**, and decision 2 was the one that mattered:
+  replacing `paneSizes` with `layout` was not a rename but the change everything
+  else fell out of. Once the geometry was two axes of fractions, the grid was
+  `grid-template-columns` / `-rows`, the resize hook was the same maths twice,
+  and the dividers were two elements rather than three.
+- **CSS Grid, not nested flex rows** — a choice the plan left open. Panes fill a
+  grid in reading order for free, and the fractions go straight into
+  `grid-template-*` rather than being threaded through `flexGrow`/`flexBasis` at
+  two levels. One trap: a bare `Nfr` track lets a long filename push a column
+  wider than its share, so every track is `minmax(0, Nfr)`.
+- **The dividers are positioned over the grid rather than sitting in it**, and
+  that is what actually delivers decision 1. A column divider rendered inside
+  each row would be two elements that happen to line up — two tab stops and two
+  things a screen reader announces, for one split. As overlays there is one
+  full-height line, and the drag maths gets more accurate as a side effect: the
+  container's width is no longer the panes' width plus the dividers'.
+- **Three labels for two dividers.** With more than two columns a bare "Resize
+  columns" is ambiguous, so 3 Columns names them "Resize column 1" and "Resize
+  column 2", while 2 Columns and the grid — which have exactly one — keep the
+  plain name.
+- **The status bar's split name is now the same as everywhere else**, which
+  broke four tests asserting on the old private vocabulary ("Single", "4-Way").
+  Worth recording because it is the milestone working: those assertions had
+  encoded a drift nobody ever decided on.
+- **One test failed for exactly the right reason.** `getByText(/2 × 2 Grid/)`
+  matched twice — once in the dropdown, once in the status bar — which is the
+  single-source change landing. Scoped to `/2 × 2 Grid \/ Details/`.
+- **`parseTab` grew a rule it did not have: the mode and the pane count must
+  agree.** A stored mode is kept only when it holds exactly the panes that
+  survived, and the pane list is trimmed to fit. Before, a four-pane tab that
+  lost a pane restored as `splitMode: 4` with three panes — a merely odd
+  four-column layout then, a grid with an empty cell now. A latent bug that only
+  became visible because the geometry got stricter.
+- **Verified in the running app**, measured through the accessibility API: the
+  grid renders four equal quadrants (390 × 316 each) with **one column divider
+  631px tall spanning both rows** and one row divider 780px wide spanning both
+  columns — two dividers, not three, orientations correct. Dragging the row
+  divider down 100px moved both rows together (316/316 → 416/216) and left the
+  columns alone. Dragging the column divider **while grabbing it in the bottom
+  row** moved the split in *both* rows (390/390 → 240/540), which is the cross
+  doing what decision 1 asked for. 3 Columns and 2 Columns still lay out in a
+  single row with no row divider at all. The dropdown lists exactly Single Pane
+  / 2 Columns / 3 Columns / 2 × 2 Grid, and the native View menu and the status
+  bar print the same four names.
+- **Both directions of the persistence change were checked against a real
+  database.** A dragged grid (0.308/0.692 columns, 0.658/0.342 rows) survived a
+  quit and relaunch to the pixel. A hand-written *pre-M16* session — `paneSizes`
+  and no `layout` — was written straight into SQLite: the two-column tab's 70/30
+  came back as 546px and 234px of 780, and the four-column tab came back as an
+  even 2 × 2, exactly as decision 11 requires.
+- **Decision 13 is the one thing not verified end to end.** The hit-test was
+  read rather than exercised: `document.elementFromPoint(x, y)` then
+  `closest('[data-drop-path]')`, a genuine 2D test with no single-row
+  assumption, and the four panes measured as four distinct rectangles with
+  distinct Y ranges — the geometric precondition. But an actual Finder drag onto
+  a bottom-row pane was **not** performed: Finder's file area does not expose
+  its items to this accessibility session, so the drag could not be aimed. Worth
+  doing by hand.
+- **Note for whoever verifies next: a mouse drag *can* be synthesised, and it is
+  the only way to exercise a divider in the packaged app.** Synthetic keystrokes
+  still reach nothing but the document-level shortcut registry — a divider
+  reports `focused=true` and then ignores the arrow key, exactly as M14's verify
+  field ignored typing. A tiny Swift helper posting `CGEvent`s (`mouseMoved`,
+  `leftMouseDown`, several `leftMouseDragged` steps, `leftMouseUp`) drives the
+  resize perfectly, and stepping the drag matters: one jump does not produce the
+  `mousemove` stream the handler listens for. Second trap, which cost the first
+  round of verification: `open` on an already-running app only activates it, so
+  the measurements were taken against a 46-minute-old build and faithfully
+  reported the *old* segmented control. `pkill` first, or read the process start
+  time.
+
 ### M12 — Polish, testing, packaging
 Animations and reduced-motion support; light theme; empty/loading/error states; perf pass on a 10k-file directory; Vitest coverage of services, stores and hooks against the mock bridge; Playwright e2e in the browser against the mock bridge; `wails build` + code-signing/notarization notes.
 
@@ -780,6 +977,7 @@ Animations and reduced-motion support; light theme; empty/loading/error states; 
 | **A stale digest presented as fact** | Session-scoped cache only, keyed on path + size + mtime; nothing persisted across runs (§M14 decision 4) |
 | **Writing content could overwrite a file** — M15 is the first feature that puts bytes on disk | No write API is added at all: `CreateFile` keeps `O_EXCL`, so it creates or fails and can never truncate an existing file (§M15 decision 3) |
 | **A hand-maintained templates folder** — huge, binary or unreadable files | Read through `readTextFile`'s existing cap; a bad template is listed with its reason and never stops the dialog opening (§M15 decision 14) |
+| **A persisted layout changing shape**, not just value — M16 replaces `paneSizes` with a grid | Old sizes are lifted on read, a missing field already falls back to even, and both directions get a regression test (§M16 decision 11) |
 | **Notarization** for distribution | Deferred to M12; not blocking for local development |
 
 ---

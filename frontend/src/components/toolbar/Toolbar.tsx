@@ -2,20 +2,17 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
-  Columns2,
-  Columns3,
   Eye,
   FolderPlus,
-  Grid2x2,
   Hash,
   RefreshCw,
   Search,
-  Square,
   Star,
   StarOff,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Breadcrumb } from './Breadcrumb'
+import { SplitMenu } from './SplitMenu'
 import { ViewMenu } from './ViewMenu'
 import { useFileOperations } from '@/hooks/useFileOperations'
 import { useMenuCommands } from '@/hooks/useMenuCommands'
@@ -31,7 +28,6 @@ import {
 import { useFavorites } from '@/hooks/useFavorites'
 import { useUiStore } from '@/stores/uiStore'
 import { fsKeys } from '@/services/filesystem/queries'
-import type { SplitMode } from '@/types/workspace'
 
 /**
  * The mockup's `.toolbar`, ported.
@@ -39,13 +35,6 @@ import type { SplitMode } from '@/types/workspace'
  * Only controls that actually work are here. Search (M8) and Settings arrive
  * with their milestones — a toolbar of dead buttons is worse than a short one.
  */
-
-const SPLIT_OPTIONS: { mode: SplitMode; label: string; icon: typeof Square }[] = [
-  { mode: 1, label: 'Single pane', icon: Square },
-  { mode: 2, label: 'Two panes', icon: Columns2 },
-  { mode: 3, label: 'Three panes', icon: Columns3 },
-  { mode: 4, label: 'Four panes', icon: Grid2x2 },
-]
 
 function ToolbarButton({
   label,
@@ -162,33 +151,7 @@ export function Toolbar() {
         onClick={() => (pinned ? unpin(pane.path) : pin(pane.path))}
       />
 
-      <div
-        role="group"
-        aria-label="Split layout"
-        className="bg-base border-edge flex shrink-0 gap-0.5 rounded-md border p-0.5"
-      >
-        {SPLIT_OPTIONS.map((option) => {
-          const Icon = option.icon
-          const active = tab.splitMode === option.mode
-          return (
-            <button
-              key={option.mode}
-              type="button"
-              aria-label={option.label}
-              aria-pressed={active}
-              title={option.label}
-              onClick={() => setSplitMode(tab.id, option.mode)}
-              className={`flex h-[26px] w-[30px] items-center justify-center rounded transition-colors ${
-                active
-                  ? 'text-accent bg-[var(--accent-glow)]'
-                  : 'text-muted hover:bg-hover hover:text-primary'
-              }`}
-            >
-              <Icon size={14} />
-            </button>
-          )
-        })}
-      </div>
+      <SplitMenu mode={tab.splitMode} onChange={(mode) => setSplitMode(tab.id, mode)} />
 
       <ViewMenu mode={pane.viewMode} onChange={(mode) => setViewMode(pane.id, mode)} />
 

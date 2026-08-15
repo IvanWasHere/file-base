@@ -12,6 +12,8 @@
  * is stated once, in the registry that actually dispatches it.
  */
 
+import { splitLabel } from '@/constants/splitModes'
+
 export type MenuCommandId =
   // File
   | 'file.open'
@@ -131,10 +133,16 @@ export const APP_MENUS: MenuDefinition[] = [
       { id: 'view.smallIcons', label: 'as Small Icons', checkable: true },
       { id: 'view.photos', label: 'as Photos', checkable: true },
       { separator: true },
-      { id: 'view.splitSingle', label: 'Single Pane', checkable: true },
-      { id: 'view.splitTwo', label: 'Two Panes', checkable: true },
-      { id: 'view.splitThree', label: 'Three Panes', checkable: true },
-      { id: 'view.splitFour', label: 'Four Panes', checkable: true },
+      // Labels come from the split registry, not from here: this menu, the
+      // toolbar dropdown and the status bar all print the same four names, and
+      // before §M16 they printed three different sets. The command ids keep
+      // their original spellings — `view.splitFour` no longer means four
+      // columns, but ids are internal and pinned across the Go boundary by a
+      // drift test, so renaming them would change a string nobody sees.
+      { id: 'view.splitSingle', label: splitLabel(1), checkable: true },
+      { id: 'view.splitTwo', label: splitLabel(2), checkable: true },
+      { id: 'view.splitThree', label: splitLabel(3), checkable: true },
+      { id: 'view.splitFour', label: splitLabel(4), checkable: true },
       { separator: true },
       { id: 'view.toggleHidden', label: 'Show Hidden Files', checkable: true },
       { id: 'view.toggleSidebar', label: 'Show Sidebar', checkable: true },
