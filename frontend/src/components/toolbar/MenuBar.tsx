@@ -1,6 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { MenuItemButton, MenuPanel, MenuSeparator } from '@/components/menus/MenuPanel'
-import { APP_MENUS, isSeparator, type MenuCommandId } from '@/constants/menus'
+import {
+  MenuItemButton,
+  MenuPanel,
+  MenuSeparator,
+  MenuSubmenuButton,
+} from '@/components/menus/MenuPanel'
+import {
+  APP_MENUS,
+  isSeparator,
+  isSubmenu,
+  type MenuCommandId,
+  type MenuItem,
+} from '@/constants/menus'
 import { acceleratorFor } from '@/constants/shortcuts'
 import { useMenuCommands } from '@/hooks/useMenuCommands'
 
@@ -44,6 +55,19 @@ export function MenuBar() {
     run(id)
     setOpenMenu(null)
   }
+
+  /** One row, wherever it sits — top level or inside a submenu. */
+  const row = (item: MenuItem) => (
+    <MenuItemButton
+      key={item.id}
+      label={item.label}
+      accelerator={acceleratorFor(item.id)}
+      checkable={item.checkable}
+      checked={item.checkable ? isChecked(item.id) : undefined}
+      disabled={!isEnabled(item.id)}
+      onSelect={() => activate(item.id)}
+    />
+  )
 
   return (
     <div
@@ -91,22 +115,20 @@ export function MenuBar() {
                     // Hidden items go before the separators are drawn, so the
                     // Add/Remove Favorites pair collapsing to one never leaves a
                     // rule with nothing between it and the next.
-                    .filter((entry) => isSeparator(entry) || isVisible(entry.id))
-                    .map((entry, index) =>
-                      isSeparator(entry) ? (
-                        <MenuSeparator key={`separator-${index}`} />
-                      ) : (
-                        <MenuItemButton
-                          key={entry.id}
-                          label={entry.label}
-                          accelerator={acceleratorFor(entry.id)}
-                          checkable={entry.checkable}
-                          checked={entry.checkable ? isChecked(entry.id) : undefined}
-                          disabled={!isEnabled(entry.id)}
-                          onSelect={() => activate(entry.id)}
-                        />
-                      ),
-                    )}
+                    .filter(
+                      (entry) => isSeparator(entry) || isSubmenu(entry) || isVisible(entry.id),
+                    )
+                    .map((entry, index) => {
+                      if (isSeparator(entry)) return <MenuSeparator key={`separator-${index}`} />
+                      if (isSubmenu(entry)) {
+                        return (
+                          <MenuSubmenuButton key={entry.label} label={entry.label}>
+                            {entry.items.map((item) => row(item))}
+                          </MenuSubmenuButton>
+                        )
+                      }
+                      return row(entry)
+                    })}
                 </MenuPanel>
               )}
             </div>

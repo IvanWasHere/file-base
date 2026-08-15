@@ -107,8 +107,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       id: nextId('tab'),
       paneIds: [pane.id],
       activePaneId: pane.id,
-      splitMode: 1,
-      layout: evenLayout(1),
+      splitMode: 'single',
+      layout: evenLayout('single'),
     }
     set((state) => ({
       tabs: [...state.tabs, tab],

@@ -50,6 +50,44 @@ func TestCommandIDsAreUnique(t *testing.T) {
 	}
 }
 
+// The View menu's Split Layout submenu is the first nested one this package
+// builds (PLAN.md §M17 decision 8). A `build` that flattened it, or dropped it,
+// would leave nine layouts unreachable from the native menu while every other
+// test kept passing — CommandIDs walks the declaration, not what was built.
+func TestSplitLayoutIsANestedSubmenu(t *testing.T) {
+	root := New(context.Background())
+
+	var view *menu.MenuItem
+	for _, entry := range root.Items {
+		if entry.Label == "View" {
+			view = entry
+		}
+	}
+	if view == nil || view.SubMenu == nil {
+		t.Fatal("no View menu was built")
+	}
+
+	var split *menu.MenuItem
+	for _, entry := range view.SubMenu.Items {
+		if entry.Label == "Split Layout" {
+			split = entry
+		}
+	}
+	if split == nil {
+		t.Fatal("View has no Split Layout row")
+	}
+	if split.SubMenu == nil {
+		t.Fatal("Split Layout was built as a flat row, not a submenu")
+	}
+	if got := len(split.SubMenu.Items); got != 9 {
+		t.Errorf("Split Layout holds %d rows, want 9", got)
+	}
+	// A submenu row itself dispatches nothing; picking it only opens the menu.
+	if split.Click != nil {
+		t.Error("the Split Layout row has a click handler of its own")
+	}
+}
+
 // Every leaf must carry a callback: a menu row that emits nothing looks enabled
 // and does nothing, which is worse than being absent.
 func TestEveryItemDispatches(t *testing.T) {

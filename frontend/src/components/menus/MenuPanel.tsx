@@ -1,5 +1,5 @@
-import { Check } from 'lucide-react'
-import { forwardRef } from 'react'
+import { Check, ChevronRight } from 'lucide-react'
+import { forwardRef, useState } from 'react'
 import { ariaKeyShortcuts, formatAccelerator } from '@/constants/shortcuts'
 
 /**
@@ -46,6 +46,58 @@ interface MenuItemButtonProps {
   onMouseEnter?: (() => void) | undefined
 }
 
+/**
+ * A row that opens a nested menu beside it (§M17).
+ *
+ * Opens on hover as a real menu does, and stays open while the pointer is
+ * anywhere in the row *or* the flyout — which is why the two share one wrapper
+ * with the mouse handlers on it, rather than the flyout being a sibling the
+ * pointer has to leave the row to reach.
+ */
+export function MenuSubmenuButton({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        role="menuitem"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className={`text-secondary hover:bg-hover hover:text-primary flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] transition-colors outline-none ${
+          open ? 'bg-hover text-primary' : ''
+        }`}
+      >
+        <span className="flex w-3.5 shrink-0 justify-center" />
+        <span className="truncate">{label}</span>
+        <ChevronRight size={12} className="text-muted ml-auto shrink-0" aria-hidden />
+      </button>
+
+      {open && (
+        <MenuPanel
+          aria-label={label}
+          // Flush with the top of its row and just clear of the parent panel's
+          // padding, which is where macOS puts a submenu.
+          className="absolute top-0 left-full ml-0.5"
+        >
+          {children}
+        </MenuPanel>
+      )}
+    </div>
+  )
+}
+
 export const MenuItemButton = forwardRef<HTMLButtonElement, MenuItemButtonProps>(
   function MenuItemButton(
     { id, label, accelerator, checkable, checked, disabled, active, onSelect, onMouseEnter },
@@ -79,10 +131,7 @@ export const MenuItemButton = forwardRef<HTMLButtonElement, MenuItemButtonProps>
           // Hidden from assistive technology — `aria-keyshortcuts` above says
           // the same thing, and leaving the glyphs in the accessible name would
           // make the row read as "New Folder ⌘⇧N".
-          <span
-            aria-hidden
-            className="text-muted ml-auto shrink-0 pl-6 font-mono text-[11px]"
-          >
+          <span aria-hidden className="text-muted ml-auto shrink-0 pl-6 font-mono text-[11px]">
             {formatAccelerator(accelerator)}
           </span>
         )}

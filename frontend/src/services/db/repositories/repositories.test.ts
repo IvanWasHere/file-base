@@ -234,7 +234,7 @@ describe('session', () => {
     id: 'tab-1',
     paneIds: ['pane-1'],
     activePaneId: 'pane-1',
-    splitMode: 1,
+    splitMode: 'single',
     layout: { columns: [1], rows: [1] },
   }
 
@@ -307,7 +307,7 @@ describe('session', () => {
         id: 'tab-1',
         paneIds: ['pane-1', 'pane-2'],
         activePaneId: 'pane-1',
-        splitMode: 2,
+        splitMode: 'columns-2',
         layout: { columns: [1], rows: [1] }, // one column for two panes
       },
       ['pane-1', 'pane-2'],
@@ -315,6 +315,66 @@ describe('session', () => {
 
     expect(restored?.layout.columns).toHaveLength(2)
     expect(restored?.layout.columns.reduce((sum, size) => sum + size, 0)).toBeCloseTo(1)
+  })
+
+  // §M17 changed the stored *type*: `splitMode` was a pane count and is now a
+  // name. This is the third shape this one field has taken.
+  it.each([
+    [1, 'single'],
+    [2, 'columns-2'],
+    [3, 'columns-3'],
+    [4, 'grid-2x2'],
+  ])('maps the pre-M17 numeric mode %i onto %s', async (legacy, expected) => {
+    const ids = ['pane-1', 'pane-2', 'pane-3', 'pane-4'].slice(0, legacy)
+    const restored = await storeRawTab(
+      { id: 'tab-1', paneIds: ids, activePaneId: 'pane-1', splitMode: legacy },
+      ids,
+    )
+
+    expect(restored?.splitMode).toBe(expected)
+    expect(restored?.paneIds).toHaveLength(legacy)
+  })
+
+  // A name from a later build. Unreadable is unreadable, whichever direction it
+  // came from, so it takes the same path a corrupt value does.
+  it('falls back by pane count for a layout it has never heard of', async () => {
+    const ids = ['pane-1', 'pane-2', 'pane-3']
+    const restored = await storeRawTab(
+      { id: 'tab-1', paneIds: ids, activePaneId: 'pane-1', splitMode: 'grid-3x3' },
+      ids,
+    )
+
+    expect(restored?.splitMode).toBe('columns-3')
+    expect(restored?.paneIds).toHaveLength(3)
+  })
+
+  it('round-trips an asymmetric layout with its dragged proportions', async () => {
+    const ids = ['pane-1', 'pane-2', 'pane-3']
+    const restored = await storeRawTab(
+      {
+        id: 'tab-1',
+        paneIds: ids,
+        activePaneId: 'pane-1',
+        splitMode: 'split-right',
+        layout: { columns: [0.6, 0.4], rows: [0.25, 0.75] },
+      },
+      ids,
+    )
+
+    expect(restored?.splitMode).toBe('split-right')
+    expect(restored?.layout).toEqual({ columns: [0.6, 0.4], rows: [0.25, 0.75] })
+  })
+
+  // Split Top is three panes in a 2 × 2 of tracks, so its fractions are two and
+  // two — not three columns, which is what a pane-count guess would produce.
+  it('keeps an asymmetric layout’s track counts rather than its pane count', async () => {
+    const ids = ['pane-1', 'pane-2', 'pane-3']
+    const restored = await storeRawTab(
+      { id: 'tab-1', paneIds: ids, activePaneId: 'pane-1', splitMode: 'split-top' },
+      ids,
+    )
+
+    expect(restored?.layout).toEqual({ columns: [0.5, 0.5], rows: [0.5, 0.5] })
   })
 
   // §M16 changed the stored *shape*, not just a value. A tab written by the
@@ -350,7 +410,7 @@ describe('session', () => {
       ids,
     )
 
-    expect(restored?.splitMode).toBe(4)
+    expect(restored?.splitMode).toBe('grid-2x2')
     expect(restored?.layout).toEqual({ columns: [0.5, 0.5], rows: [0.5, 0.5] })
   })
 
@@ -384,7 +444,7 @@ describe('session', () => {
       ['pane-1', 'pane-2'],
     )
 
-    expect(restored?.splitMode).toBe(2)
+    expect(restored?.splitMode).toBe('columns-2')
     expect(restored?.paneIds).toEqual(['pane-1', 'pane-2'])
     expect(restored?.layout).toEqual({ columns: [0.5, 0.5], rows: [1] })
   })

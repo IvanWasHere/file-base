@@ -45,10 +45,19 @@ export type MenuCommandId =
   | 'view.mediumIcons'
   | 'view.smallIcons'
   | 'view.photos'
+  // The ids keep their original spellings: `view.splitFour` stopped meaning
+  // four columns in §M16 and `view.splitTwo` is now one of nine rather than
+  // one of four, but ids are internal and pinned across the Go boundary by a
+  // drift test. Renaming them would change strings nobody sees.
   | 'view.splitSingle'
   | 'view.splitTwo'
   | 'view.splitThree'
   | 'view.splitFour'
+  | 'view.splitRows'
+  | 'view.splitTop'
+  | 'view.splitBottom'
+  | 'view.splitLeft'
+  | 'view.splitRight'
   | 'view.toggleHidden'
   | 'view.toggleSidebar'
   | 'view.togglePreview'
@@ -69,8 +78,20 @@ export interface MenuItem {
   checkable?: boolean
 }
 
+/**
+ * A nested menu (§M17).
+ *
+ * The first and so far only one: nine split layouts inline would have made View
+ * by far the longest menu in the app. It holds plain items only — a submenu
+ * inside a submenu is a depth macOS allows and nobody enjoys.
+ */
+export interface MenuSubmenu {
+  label: string
+  items: MenuItem[]
+}
+
 /** A rule between groups of items. */
-export type MenuEntry = MenuItem | { separator: true }
+export type MenuEntry = MenuItem | MenuSubmenu | { separator: true }
 
 export interface MenuDefinition {
   id: string
@@ -133,16 +154,25 @@ export const APP_MENUS: MenuDefinition[] = [
       { id: 'view.smallIcons', label: 'as Small Icons', checkable: true },
       { id: 'view.photos', label: 'as Photos', checkable: true },
       { separator: true },
-      // Labels come from the split registry, not from here: this menu, the
-      // toolbar dropdown and the status bar all print the same four names, and
-      // before §M16 they printed three different sets. The command ids keep
-      // their original spellings — `view.splitFour` no longer means four
-      // columns, but ids are internal and pinned across the Go boundary by a
-      // drift test, so renaming them would change a string nobody sees.
-      { id: 'view.splitSingle', label: splitLabel(1), checkable: true },
-      { id: 'view.splitTwo', label: splitLabel(2), checkable: true },
-      { id: 'view.splitThree', label: splitLabel(3), checkable: true },
-      { id: 'view.splitFour', label: splitLabel(4), checkable: true },
+      // Nested since §M17: nine layouts inline, after five view modes, would
+      // make View by far the longest menu in the app. Labels come from the
+      // split registry — this submenu, the status bar and the toolbar's
+      // tooltip all print the same nine names, and before §M16 the status bar
+      // printed a private set of its own.
+      {
+        label: 'Split Layout',
+        items: [
+          { id: 'view.splitSingle', label: splitLabel('single'), checkable: true },
+          { id: 'view.splitTwo', label: splitLabel('columns-2'), checkable: true },
+          { id: 'view.splitRows', label: splitLabel('rows-2'), checkable: true },
+          { id: 'view.splitThree', label: splitLabel('columns-3'), checkable: true },
+          { id: 'view.splitTop', label: splitLabel('split-top'), checkable: true },
+          { id: 'view.splitBottom', label: splitLabel('split-bottom'), checkable: true },
+          { id: 'view.splitLeft', label: splitLabel('split-left'), checkable: true },
+          { id: 'view.splitRight', label: splitLabel('split-right'), checkable: true },
+          { id: 'view.splitFour', label: splitLabel('grid-2x2'), checkable: true },
+        ],
+      },
       { separator: true },
       { id: 'view.toggleHidden', label: 'Show Hidden Files', checkable: true },
       { id: 'view.toggleSidebar', label: 'Show Sidebar', checkable: true },
@@ -171,9 +201,20 @@ export function isSeparator(entry: MenuEntry): entry is { separator: true } {
   return 'separator' in entry
 }
 
-/** Every item, flattened — how the context menus and the native menu resolve ids. */
+export function isSubmenu(entry: MenuEntry): entry is MenuSubmenu {
+  return 'items' in entry
+}
+
+/**
+ * Every item, flattened — how the context menus and the native menu resolve ids.
+ * Descends into submenus: a command nested one level deep is still a command,
+ * and a lookup that stopped at the top level would report the nine split
+ * layouts as unknown ids.
+ */
 const ITEMS: MenuItem[] = APP_MENUS.flatMap((menu) =>
-  menu.items.filter((entry): entry is MenuItem => !isSeparator(entry)),
+  menu.items.flatMap((entry) =>
+    isSeparator(entry) ? [] : isSubmenu(entry) ? entry.items : [entry],
+  ),
 )
 
 export function findMenuItem(id: MenuCommandId): MenuItem | undefined {

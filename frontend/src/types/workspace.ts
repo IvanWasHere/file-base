@@ -20,11 +20,24 @@ export type ViewMode = 'details' | 'large-icons' | 'medium-icons' | 'small-icons
 export type IconViewMode = 'large-icons' | 'medium-icons' | 'small-icons'
 
 /**
- * Which split layout a tab is in. The *shape* each one means — how many columns
- * and rows — lives in `constants/splitModes.ts`, so this stays the name of the
- * thing the user picked rather than a pane count that happens to match.
+ * Which split layout a tab is in. The *shape* each one means — which cells each
+ * pane occupies — lives in `constants/splitModes.ts`.
+ *
+ * Named rather than numbered since §M17. The numbers were pane counts wearing a
+ * mode's clothes, which worked only while every mode held a different number of
+ * panes; five of the nine now hold three. A stored mode from before then is a
+ * number, and `splitModeFromLegacy` maps it.
  */
-export type SplitMode = 1 | 2 | 3 | 4
+export type SplitMode =
+  | 'single'
+  | 'columns-2'
+  | 'rows-2'
+  | 'columns-3'
+  | 'split-top'
+  | 'split-bottom'
+  | 'split-left'
+  | 'split-right'
+  | 'grid-2x2'
 
 /**
  * How big each part of the split currently is.

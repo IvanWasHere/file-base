@@ -9,10 +9,11 @@
 
 import {
   SPLIT_GRIDS,
+  defaultModeForPaneCount,
   evenLayout,
   isSplitMode,
   paneCount,
-  splitModeForPaneCount,
+  splitModeFromLegacy,
 } from '@/constants/splitModes'
 import { isViewMode } from '@/constants/viewModes'
 import { bridge } from '@/services/bridge'
@@ -166,7 +167,8 @@ function parseLayout(record: Record<string, unknown>, mode: SplitMode): PaneLayo
     if (columns && rows) return { columns, rows }
   }
 
-  // The pre-§M16 shape. It only means anything where the grid is one row deep.
+  // The pre-§M16 shape. It only means anything where the grid is one row deep,
+  // which after §M17 also excludes every layout with a spanning pane.
   if (grid.rows === 1) {
     const columns = parseFractions(record.paneSizes, grid.columns)
     if (columns) return { columns, rows: [1] }
@@ -190,11 +192,18 @@ function parseTab(raw: unknown, panes: Record<string, Pane>): Tab | null {
   // cell — or worse, a pane with no cell to sit in. A stored mode is only kept
   // when it holds exactly the panes that survived; otherwise the count wins,
   // because the panes are the thing with content in them.
-  const stored = isSplitMode(record.splitMode) ? record.splitMode : null
+  //
+  // A mode written before §M17 is a number, not a name, and is mapped on the
+  // way in. Anything else — a name this build has never heard of, from a later
+  // one — falls through to the canonical mode for the pane count, which is the
+  // same path a corrupt value takes.
+  const stored = isSplitMode(record.splitMode)
+    ? record.splitMode
+    : splitModeFromLegacy(record.splitMode)
   const splitMode =
     stored !== null && paneCount(stored) === found.length
       ? stored
-      : splitModeForPaneCount(Math.min(found.length, 4))
+      : defaultModeForPaneCount(found.length)
   const paneIds = found.slice(0, paneCount(splitMode))
 
   const activePaneId =

@@ -102,7 +102,7 @@ describe('navigation', () => {
 
   it('keeps each pane history independent', () => {
     const tab = activeTab()
-    store().setSplitMode(tab.id, 2)
+    store().setSplitMode(tab.id, 'columns-2')
 
     const [firstId, secondId] = activeTab().paneIds
     if (!firstId || !secondId) throw new Error('expected two panes')
@@ -166,7 +166,7 @@ describe('splits', () => {
   it('adds panes at the active pane’s location', () => {
     const tab = activeTab()
     store().navigate(tab.activePaneId, `${HOME}/Documents`)
-    store().setSplitMode(tab.id, 3)
+    store().setSplitMode(tab.id, 'columns-3')
 
     const updated = activeTab()
     expect(updated.paneIds).toHaveLength(3)
@@ -176,7 +176,7 @@ describe('splits', () => {
   })
 
   it('distributes sizes evenly and keeps each axis summing to 1', () => {
-    store().setSplitMode(activeTab().id, 3)
+    store().setSplitMode(activeTab().id, 'columns-3')
     const { columns, rows } = activeTab().layout
 
     expect(columns).toHaveLength(3)
@@ -186,7 +186,7 @@ describe('splits', () => {
 
   // The point of §M16: four panes are two rows of two, not four columns.
   it('lays four panes out as a 2 × 2 grid', () => {
-    store().setSplitMode(activeTab().id, 4)
+    store().setSplitMode(activeTab().id, 'grid-2x2')
     const tab = activeTab()
 
     expect(tab.paneIds).toHaveLength(4)
@@ -196,23 +196,46 @@ describe('splits', () => {
     expect(tab.layout.rows.reduce((sum, size) => sum + size, 0)).toBeCloseTo(1)
   })
 
+  // §M17: five of the nine layouts hold three panes, so switching between two
+  // of them must keep the panes and change only the arrangement.
+  it('keeps the same panes when switching between two three-pane layouts', () => {
+    const tabId = activeTab().id
+    store().setSplitMode(tabId, 'columns-3')
+    const before = [...activeTab().paneIds]
+
+    store().setSplitMode(tabId, 'split-top')
+    expect(activeTab().paneIds).toEqual(before)
+    expect(activeTab().splitMode).toBe('split-top')
+    // Split Top is a 2 × 2 of tracks holding three panes.
+    expect(activeTab().layout).toEqual({ columns: [0.5, 0.5], rows: [0.5, 0.5] })
+  })
+
+  it('adds a pane going from 2 Rows to Split Left', () => {
+    const tabId = activeTab().id
+    store().setSplitMode(tabId, 'rows-2')
+    expect(activeTab().paneIds).toHaveLength(2)
+
+    store().setSplitMode(tabId, 'split-left')
+    expect(activeTab().paneIds).toHaveLength(3)
+  })
+
   // A layout dragged in one mode must not be carried into another, where its
   // fractions would describe an arrangement that no longer exists.
   it('resets the layout when the mode changes', () => {
     const tabId = activeTab().id
-    store().setSplitMode(tabId, 2)
+    store().setSplitMode(tabId, 'columns-2')
     store().setLayout(tabId, { columns: [0.8, 0.2], rows: [1] })
 
-    store().setSplitMode(tabId, 4)
+    store().setSplitMode(tabId, 'grid-2x2')
     expect(activeTab().layout).toEqual({ columns: [0.5, 0.5], rows: [0.5, 0.5] })
   })
 
   it('removes panes and their state when collapsing', () => {
     const tabId = activeTab().id
-    store().setSplitMode(tabId, 3)
+    store().setSplitMode(tabId, 'columns-3')
     const [, second, third] = activeTab().paneIds
 
-    store().setSplitMode(tabId, 1)
+    store().setSplitMode(tabId, 'single')
 
     expect(activeTab().paneIds).toHaveLength(1)
     expect(second && store().panes[second]).toBeUndefined()
@@ -221,14 +244,14 @@ describe('splits', () => {
 
   it('reassigns the active pane if it was removed', () => {
     const tabId = activeTab().id
-    store().setSplitMode(tabId, 2)
+    store().setSplitMode(tabId, 'columns-2')
     const secondPane = activeTab().paneIds[1]
     if (!secondPane) throw new Error('expected two panes')
 
     store().setActivePane(tabId, secondPane)
     expect(activeTab().activePaneId).toBe(secondPane)
 
-    store().setSplitMode(tabId, 1)
+    store().setSplitMode(tabId, 'single')
     expect(activeTab().activePaneId).toBe(activeTab().paneIds[0])
     expect(store().panes[activeTab().activePaneId]).toBeDefined()
   })

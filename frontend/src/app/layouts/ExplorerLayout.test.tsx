@@ -180,6 +180,120 @@ describe('splits', () => {
     await waitFor(() => expect(screen.getByText(/2 × 2 Grid \/ Details/)).toBeInTheDocument())
   })
 
+  // §M17: the menu is pictograms only. The tiles have no text, so their
+  // accessible names are the only thing naming them — which is also what makes
+  // them findable here.
+  it('offers nine layouts as unlabelled tiles', async () => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+
+    await user.click(screen.getByRole('button', { name: /^Split layout:/ }))
+    const menu = await screen.findByRole('menu', { name: 'Split layout' })
+    const tiles = within(menu).getAllByRole('menuitemradio')
+
+    expect(tiles).toHaveLength(9)
+    // No visible text anywhere in the menu; the pictograms carry it.
+    expect(menu.textContent).toBe('')
+    expect(tiles.map((tile) => tile.getAttribute('aria-label'))).toEqual([
+      'Single Pane',
+      '2 Columns',
+      '2 Rows',
+      '3 Columns',
+      'Split Top',
+      'Split Bottom',
+      'Split Left',
+      'Split Right',
+      '2 × 2 Grid',
+    ])
+  })
+
+  it('stacks two panes for 2 Rows', async () => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+
+    await chooseSplit(user, '2 Rows')
+
+    await screen.findByRole('region', { name: 'Pane B' })
+    expect(useWorkspaceStore.getState().tabs[0]?.layout).toEqual({
+      columns: [1],
+      rows: [0.5, 0.5],
+    })
+    // One divider, and it is the horizontal one.
+    const dividers = screen.getAllByRole('separator')
+    expect(dividers).toHaveLength(1)
+    expect(dividers[0]).toHaveAttribute('aria-orientation', 'horizontal')
+  })
+
+  // The heart of §M17: a divider stops where the panes on either side of it
+  // stop being different.
+  it('stops Split Top’s column divider at the row boundary', async () => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+
+    await chooseSplit(user, 'Split Top')
+    await screen.findByRole('region', { name: 'Pane C' })
+
+    expect(screen.getAllByRole('separator')).toHaveLength(2)
+    const columnDivider = screen.getByRole('separator', { name: 'Resize columns' })
+    const rowDivider = screen.getByRole('separator', { name: 'Resize rows' })
+
+    // The column divider covers the top row only; the row divider spans both
+    // columns and so is marked as a full-length one.
+    expect(columnDivider).not.toHaveAttribute('data-full-span')
+    expect(columnDivider).toHaveStyle({ top: '0%', height: '50%' })
+    expect(rowDivider).toHaveAttribute('data-full-span')
+    expect(rowDivider).toHaveStyle({ left: '0%', width: '100%' })
+  })
+
+  it('confines Split Left’s row divider to the left column', async () => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+
+    await chooseSplit(user, 'Split Left')
+    await screen.findByRole('region', { name: 'Pane C' })
+
+    const rowDivider = screen.getByRole('separator', { name: 'Resize rows' })
+    expect(rowDivider).not.toHaveAttribute('data-full-span')
+    expect(rowDivider).toHaveStyle({ left: '0%', width: '50%' })
+    // …while the column divider still runs the whole way down.
+    expect(screen.getByRole('separator', { name: 'Resize columns' })).toHaveAttribute(
+      'data-full-span',
+    )
+  })
+
+  // Dragging the divider inside the subdivided half must not disturb the pane
+  // that spans across it.
+  it('leaves Split Top’s wide pane alone when the column split moves', async () => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+
+    await chooseSplit(user, 'Split Top')
+    const divider = await screen.findByRole('separator', { name: 'Resize columns' })
+    divider.focus()
+    await user.keyboard('{ArrowRight}')
+
+    const layout = useWorkspaceStore.getState().tabs[0]?.layout
+    expect(layout?.columns[0]).toBeGreaterThan(0.5)
+    expect(layout?.columns.reduce((sum, size) => sum + size, 0)).toBeCloseTo(1)
+    // The rows — which is what the full-width pane's height follows — untouched.
+    expect(layout?.rows).toEqual([0.5, 0.5])
+  })
+
+  it('switches between two three-pane layouts without disturbing the panes', async () => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+
+    await chooseSplit(user, '3 Columns')
+    await screen.findByRole('region', { name: 'Pane C' })
+    const before = [...(useWorkspaceStore.getState().tabs[0]?.paneIds ?? [])]
+
+    await chooseSplit(user, 'Split Right')
+    await waitFor(() => expect(useWorkspaceStore.getState().tabs[0]?.splitMode).toBe('split-right'))
+
+    expect(useWorkspaceStore.getState().tabs[0]?.paneIds).toEqual(before)
+    expect(screen.getByRole('region', { name: 'Pane C' })).toBeInTheDocument()
+  })
+
   // Three columns still means three columns; only the fourth mode changed.
   it('keeps three columns in one row', async () => {
     const { user } = renderApp()

@@ -33,13 +33,22 @@ import (
 // `menuCommandEvent` in frontend/src/services/bridge/impl/decode.ts.
 const CommandEvent = "menu:command"
 
-// item is one row. An empty ID marks a separator.
+// item is one row. An empty ID marks a separator; a non-empty Items marks a
+// nested submenu, whose own ID is empty because there is nothing to dispatch.
 type item struct {
 	ID    string
 	Label string
+	Items []item
 }
 
 func separator() item { return item{} }
+
+// submenu nests a group of rows. The only one so far is Split Layout: nine
+// arrangements inline, after five view modes, would make View by far the
+// longest menu in the app (PLAN.md §M17 decision 8).
+func submenu(label string, items ...item) item {
+	return item{Label: label, Items: items}
+}
 
 type section struct {
 	Label string
@@ -102,10 +111,17 @@ var sections = []section{
 			{ID: "view.smallIcons", Label: "as Small Icons"},
 			{ID: "view.photos", Label: "as Photos"},
 			separator(),
-			{ID: "view.splitSingle", Label: "Single Pane"},
-			{ID: "view.splitTwo", Label: "2 Columns"},
-			{ID: "view.splitThree", Label: "3 Columns"},
-			{ID: "view.splitFour", Label: "2 × 2 Grid"},
+			submenu("Split Layout",
+				item{ID: "view.splitSingle", Label: "Single Pane"},
+				item{ID: "view.splitTwo", Label: "2 Columns"},
+				item{ID: "view.splitRows", Label: "2 Rows"},
+				item{ID: "view.splitThree", Label: "3 Columns"},
+				item{ID: "view.splitTop", Label: "Split Top"},
+				item{ID: "view.splitBottom", Label: "Split Bottom"},
+				item{ID: "view.splitLeft", Label: "Split Left"},
+				item{ID: "view.splitRight", Label: "Split Right"},
+				item{ID: "view.splitFour", Label: "2 × 2 Grid"},
+			),
 			separator(),
 			{ID: "view.toggleHidden", Label: "Show Hidden Files"},
 			{ID: "view.toggleSidebar", Label: "Show Sidebar"},
@@ -131,14 +147,26 @@ var sections = []section{
 
 // CommandIDs lists every id the native menu can emit, in menu order. Exported
 // for the drift test.
+//
+// Descends into nested submenus: a command one level down is still a command,
+// and a walk that stopped at the top would report the nine split layouts as
+// unreachable — which is exactly what the drift test is for.
 func CommandIDs() []string {
-	ids := make([]string, 0, 48)
-	for _, section := range sections {
-		for _, entry := range section.Items {
+	ids := make([]string, 0, 56)
+	var collect func(items []item)
+	collect = func(items []item) {
+		for _, entry := range items {
+			if len(entry.Items) > 0 {
+				collect(entry.Items)
+				continue
+			}
 			if entry.ID != "" {
 				ids = append(ids, entry.ID)
 			}
 		}
+	}
+	for _, section := range sections {
+		collect(section.Items)
 	}
 	return ids
 }
@@ -160,16 +188,25 @@ func New(ctx context.Context) *menu.Menu {
 	// All three are Wails roles rendered by macOS, so they behave natively.
 	root := menu.NewMenuFromItems(menu.AppMenu())
 
-	for _, section := range sections {
-		submenu := menu.NewMenu()
-		for _, entry := range section.Items {
-			if entry.ID == "" {
-				submenu.AddSeparator()
-				continue
+	// Recursive since §M17, for the one nested submenu the View menu now has.
+	var build func(items []item) *menu.Menu
+	build = func(items []item) *menu.Menu {
+		built := menu.NewMenu()
+		for _, entry := range items {
+			switch {
+			case len(entry.Items) > 0:
+				built.Append(menu.SubMenu(entry.Label, build(entry.Items)))
+			case entry.ID == "":
+				built.AddSeparator()
+			default:
+				built.AddText(entry.Label, nil, emit(entry.ID))
 			}
-			submenu.AddText(entry.Label, nil, emit(entry.ID))
 		}
-		root.Append(menu.SubMenu(section.Label, submenu))
+		return built
+	}
+
+	for _, section := range sections {
+		root.Append(menu.SubMenu(section.Label, build(section.Items)))
 
 		// Edit belongs between File and View, where macOS apps put it. Appending
 		// it up front would have read App, Edit, File, View.

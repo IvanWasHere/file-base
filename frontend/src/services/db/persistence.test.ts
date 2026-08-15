@@ -83,7 +83,7 @@ describe('session restore', () => {
     if (!firstTab) throw new Error('expected a tab')
 
     store.navigate(firstTab.activePaneId, `${HOME}/Documents`)
-    store.setSplitMode(firstTab.id, 2)
+    store.setSplitMode(firstTab.id, 'columns-2')
     store.openTab(`${HOME}/Downloads`)
 
     await settle()
@@ -99,7 +99,7 @@ describe('session restore', () => {
     expect(restored.tabs).toHaveLength(2)
 
     const restoredFirst = restored.tabs[0]
-    expect(restoredFirst?.splitMode).toBe(2)
+    expect(restoredFirst?.splitMode).toBe('columns-2')
     expect(restoredFirst?.paneIds).toHaveLength(2)
     expect(restored.panes[restoredFirst?.activePaneId ?? '']?.path).toBe(`${HOME}/Documents`)
   })

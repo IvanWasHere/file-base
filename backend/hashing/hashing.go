@@ -87,13 +87,13 @@ const (
 // because published checksums still use them. Which of those is safe to trust
 // is a question the UI answers, not this package (PLAN.md M14 decision 11).
 var constructors = map[string]func() hash.Hash{
-	"crc32":   func() hash.Hash { return crc32.NewIEEE() },
-	"md5":     md5.New,
-	"sha1":    sha1.New,
-	"sha224":  sha256.New224,
-	"sha256":  sha256.New,
-	"sha384":  sha512.New384,
-	"sha512":  sha512.New,
+	"crc32":  func() hash.Hash { return crc32.NewIEEE() },
+	"md5":    md5.New,
+	"sha1":   sha1.New,
+	"sha224": sha256.New224,
+	"sha256": sha256.New,
+	"sha384": sha512.New384,
+	"sha512": sha512.New,
 }
 
 // Algorithms lists every algorithm this package can compute, sorted. Exported

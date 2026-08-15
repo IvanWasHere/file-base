@@ -45,7 +45,7 @@ function PaneHarness({ paneId }: { paneId: string }) {
 function renderPane(pane = makePane()) {
   useWorkspaceStore.setState({
     tabs: [
-      { id: 'tab-1', paneIds: [pane.id], activePaneId: pane.id, splitMode: 1, layout: evenLayout(1) },
+      { id: 'tab-1', paneIds: [pane.id], activePaneId: pane.id, splitMode: 'single', layout: evenLayout('single') },
     ],
     panes: { [pane.id]: pane },
     activeTabId: 'tab-1',

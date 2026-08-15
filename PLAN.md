@@ -956,6 +956,224 @@ Notes from the build:
   reported the *old* segmented control. `pkill` first, or read the process start
   time.
 
+### M17 — Asymmetric split layouts ✅ complete
+
+Five more arrangements beside M16's four:
+
+| Name | Shape | Panes |
+| --- | --- | --- |
+| **2 Rows** | one column, two rows | 2 |
+| **Split Top** | two rows; the top divided into two columns | 3 |
+| **Split Bottom** | two rows; the bottom divided into two columns | 3 |
+| **Split Left** | two columns; the left divided into two rows | 3 |
+| **Split Right** | two columns; the right divided into two rows | 3 |
+
+**The good news first: M16's state model survives untouched.** Every one of the
+five is still describable as `layout: { columns, rows }` — a set of column
+fractions and a set of row fractions. Split Top is a 2 × 2 track grid where the
+bottom pane spans both columns; Split Left is a 2 × 2 where the right pane spans
+both rows. Nothing new has to be stored. What changes is the *shape* constant,
+which stops being "how many columns by how many rows" and becomes "which cells
+each pane occupies".
+
+**Three M16 invariants do not survive, and it is worth being blunt about them.**
+
+1. **`SplitMode = 1 | 2 | 3 | 4` is finished.** The numbers were pane counts
+   wearing a mode's clothes, which worked only while every mode held a different
+   number of panes. Four of these five hold three panes.
+2. **"One mode per pane count" is dead**, along with `splitModeForPaneCount` and
+   the test asserting the counts are unique. It was load-bearing in exactly one
+   place — restoring a tab whose mode and panes disagree — which now needs a
+   declared default per count instead of a search.
+3. **"One full-length divider" is dead.** M16 decision 1 got a cross because
+   every divider crossed the whole container. In Split Top the vertical divider
+   exists only in the top row; in Split Left the horizontal one exists only in
+   the left column. A divider becomes a *segment*.
+
+**Numbered after M16, built before M12**, for the fourth time and the same
+reason. It depends on M16 and on nothing else.
+
+Decisions taken up front:
+
+1. **A mode declares its cells; the track counts are derived.** `SPLIT_GRIDS`'
+   `{columns, rows}` becomes `cells: { column, row, columnSpan?, rowSpan? }[]`,
+   in reading order, and the number of tracks is the maximum extent of those
+   cells. Declaring both would be two facts that can disagree; deriving means a
+   new layout is one list. CSS Grid places them natively — `grid-column: 1 /
+   span 2` — so nothing has to be measured or positioned by hand.
+2. **A test proves every mode tiles its grid exactly.** No cell overlapping
+   another, no track position left uncovered, and `cells.length` equal to the
+   pane count. A malformed cell list is otherwise a pane rendered on top of
+   another or a hole in the layout, and neither fails loudly. This is the guard
+   that makes decision 1 safe to derive from.
+3. **`SplitMode` becomes named string ids** — `'single'`, `'columns-2'`,
+   `'columns-3'`, `'grid-2x2'`, `'rows-2'`, `'split-top'`, `'split-bottom'`,
+   `'split-left'`, `'split-right'`. The ids say the layout rather than counting
+   the panes, which is what lets four of them hold three panes without
+   colliding.
+4. **Dividers are derived from the cells, not declared.** For each boundary
+   between adjacent tracks, a segment exists over exactly the stretch where the
+   panes on either side differ; adjacent segments merge into one. Split Top's
+   column boundary therefore covers the top row and stops, and M16's cross falls
+   out of the same rule rather than being a special case — in a 2 × 2 the panes
+   differ across the whole boundary, so the segment is the full line. A
+   per-mode divider table would be a fourth thing to keep in step with the
+   cells.
+5. **Drag semantics do not change, and that is the payoff of keeping
+   `{columns, rows}`.** A column divider always edits `columns`, a row divider
+   always edits `rows`, however short the segment is. In Split Top, dragging the
+   top row's divider changes `columns[0]` and the bottom pane — which spans both
+   columns — simply does not care. `MIN_FRACTION` still applies per axis.
+6. **The icons are drawn from the cells, not chosen from a set.** Nine layouts,
+   four of them differing only in which quadrant is subdivided, is past what a
+   glyph library can say clearly — and M16 exists *because* an icon promised a
+   2 × 2 while the layout delivered four columns. A tiny SVG generated from the
+   same `cells` the layout is built from cannot lie about the arrangement, and
+   the four asymmetric ones become distinguishable at a glance rather than by
+   reading. Lucide keeps every other icon in the app; the split control stops
+   using it.
+7. **The dropdown shows pictograms and no words at all.** Once the picture is
+   generated from the layout itself (decision 6) it is a better description than
+   any name — nine accurate diagrams are scanned in one glance, where nine text
+   rows have to be read, and "Split Left" versus "Split Right" is exactly the
+   pair a word does worst at. This is the toolbar speaking the toolbar's
+   language.
+
+   **Names still exist, because four other places are text and cannot show a
+   picture:** the in-window and native View menus, the status bar's "layout /
+   view" pair, the toolbar button that opens the dropdown, the tooltip on hover,
+   and the accessible name a screen reader reads out — a control whose only
+   content is a drawing is unusable without one. So the names stay in
+   `constants/splitModes.ts` exactly as before, and the *only* thing that
+   changes is that the dropdown's own rows stop rendering them. Nothing outside
+   that one menu is touched. Naming them is therefore a much smaller decision
+   than it was: Split Top /
+   Split Bottom / Split Left / Split Right, after which part is subdivided,
+   because nothing short says "two columns of which the left is split into two
+   rows" and nobody has to recognise these at a glance any more.
+8. **The View menu gets a "Split Layout" submenu.** Nine radio items inline,
+   after five view modes, would make View the longest menu in the app by a wide
+   margin. This is the first nested submenu in `backend/appmenu`, whose `item`
+   struct is currently flat — a real change there, not just another row.
+9. **Still no keyboard shortcuts for splits**, as since M2. Nine modes is nine
+   bindings nobody would remember, and the four that existed were never bound
+   either.
+10. **A stored mode changes type, for the third time this field has moved.**
+    M16 turned `paneSizes` into `layout`; this turns a numeric `splitMode` into
+    a string. Reading maps the legacy numbers — `1 → 'single'`, `2 →
+    'columns-2'`, `3 → 'columns-3'`, `4 → 'grid-2x2'` — and anything
+    unrecognised falls back by pane count. Downgrading is worth stating plainly
+    because it is worse than M16's: an M16 build reading `'split-top'` rejects
+    it, falls back to three panes by count, finds `columns` has two entries
+    where its grid wants three, and lands on an even 3 Columns. The panes and
+    their paths survive; the arrangement does not. That is acceptable and it
+    should be written down rather than discovered.
+11. **One canonical mode per pane count, declared rather than searched.**
+    `1 → single`, `2 → columns-2`, `3 → columns-3`, `4 → grid-2x2` — used when a
+    restored tab's mode and pane count disagree, and when a legacy number is
+    unreadable. Four modes hold three panes and only one of them can be the
+    answer, so the choice is made once, in the open, instead of falling out of
+    whichever `find` happens to hit first.
+12. **Adding a pane still opens it at the active pane's location**, and
+    removing still drops from the end. Unchanged from M2, but worth restating
+    because the pane count no longer follows from the mode's name: going from
+    Split Top to 2 Rows drops the third pane, and going the other way adds one.
+13. **The dropdown becomes a 3 × 3 grid of tiles, not a list.** With the words
+    gone (decision 7) a vertical list of nine icons would be a 324px column of
+    mostly empty space. Laid out as a grid it is roughly 150px square, every
+    option is visible without scanning downward, and the shapes sit next to each
+    other where the differences between them are easiest to see — which is the
+    arrangement Windows' snap layouts and every multiview picker converged on
+    for the same reason. **The toolbar button that opens it is unchanged**,
+    keeping the icon-plus-label it has had since M16: the icons-only rule is
+    scoped to the menu that drops down, and nowhere else.
+
+Files: changes to `constants/splitModes.ts` (cells, derived tracks, derived
+divider segments, the string ids, the canonical-mode table),
+`components/toolbar/SplitLayoutIcon.tsx` (the generated pictogram),
+`features/explorer/PaneGroup.tsx` (cell placement and segment dividers),
+`components/toolbar/SplitMenu.tsx` (nine entries, generated icons),
+`types/workspace.ts` (`SplitMode`), `stores/workspaceStore.ts`,
+`services/db/repositories/session.ts` (the legacy number mapping),
+`constants/menus.ts` and `backend/appmenu/appmenu.go` (five new command ids and
+the first nested submenu), and `hooks/useMenuCommands.ts`.
+
+**Done when:** the dropdown is a 3 × 3 grid of nine pictograms with no text in
+it, each drawn from its own cell list, while the toolbar button, both View
+menus and the status bar are untouched and still read as they do today;
+hovering a tile names it, and a screen reader announces that name; Split Top
+shows two panes above one full-width pane and
+Split Bottom the reverse; Split Left shows two stacked panes beside one
+full-height pane and Split Right the reverse; the divider between the two top
+panes in Split Top stops at the row boundary rather than crossing into the
+bottom pane, and dragging it leaves the bottom pane's width alone; the row
+divider in Split Left covers only the left column; every layout tiles its grid
+with no gap or overlap; the View menu carries a Split Layout submenu naming the
+same nine layouts the status bar names; a session saved in Split Right comes
+back in Split Right with its dragged proportions; and a session written by an
+M16 build still opens with its four layouts intact. ✅
+
+Notes from the build:
+
+- **All thirteen decisions held.** Decision 1 — declare cells, derive everything
+  else — is what made the rest small: the track counts, the pane count, the
+  dividers and the pictograms all fall out of one list per layout, so the five
+  new arrangements are five entries and no new branches.
+- **The state model needed no change at all**, which was the bet the plan opened
+  with. `layout: { columns, rows }` describes every one of the nine; Split Top is
+  a 2 × 2 of *tracks* whose bottom pane spans both columns. Nothing new is
+  stored and the drag semantics are untouched.
+- **`dividersOf` is the piece worth reading.** It walks each boundary asking
+  whether the panes either side of it differ, and merges touching steps. M16's
+  full-height cross and Split Top's stub come out of the same six lines — the
+  cross is simply the case where they differ the whole way down. The alternative,
+  a divider table per layout, would have been a second description of the same
+  arrangement.
+- **CSS Grid does the spanning for free**, but the spans have to be *explicit*.
+  Leaving them to auto-placement puts the panes after a spanning cell in the
+  wrong track, so every pane declares `grid-column: N / span M` from its own cell.
+- **The tiling test earns its place.** An overlap draws one pane on top of
+  another and a gap leaves a hole, and neither throws — so a malformed cell list
+  would ship. It is the guard that makes deriving from `cells` safe rather than
+  merely clever.
+- **`splitMode` changing from number to string touched more than expected.** Not
+  the production code, which was three files, but nine test files that had been
+  writing `splitMode: 2` since M2. Worth noting for the next time an enum
+  changes shape: the blast radius is in the fixtures.
+- **The native menu grew its first nested submenu**, which meant `item` gaining
+  an `Items` field, `CommandIDs` descending, and `New` becoming recursive. A new
+  Go test pins it, because `CommandIDs` walks the *declaration* — a `build` that
+  quietly flattened or dropped the submenu would leave nine layouts unreachable
+  natively while every existing test kept passing.
+- **Verified in the running app**, measured through the accessibility API. The
+  picker is a real 3 × 3 of nine 45 × 45 tiles at three x-positions and three
+  y-positions, with no text: the names exist only as accessible names, which is
+  also what made them findable. In a 1060 × 632 pane area: **Split Top** put two
+  530 × 316 panes over one **1060**-wide pane, with the column divider **316px
+  tall** — stopping at the row boundary, against the 631px it spans in a 2 × 2 —
+  and the row divider 1060 wide. **Split Bottom** was its mirror, its column
+  divider *starting* at the row boundary. **Split Left** gave a 530 × **631**
+  pane on the right and a row divider only **530** wide; **Split Right** the
+  mirror, its row divider starting at x=861. **2 Rows** was two full-width panes
+  and a single horizontal divider. Dragging Split Top's stub divider 120px moved
+  A 530→650 and B 530→410 while the spanning pane stayed exactly 1060 wide,
+  which is decision 5 in one measurement.
+- **Persistence verified in both directions.** A dragged Split Top (0.295/0.705)
+  survived a quit and relaunch to the pixel. A hand-written M16-era tab — numeric
+  `splitMode: 4` with a two-axis layout — restored as the 2 × 2 grid keeping
+  0.7/0.3 and 0.4/0.6 exactly (546/234 and 253/379), and a pre-M16 tab — numeric
+  `2` with the flat `paneSizes: [0.8, 0.2]` — restored as 2 Columns at 848/212.
+  Two shape changes, three formats, one read path.
+- **Note for whoever verifies next, and this one cost real time: a surviving app
+  instance will overwrite the session you just wrote.** `pkill` without checking,
+  or a `Cmd+Q` that has not finished, leaves a process alive that saves its own
+  state on the way out — so a round-trip test reads a database the zombie
+  rewrote and the layout looks like it failed to restore. Twice this looked like
+  a persistence bug; both times a unit test with the exact stored payload passed
+  immediately, which is the quickest way to tell a real bug from this one.
+  `pgrep` after killing, every time. This is M16's "`open` only activates a
+  running app" trap with sharper teeth.
+
 ### M12 — Polish, testing, packaging
 Animations and reduced-motion support; light theme; empty/loading/error states; perf pass on a 10k-file directory; Vitest coverage of services, stores and hooks against the mock bridge; Playwright e2e in the browser against the mock bridge; `wails build` + code-signing/notarization notes.
 
@@ -978,6 +1196,8 @@ Animations and reduced-motion support; light theme; empty/loading/error states; 
 | **Writing content could overwrite a file** — M15 is the first feature that puts bytes on disk | No write API is added at all: `CreateFile` keeps `O_EXCL`, so it creates or fails and can never truncate an existing file (§M15 decision 3) |
 | **A hand-maintained templates folder** — huge, binary or unreadable files | Read through `readTextFile`'s existing cap; a bad template is listed with its reason and never stops the dialog opening (§M15 decision 14) |
 | **A persisted layout changing shape**, not just value — M16 replaces `paneSizes` with a grid | Old sizes are lifted on read, a missing field already falls back to even, and both directions get a regression test (§M16 decision 11) |
+| **`splitMode` changing type** — M17 turns the stored number into a string, the third move for one field | Legacy numbers are mapped on read; a downgrade loses the *arrangement* but keeps the panes and their paths, which is stated rather than discovered (§M17 decision 10) |
+| **A malformed cell list** — a pane drawn over another, or a hole in the layout | Neither fails loudly, so a test proves every mode tiles its grid exactly: no overlap, no gap, one cell per pane (§M17 decision 2) |
 | **Notarization** for distribution | Deferred to M12; not blocking for local development |
 
 ---

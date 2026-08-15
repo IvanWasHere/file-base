@@ -111,10 +111,15 @@ export function useMenuCommands(): MenuCommandState {
   }
 
   const splitModes: Partial<Record<MenuCommandId, SplitMode>> = {
-    'view.splitSingle': 1,
-    'view.splitTwo': 2,
-    'view.splitThree': 3,
-    'view.splitFour': 4,
+    'view.splitSingle': 'single',
+    'view.splitTwo': 'columns-2',
+    'view.splitRows': 'rows-2',
+    'view.splitThree': 'columns-3',
+    'view.splitTop': 'split-top',
+    'view.splitBottom': 'split-bottom',
+    'view.splitLeft': 'split-left',
+    'view.splitRight': 'split-right',
+    'view.splitFour': 'grid-2x2',
   }
 
   const run = (id: MenuCommandId): void => {

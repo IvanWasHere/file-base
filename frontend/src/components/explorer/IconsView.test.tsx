@@ -39,7 +39,7 @@ function renderGrid(viewMode: ViewMode = 'large-icons', path = DOWNLOADS) {
 
   useWorkspaceStore.setState({
     tabs: [
-      { id: 'tab-1', paneIds: [PANE_ID], activePaneId: PANE_ID, splitMode: 1, layout: evenLayout(1) },
+      { id: 'tab-1', paneIds: [PANE_ID], activePaneId: PANE_ID, splitMode: 'single', layout: evenLayout('single') },
     ],
     panes: { [PANE_ID]: pane },
     activeTabId: 'tab-1',

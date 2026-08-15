@@ -1,16 +1,27 @@
-import { ChevronDown, Square } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { SPLIT_OPTIONS } from '@/constants/splitModes'
+import { SplitLayoutIcon } from './SplitLayoutIcon'
+import { SPLIT_OPTIONS, splitLabel } from '@/constants/splitModes'
 import type { SplitMode } from '@/types/workspace'
 
 /**
- * The split layout dropdown (PLAN.md §M16).
+ * The split layout picker (PLAN.md §M16, §M17).
  *
- * Replaces the four-button segmented group M2 shipped, which spent about 136px
- * of a toolbar that has been getting crowded on a control most people set once.
- * Deliberately the same shape as `ViewMenu`, which sits beside it — closing on
- * outside pointerdown and Escape, and unbinding when shut, rather than the
- * mockup's document-level click listener that ran on every click in the app.
+ * The menu that drops down is **pictograms only** — nine tiles in a 3 × 3 grid,
+ * no text. Once the picture is generated from the layout itself it describes the
+ * arrangement better than any name can, and "Split Left" versus "Split Right" is
+ * exactly the pair a word does worst at. A vertical list of nine icons would
+ * also be a 324px column of mostly empty space; as a grid it is small enough to
+ * take in at once and puts the shapes side by side, where the differences
+ * between them are easiest to see.
+ *
+ * The names have not gone anywhere — they are the tooltip, the accessible name,
+ * the status bar and both View menus. Only this menu's own rows stop printing
+ * them, and the button that opens it is untouched.
+ *
+ * Closes on outside pointerdown and Escape and unbinds when shut, as `ViewMenu`
+ * does beside it, rather than the mockup's document-level click listener that
+ * ran on every click in the app.
  */
 export function SplitMenu({
   mode,
@@ -40,24 +51,21 @@ export function SplitMenu({
     }
   }, [open])
 
-  const current = SPLIT_OPTIONS.find((option) => option.mode === mode) ?? SPLIT_OPTIONS[0]
-  const CurrentIcon = current?.icon ?? Square
-
   return (
     <div ref={container} className="relative">
       <button
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Split layout: ${current?.label}`}
+        aria-label={`Split layout: ${splitLabel(mode)}`}
         title="Split layout"
         onClick={() => setOpen((value) => !value)}
         className={`bg-base text-primary flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors ${
           open ? 'border-accent' : 'border-edge hover:border-[var(--text-muted)]'
         }`}
       >
-        <CurrentIcon size={13} />
-        <span>{current?.label}</span>
+        <SplitLayoutIcon mode={mode} size={13} />
+        <span>{splitLabel(mode)}</span>
         <ChevronDown size={10} className="text-muted" />
       </button>
 
@@ -67,11 +75,10 @@ export function SplitMenu({
           aria-label="Split layout"
           // Right-aligned for the same reason as the view menu: this sits near
           // the right edge of the toolbar, and a left-aligned menu overflows.
-          className="bg-elevated border-edge absolute top-full right-0 z-50 mt-1 min-w-[180px] rounded-lg border p-1"
+          className="bg-elevated border-edge absolute top-full right-0 z-50 mt-1 grid grid-cols-3 gap-1 rounded-lg border p-1.5"
           style={{ boxShadow: 'var(--shadow-menu)' }}
         >
           {SPLIT_OPTIONS.map((option) => {
-            const Icon = option.icon
             const active = option.mode === mode
             return (
               <button
@@ -79,18 +86,21 @@ export function SplitMenu({
                 type="button"
                 role="menuitemradio"
                 aria-checked={active}
+                // The tile shows no text, so this is the only name it has —
+                // for the tooltip, and for anything reading the screen.
+                aria-label={option.label}
+                title={option.label}
                 onClick={() => {
                   onChange(option.mode)
                   setOpen(false)
                 }}
-                className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-[13px] transition-colors ${
+                className={`flex size-11 items-center justify-center rounded-md border transition-colors ${
                   active
-                    ? 'text-accent bg-[var(--accent-glow)]'
-                    : 'text-secondary hover:bg-hover hover:text-primary'
+                    ? 'border-accent text-accent bg-[var(--accent-glow)]'
+                    : 'text-muted hover:bg-hover hover:text-primary border-transparent'
                 }`}
               >
-                <Icon size={14} className="w-[18px] shrink-0" />
-                <span>{option.label}</span>
+                <SplitLayoutIcon mode={option.mode} size={24} />
               </button>
             )
           })}
