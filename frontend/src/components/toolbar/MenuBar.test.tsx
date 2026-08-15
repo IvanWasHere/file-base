@@ -6,6 +6,7 @@ import { ExplorerLayout } from '@/app/layouts/ExplorerLayout'
 import { createQueryClient } from '@/app/providers/queryClient'
 import { APP_MENUS } from '@/constants/menus'
 import { DEFAULT_THEME } from '@/constants/themes'
+import { DEFAULT_LAYOUT } from '@/constants/columns'
 import { useSelectionStore } from '@/stores/selectionStore'
 import { useUiStore } from '@/stores/uiStore'
 import { __resetIdCounter, useWorkspaceStore } from '@/stores/workspaceStore'
@@ -31,6 +32,7 @@ beforeEach(() => {
     sidebarOpen: true,
     showHiddenFiles: false,
     theme: DEFAULT_THEME,
+    columnLayout: DEFAULT_LAYOUT,
   })
   __resetIdCounter()
 })
@@ -168,6 +170,29 @@ describe('menu bar', () => {
       'aria-checked',
       'false',
     )
+  })
+
+  // §M19: the one column command with no target, which is why it is an app
+  // command at all rather than a row in a header menu.
+  it('resets the column layout from the View menu, and is dead until there is something to reset', async () => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+
+    await user.click(screen.getByRole('menuitem', { name: 'View' }))
+    expect(await screen.findByRole('menuitem', { name: 'Reset Columns' })).toBeDisabled()
+    await user.keyboard('{Escape}')
+
+    useUiStore.getState().setColumnLayout({
+      order: ['size', 'name', 'type', 'modified'],
+      weights: { name: 0.3, size: 0.3, type: 0.2, modified: 0.2 },
+    })
+
+    await user.click(screen.getByRole('menuitem', { name: 'View' }))
+    const reset = await screen.findByRole('menuitem', { name: 'Reset Columns' })
+    expect(reset).toBeEnabled()
+    await user.click(reset)
+
+    await waitFor(() => expect(useUiStore.getState().columnLayout).toEqual(DEFAULT_LAYOUT))
   })
 
   it('navigates from the Go menu', async () => {

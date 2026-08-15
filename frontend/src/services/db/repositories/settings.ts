@@ -12,6 +12,7 @@ import {
   type HashAlgorithm,
 } from '@/constants/hashAlgorithms'
 import { DEFAULT_THEME, isThemePreference, type ThemePreference } from '@/constants/themes'
+import { DEFAULT_LAYOUT, normaliseLayout, type ColumnLayout } from '@/constants/columns'
 
 export interface AppSettings {
   showHiddenFiles: boolean
@@ -29,6 +30,8 @@ export interface AppSettings {
    * the build, and a custom one's belongs to its file.
    */
   lastTemplate: string
+  /** The detail view's column order and widths (§M19). */
+  columnLayout: ColumnLayout
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -40,6 +43,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   previewOpen: false,
   hashAlgorithm: DEFAULT_ALGORITHM,
   lastTemplate: '',
+  columnLayout: DEFAULT_LAYOUT,
 }
 
 export async function loadSettings(): Promise<AppSettings> {
@@ -72,6 +76,11 @@ export async function loadSettings(): Promise<AppSettings> {
   // against the list it actually has and falls back to none, so only the type
   // needs guarding here.
   if (typeof stored.lastTemplate !== 'string') delete stored.lastTemplate
+  // Repaired rather than validated: a column layout has parts that can each be
+  // wrong on their own — an unknown id, a missing one, weights that sum to
+  // anything — and dropping the whole row for one bad field would throw away a
+  // layout the user built. `normaliseLayout` keeps what it can (§M19).
+  if ('columnLayout' in stored) stored.columnLayout = normaliseLayout(stored.columnLayout)
 
   return { ...DEFAULT_SETTINGS, ...stored }
 }

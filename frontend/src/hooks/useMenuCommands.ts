@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useQuery } from '@tanstack/react-query'
 import type { MenuCommandId } from '@/constants/menus'
 import type { ThemePreference } from '@/constants/themes'
+import { isDefaultLayout } from '@/constants/columns'
 import { useFavorites } from '@/hooks/useFavorites'
 import { useArchive } from '@/hooks/useArchive'
 import { useFileOperations } from '@/hooks/useFileOperations'
@@ -292,6 +293,9 @@ export function useMenuCommands(): MenuCommandState {
       case 'view.togglePreview':
         ui.togglePreview()
         return
+      case 'view.resetColumns':
+        ui.resetColumns()
+        return
       case 'view.refresh':
         if (pane) {
           void queryClient.invalidateQueries({ queryKey: fsKeys.directoryRoot(pane.path) })
@@ -363,6 +367,10 @@ export function useMenuCommands(): MenuCommandState {
       case 'file.addToFavorites':
       case 'file.removeFromFavorites':
         return favoriteTarget() !== undefined
+      // Dead when there is nothing to reset, rather than a row that looks like
+      // it did nothing (§M19).
+      case 'view.resetColumns':
+        return !isDefaultLayout(ui.columnLayout)
       case 'edit.paste':
         return clipboardCount > 0
       case 'edit.undo':

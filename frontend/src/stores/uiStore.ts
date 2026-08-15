@@ -8,6 +8,7 @@
 
 import { create } from 'zustand'
 import type { ContextKind } from '@/constants/contextMenus'
+import { DEFAULT_LAYOUT, type ColumnLayout } from '@/constants/columns'
 import { DEFAULT_ALGORITHM, type HashAlgorithm } from '@/constants/hashAlgorithms'
 import { DEFAULT_THEME, type ThemePreference } from '@/constants/themes'
 import type { ConflictPolicy } from '@/types/file'
@@ -144,6 +145,16 @@ interface UiState {
   hashAlgorithm: HashAlgorithm
   /** Persisted: the template id last used, so the next file starts there. */
   lastTemplate: string
+  /**
+   * Persisted, and global rather than per folder (§M19 decision 10): `viewMode`
+   * and `sort` are about a folder's contents, but how wide Size is is about how
+   * this user reads a table — Downloads laid out differently from Documents
+   * would read as a bug.
+   *
+   * Replaced wholesale rather than mutated, so `order` stays a stable reference
+   * for the memoised rows that receive it.
+   */
+  columnLayout: ColumnLayout
   renaming: RenameTarget | null
   contextMenu: ContextMenuRequest | null
 
@@ -152,6 +163,8 @@ interface UiState {
   toggleSidebar: () => void
   toggleHiddenFiles: () => void
   setTheme: (theme: ThemePreference) => void
+  setColumnLayout: (layout: ColumnLayout) => void
+  resetColumns: () => void
 
   openHashes: (paths: string[]) => void
   closeHashes: () => void
@@ -188,6 +201,7 @@ export const useUiStore = create<UiState>()((set) => ({
   newFile: null,
   compress: null,
   theme: DEFAULT_THEME,
+  columnLayout: DEFAULT_LAYOUT,
   hashAlgorithm: DEFAULT_ALGORITHM,
   lastTemplate: '',
   renaming: null,
@@ -200,6 +214,11 @@ export const useUiStore = create<UiState>()((set) => ({
   // Nothing here touches the DOM: `services/theme` subscribes and owns
   // `data-theme`, so the store stays plain data (§M12).
   setTheme: (theme) => set({ theme }),
+  setColumnLayout: (columnLayout) => set({ columnLayout }),
+  // Its own action rather than `setColumnLayout(DEFAULT_LAYOUT)` at the call
+  // site: the default belongs to the registry, and a caller reaching for it
+  // would be a second place that decides what "reset" means.
+  resetColumns: () => set({ columnLayout: DEFAULT_LAYOUT }),
 
   // Opening with nothing to hash would be a modal that can only be closed.
   openHashes: (paths) => set(paths.length > 0 ? { hashJob: { paths }, renaming: null } : {}),

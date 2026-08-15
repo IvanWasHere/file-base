@@ -27,18 +27,43 @@ interface UseSplitResizeOptions {
   axis: SplitAxis
   sizes: number[]
   onResize: (sizes: number[]) => void
+  /**
+   * The floor, as a fraction. One number applies to every part; an array gives
+   * each its own.
+   *
+   * §M19's second caller is why this is an option at all: 0.12 of a pane is a
+   * sane floor for a pane and a fat one for a Size column, and the columns want
+   * a different floor per column. A `useColumnResize` copied from this would
+   * have started identical and drifted — the same argument §M16 decision 4 made
+   * against a vertical copy.
+   */
+  minFraction?: number | number[]
 }
 
 /** Redistributes `delta` across one divider, respecting both neighbours' floor. */
-function resized(sizes: number[], handleIndex: number, delta: number): number[] | null {
+function resized(
+  sizes: number[],
+  handleIndex: number,
+  delta: number,
+  minFraction: number | number[],
+): number[] | null {
   const before = sizes[handleIndex]
   const after = sizes[handleIndex + 1]
   if (before === undefined || after === undefined) return null
 
+  const minOf = (index: number) =>
+    (Array.isArray(minFraction) ? minFraction[index] : minFraction) ?? MIN_FRACTION
+
   // A divider only ever redistributes between its two neighbours; parts further
   // along stay put, which is what makes dragging feel predictable.
   const pair = before + after
-  const next = Math.min(Math.max(before + delta, MIN_FRACTION), pair - MIN_FRACTION)
+  const minBefore = minOf(handleIndex)
+  const minAfter = minOf(handleIndex + 1)
+  // A pair too small to hold both floors would produce a max below the min and
+  // invert the drag; there is nothing to redistribute, so it stays put.
+  if (minBefore + minAfter > pair) return null
+
+  const next = Math.min(Math.max(before + delta, minBefore), pair - minAfter)
 
   const result = [...sizes]
   result[handleIndex] = next
@@ -46,15 +71,21 @@ function resized(sizes: number[], handleIndex: number, delta: number): number[] 
   return result
 }
 
-export function useSplitResize({ containerRef, axis, sizes, onResize }: UseSplitResizeOptions) {
+export function useSplitResize({
+  containerRef,
+  axis,
+  sizes,
+  onResize,
+  minFraction = MIN_FRACTION,
+}: UseSplitResizeOptions) {
   // Held in a ref so the move handler always sees the current values without
   // being torn down and rebound on every frame.
   const drag = useRef<{ handleIndex: number; start: number; startSizes: number[] } | null>(null)
-  const latest = useRef({ sizes, onResize, axis })
+  const latest = useRef({ sizes, onResize, axis, minFraction })
 
   useEffect(() => {
-    latest.current = { sizes, onResize, axis }
-  }, [sizes, onResize, axis])
+    latest.current = { sizes, onResize, axis, minFraction }
+  }, [sizes, onResize, axis, minFraction])
 
   useEffect(() => {
     const handleMove = (event: MouseEvent) => {
@@ -68,7 +99,12 @@ export function useSplitResize({ containerRef, axis, sizes, onResize }: UseSplit
       if (extent <= 0) return
 
       const position = horizontal ? event.clientX : event.clientY
-      const next = resized(state.startSizes, state.handleIndex, (position - state.start) / extent)
+      const next = resized(
+        state.startSizes,
+        state.handleIndex,
+        (position - state.start) / extent,
+        latest.current.minFraction,
+      )
       if (next) latest.current.onResize(next)
     }
 
@@ -101,7 +137,12 @@ export function useSplitResize({ containerRef, axis, sizes, onResize }: UseSplit
 
   /** Keyboard equivalent, so the divider is not mouse-only. */
   const nudge = useCallback((handleIndex: number, direction: -1 | 1) => {
-    const next = resized(latest.current.sizes, handleIndex, 0.02 * direction)
+    const next = resized(
+      latest.current.sizes,
+      handleIndex,
+      0.02 * direction,
+      latest.current.minFraction,
+    )
     if (next) latest.current.onResize(next)
   }, [])
 

@@ -7,7 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { hydrate, startPersistence } from './persistence'
-import { loadSettings } from './repositories/settings'
+import { loadSettings, saveSetting } from './repositories/settings'
 import { addFavorite, listFavorites } from './repositories/favorites'
 import { listRecents } from './repositories/recents'
 import { getFolderPrefs } from './repositories/folderPrefs'
@@ -15,6 +15,7 @@ import { loadSession } from './repositories/session'
 import { __resetIdCounter, useWorkspaceStore } from '@/stores/workspaceStore'
 import { useUiStore } from '@/stores/uiStore'
 import { DEFAULT_THEME } from '@/constants/themes'
+import { DEFAULT_LAYOUT } from '@/constants/columns'
 
 const HOME = '/Users/dev'
 
@@ -31,6 +32,7 @@ function resetStores() {
     sidebarOpen: true,
     showHiddenFiles: false,
     theme: DEFAULT_THEME,
+    columnLayout: DEFAULT_LAYOUT,
   })
   __resetIdCounter()
 }
@@ -76,6 +78,47 @@ describe('hydrate', () => {
     resetStores()
     await hydrate(HOME)
     expect(useUiStore.getState().showHiddenFiles).toBe(true)
+  })
+
+  // §M19: the layout is a structure rather than a scalar, so the round trip is
+  // worth proving on its own — JSON out, JSON in, repaired on the way.
+  it('remembers the column layout across a relaunch', async () => {
+    await hydrate(HOME)
+    stop = startPersistence(now)
+
+    useUiStore.getState().setColumnLayout({
+      order: ['modified', 'name', 'size', 'type'],
+      weights: { name: 0.4, size: 0.2, type: 0.2, modified: 0.2 },
+    })
+    await settle()
+
+    expect((await loadSettings()).columnLayout.order).toEqual(['modified', 'name', 'size', 'type'])
+
+    stop()
+    stop = undefined
+
+    resetStores()
+    await hydrate(HOME)
+    expect(useUiStore.getState().columnLayout.order).toEqual(['modified', 'name', 'size', 'type'])
+  })
+
+  // A row a later build could have written. The repair happens in the
+  // repository, so hydration is where it has to hold.
+  it('repairs a stored layout that names a column this build does not have', async () => {
+    // Migrations run inside `hydrate`, so the bad row has to be written between
+    // two of them rather than before the first.
+    await hydrate(HOME)
+    await saveSetting('columnLayout', {
+      order: ['created', 'modified'],
+      weights: { created: 0.5, modified: 0.5 },
+    } as never)
+
+    resetStores()
+    await hydrate(HOME)
+
+    const layout = useUiStore.getState().columnLayout
+    expect(layout.order).toEqual(['modified', 'name', 'size', 'type'])
+    expect(Object.values(layout.weights).reduce((sum, weight) => sum + weight, 0)).toBeCloseTo(1, 6)
   })
 
   // The theme is the one setting a wrong answer is visible in every pixel of,

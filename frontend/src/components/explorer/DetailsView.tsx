@@ -1,8 +1,19 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { AlertTriangle, ArrowDown, ArrowUp, FolderOpen, Link2 } from 'lucide-react'
-import { memo, useCallback, useMemo, useRef } from 'react'
+import { Fragment, memo, useCallback, useMemo, useRef, type ReactNode } from 'react'
 import { FileIcon } from '@/components/common/FileIcon'
 import { InlineRename } from '@/components/explorer/InlineRename'
+import {
+  columnSpec,
+  gridTemplate,
+  minWeightsOf,
+  moveColumn,
+  weightsOf,
+  withWeights,
+  type ColumnId,
+} from '@/constants/columns'
+import { useColumnReorder } from '@/hooks/useColumnReorder'
+import { useSplitResize } from '@/hooks/useSplitResize'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { useDragSource, useDropZone } from '@/hooks/useFileDrag'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
@@ -20,19 +31,17 @@ import type { Rect } from '@/utils/selection'
 
 /**
  * Details view — the mockup's `.detail-header` / `.detail-row` layout, now
- * virtualized and with sortable columns.
+ * virtualized, with sortable columns the user can reorder and resize (§M19).
+ *
+ * The header and the rows are two separate grids that must agree. They agree
+ * because both take one `gridTemplateColumns` string computed here from the
+ * stored layout, and both walk the same `order` array — before §M19 they agreed
+ * because they shared one hard-coded constant, which is the same property held
+ * a weaker way.
  */
 
 const ROW_HEIGHT = 34
 const HEADER_HEIGHT = 28
-const COLUMNS = 'grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]'
-
-const HEADERS: { key: SortKey; label: string }[] = [
-  { key: 'name', label: 'Name' },
-  { key: 'size', label: 'Size' },
-  { key: 'type', label: 'Type' },
-  { key: 'modified', label: 'Modified' },
-]
 
 interface DetailsViewProps {
   paneId: string
@@ -49,6 +58,8 @@ interface DetailsViewProps {
 /** Memoised so scrolling re-renders only rows entering the window. */
 const Row = memo(function Row({
   item,
+  columns,
+  template,
   selected,
   cut,
   renaming,
@@ -60,6 +71,12 @@ const Row = memo(function Row({
   onCancelRename,
 }: {
   item: FileItem
+  /**
+   * Display order. A stable reference held in the store, so a row that is
+   * merely scrolled past does not re-render (§M19 decision 9).
+   */
+  columns: ColumnId[]
+  template: string
   selected: boolean
   cut: boolean
   renaming: boolean
@@ -70,29 +87,18 @@ const Row = memo(function Row({
   onRename: (path: string, newName: string) => void
   onCancelRename: () => void
 }) {
-  return (
-    <div
-      role="row"
-      data-file-row
-      // What the right-click hit-test reads. Separate from `data-drop-path`,
-      // which only folders carry: everything can be right-clicked.
-      data-file-path={item.path}
-      // Only folders advertise themselves as drop targets; the container's
-      // hit-test reads this attribute to find what is under the pointer.
-      {...(item.isDirectory ? { 'data-drop-path': item.path } : {})}
-      {...dragProps}
-      aria-selected={selected}
-      // Primary button only: a right-click inside a multi-selection must not
-      // collapse it to the one row under the cursor. `useContextMenu` selects
-      // when the target is not already selected.
-      onMouseDown={(event) => event.button === 0 && onSelect(item, event)}
-      onDoubleClick={() => onActivate(item)}
-      className={`grid ${COLUMNS} hover:bg-hover h-full cursor-default items-center border-b border-[var(--border-subtle)] px-3 text-[13px] ${
-        selected ? 'bg-[var(--accent-glow)]' : ''
-      } ${cut ? 'opacity-45' : ''} ${
-        dropTarget ? 'ring-accent bg-[var(--accent-glow)] ring-2 ring-inset' : ''
-      }`}
-    >
+  /**
+   * Every cell this row can draw, keyed by column.
+   *
+   * `Record<ColumnId, …>` rather than a lookup that can miss: adding a column to
+   * the registry fails to compile here until it can be drawn, which is stronger
+   * than the runtime "the map covers the registry" test §M19 planned for.
+   *
+   * Rendered in layout order below, not placed by CSS: what a screen reader
+   * announces is then the order on screen (§M19 decision 8).
+   */
+  const cells: Record<ColumnId, ReactNode> = {
+    name: (
       <div role="gridcell" className="flex min-w-0 items-center gap-2">
         <FileIcon category={item.category} />
         {renaming ? (
@@ -114,15 +120,51 @@ const Row = memo(function Row({
           />
         )}
       </div>
+    ),
+    size: (
       <span role="gridcell" className="text-secondary truncate text-xs">
         {item.isDirectory ? '—' : formatSize(item.size)}
       </span>
+    ),
+    type: (
       <span role="gridcell" className="text-secondary truncate text-xs">
         {typeLabel(item.extension, item.isDirectory)}
       </span>
+    ),
+    modified: (
       <span role="gridcell" className="text-secondary truncate text-xs">
         {formatDate(item.modifiedAt)}
       </span>
+    ),
+  }
+
+  return (
+    <div
+      role="row"
+      data-file-row
+      // What the right-click hit-test reads. Separate from `data-drop-path`,
+      // which only folders carry: everything can be right-clicked.
+      data-file-path={item.path}
+      // Only folders advertise themselves as drop targets; the container's
+      // hit-test reads this attribute to find what is under the pointer.
+      {...(item.isDirectory ? { 'data-drop-path': item.path } : {})}
+      {...dragProps}
+      aria-selected={selected}
+      // Primary button only: a right-click inside a multi-selection must not
+      // collapse it to the one row under the cursor. `useContextMenu` selects
+      // when the target is not already selected.
+      onMouseDown={(event) => event.button === 0 && onSelect(item, event)}
+      onDoubleClick={() => onActivate(item)}
+      style={{ gridTemplateColumns: template }}
+      className={`hover:bg-hover grid h-full cursor-default items-center border-b border-[var(--border-subtle)] px-3 text-[13px] ${
+        selected ? 'bg-[var(--accent-glow)]' : ''
+      } ${cut ? 'opacity-45' : ''} ${
+        dropTarget ? 'ring-accent bg-[var(--accent-glow)] ring-2 ring-inset' : ''
+      }`}
+    >
+      {columns.map((id) => (
+        <Fragment key={id}>{cells[id]}</Fragment>
+      ))}
     </div>
   )
 })
@@ -148,6 +190,30 @@ export function DetailsView({
   const endRename = useUiStore((state) => state.endRename)
   const cutPaths = useCutPaths()
   const cut = useMemo(() => new Set(cutPaths), [cutPaths])
+
+  // The layout is one global setting, not one per pane: four panes showing four
+  // different column widths would read as a bug (§M19 decision 10).
+  const layout = useUiStore((state) => state.columnLayout)
+  const setColumnLayout = useUiStore((state) => state.setColumnLayout)
+  const headerRef = useRef<HTMLDivElement>(null)
+
+  const template = gridTemplate(layout)
+  const weights = weightsOf(layout)
+
+  const { startResize, nudge } = useSplitResize({
+    containerRef: headerRef,
+    axis: 'x',
+    sizes: weights,
+    minFraction: minWeightsOf(layout),
+    onResize: (sizes) => setColumnLayout(withWeights(layout, sizes)),
+  })
+
+  const { drag, startReorder, consumeClick } = useColumnReorder({
+    containerRef: headerRef,
+    weights,
+    onReorder: (from, to) =>
+      setColumnLayout({ order: moveColumn(layout.order, from, to), weights: layout.weights }),
+  })
 
   // Closing the editor unmounts the input, dropping focus to the document body
   // — after which every shortcut is inert until the next click. The list has to
@@ -226,6 +292,46 @@ export function DetailsView({
     )
   }
 
+  /**
+   * Reorder and resize from the keyboard, so neither is mouse-only.
+   *
+   * Handled here rather than in the shortcut registry because this is the
+   * focused widget's own business — `constants/shortcuts.ts` rule 1, the same
+   * line that keeps arrow keys inside `useListKeyboard`. `preventDefault` is
+   * what tells the global listener to keep its hands off (`useKeyboard` rule 1).
+   */
+  const handleHeaderKeyDown = (index: number, event: React.KeyboardEvent) => {
+    const back = event.key === 'ArrowLeft'
+    const forward = event.key === 'ArrowRight'
+    if (!back && !forward) return
+
+    const direction = back ? -1 : 1
+
+    if (event.altKey) {
+      event.preventDefault()
+      const next = moveColumn(layout.order, index, index + direction)
+      if (next !== layout.order) {
+        setColumnLayout({ order: next, weights: layout.weights })
+        // Focus follows the column, not the position: the user is moving *this*
+        // header and expects to keep moving it.
+        requestAnimationFrame(() => {
+          const headers =
+            headerRef.current?.querySelectorAll<HTMLButtonElement>('[role="columnheader"]')
+          headers?.[index + direction]?.focus()
+        })
+      }
+      return
+    }
+
+    if (event.shiftKey) {
+      event.preventDefault()
+      // A column grows against the divider on its right; the last one has none,
+      // so it grows by pulling the divider on its left the other way.
+      const last = index === layout.order.length - 1
+      nudge(last ? index - 1 : index, (last ? -direction : direction) as -1 | 1)
+    }
+  }
+
   if (items.length === 0) {
     return (
       // Right-clicking an empty folder still offers New Folder and Paste, which
@@ -243,27 +349,76 @@ export function DetailsView({
   return (
     <div className="flex h-full flex-col">
       <div
+        ref={headerRef}
         role="row"
-        className={`grid ${COLUMNS} border-edge bg-surface text-muted shrink-0 border-b px-3 text-[11px] font-semibold tracking-[0.5px] uppercase`}
-        style={{ height: HEADER_HEIGHT }}
+        className="border-edge bg-surface text-muted grid shrink-0 border-b px-3 text-[11px] font-semibold tracking-[0.5px] uppercase"
+        style={{ height: HEADER_HEIGHT, gridTemplateColumns: template }}
       >
-        {HEADERS.map((header) => {
-          const active = sort.key === header.key
+        {layout.order.map((id, index) => {
+          const spec = columnSpec(id)
+          const active = sort.key === spec.sortKey
+          const dragging = drag?.from === index
           return (
-            <button
-              key={header.key}
-              type="button"
-              role="columnheader"
-              aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
-              onClick={() => toggleSort(header.key)}
-              className={`hover:text-primary flex items-center gap-1 text-left transition-colors ${
-                active ? 'text-accent' : ''
-              }`}
-            >
-              <span>{header.label}</span>
-              {active &&
-                (sort.direction === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />)}
-            </button>
+            <div key={id} className="relative flex min-w-0 items-center">
+              <button
+                type="button"
+                role="columnheader"
+                aria-sort={
+                  active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'
+                }
+                onMouseDown={(event) => startReorder(index, event)}
+                // A drag that crossed the threshold ends in a click the button
+                // would otherwise read as a sort (§M19 decision 6).
+                onClick={() => {
+                  if (!consumeClick()) toggleSort(spec.sortKey)
+                }}
+                onKeyDown={(event) => handleHeaderKeyDown(index, event)}
+                className={`hover:text-primary flex min-w-0 flex-1 items-center gap-1 text-left transition-colors ${
+                  active ? 'text-accent' : ''
+                } ${dragging ? 'text-primary opacity-50' : ''}`}
+              >
+                <span className="truncate">{spec.label}</span>
+                {active &&
+                  (sort.direction === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />)}
+              </button>
+
+              {/* Where the dragged column would land. Drawn on the leading edge
+                  of the target, or the trailing edge when it is moving right —
+                  which is the side it will actually end up on. */}
+              {drag && drag.to === index && drag.from !== index && (
+                <div
+                  data-testid="column-drop-indicator"
+                  aria-hidden
+                  className={`bg-accent pointer-events-none absolute top-0 bottom-0 w-0.5 ${
+                    drag.from < index ? '-right-px' : '-left-px'
+                  }`}
+                />
+              )}
+
+              {/* The rule between two columns. The last column has none: there
+                  is nothing to its right to take width from (§M19 decision 4).
+
+                  Deliberately *not* `role="separator"`, which the split-pane
+                  dividers use: those are focusable splitters carrying
+                  aria-valuenow, and this is a mouse affordance for something the
+                  keyboard already reaches through the header (Shift+←/→). A
+                  second, unfocusable separator in the tree would be noise to a
+                  screen reader — and it made `getAllByRole('separator')` count
+                  fourteen dividers in a 2 × 2 split, which is how it was found. */}
+              {index < layout.order.length - 1 && (
+                <div
+                  aria-hidden
+                  data-testid={`column-resize-${id}`}
+                  onMouseDown={(event) => {
+                    // Stops the press reaching the header button, which would
+                    // start a reorder and end in a sort.
+                    event.stopPropagation()
+                    startResize(index, event)
+                  }}
+                  className="hover:bg-accent absolute top-0 -right-1 bottom-0 z-10 w-2 cursor-col-resize bg-transparent transition-colors"
+                />
+              )}
+            </div>
           )
         })}
       </div>
@@ -305,6 +460,8 @@ export function DetailsView({
               >
                 <Row
                   item={item}
+                  columns={layout.order}
+                  template={template}
                   selected={selected.has(item.path)}
                   cut={cut.has(item.path)}
                   renaming={renamingPath === item.path}

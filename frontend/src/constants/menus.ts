@@ -68,6 +68,7 @@ export type MenuCommandId =
   | 'view.toggleHidden'
   | 'view.toggleSidebar'
   | 'view.togglePreview'
+  | 'view.resetColumns'
   | 'view.refresh'
   // Go
   | 'go.back'
@@ -199,6 +200,12 @@ export const APP_MENUS: MenuDefinition[] = [
       { id: 'view.toggleHidden', label: 'Show Hidden Files', checkable: true },
       { id: 'view.toggleSidebar', label: 'Show Sidebar', checkable: true },
       { id: 'view.togglePreview', label: 'Show Preview', checkable: true },
+      { separator: true },
+      // A global command with no target, which is why it is here rather than in
+      // a header context menu: the column a Move Left would act on is the one
+      // that was right-clicked, and an app menu has no such thing. Reordering
+      // and resizing are the header's own keyboard business (§M19 decision 12).
+      { id: 'view.resetColumns', label: 'Reset Columns' },
       { separator: true },
       { id: 'view.refresh', label: 'Refresh' },
     ],

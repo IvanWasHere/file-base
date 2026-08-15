@@ -1524,6 +1524,198 @@ Notes from the build:
   process: an AX walk takes seconds, and anything that navigates in between
   invalidates them.
 
+### M19 — Rearrangeable, resizable detail columns ✅ complete
+
+Name, Size, Type and Modified become a layout the user owns: drag a header to
+reorder, drag the rule between two headers to resize, and have both survive a
+relaunch.
+
+**Numbered after M18, built before M12**, for the sixth time and the same
+reason. It is a small milestone with one genuinely load-bearing constraint: the
+header row and every body row are two separate grids that must agree, and today
+they agree because they share one hard-coded constant.
+
+Where it stands now, in `components/explorer/DetailsView.tsx`:
+
+```ts
+const COLUMNS = 'grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]'
+const HEADERS = [{ key: 'name', … }, { key: 'size', … }, { key: 'type', … }, { key: 'modified', … }]
+```
+
+The header maps `HEADERS`; `Row` renders four cells in fixed JSX order. Both use
+`COLUMNS`. Nothing else in the app draws a column — search results render through
+the same pane, so this is the only surface to change.
+
+Decisions taken up front:
+
+1. **The columns become data**, in `constants/columns.ts`, the shape
+   `splitModes`, `hashAlgorithms`, `themes` and `archiveFormats` all already
+   have: id, label, the `SortKey` it sorts by, a default weight, a minimum
+   weight, and alignment. The *cells* stay in `DetailsView` as a
+   `Record<ColumnId, (item: FileItem) => ReactNode>` — a registry that imports
+   React to hold renderers would stop being data — and a test asserts the map
+   covers the registry, because a column with no renderer draws a blank strip
+   rather than failing.
+2. **Widths are fractions, not pixels**, exactly as §M16 stores pane sizes.
+   A pane in a 2 × 2 grid is a quarter of the window wide; stored pixels would
+   overflow it, and a window resize would leave every column stranded at a stale
+   width — which is the bug §M16 decision 4 already fixed once for panes. The
+   grid template is `minmax(0, Nfr)` per column, which is the shape it has today
+   with the numbers coming from state instead of a string constant.
+3. **Resizing reuses `useSplitResize`, parameterised rather than copied.** It
+   already turns a drag into fractions redistributed between two neighbours with
+   a floor, keeps listening on `window` so the pointer can outrun the handle, and
+   ships a keyboard `nudge`. It needs one new option — `minFraction`, because
+   0.12 is a sane floor for a pane and a fat one for Size — and gains a second
+   caller, which is the argument §M16 decision 4 made for not writing
+   `useSplitResizeVertical`.
+4. **No horizontal scrolling: the columns always tile the pane exactly.** The
+   alternative is pixel widths that can exceed the pane, which means a
+   horizontally scrolling body and a header that must scroll with it — and the
+   header is deliberately *outside* the scroll container so it cannot scroll away
+   vertically. Fractions plus a floor make overflow impossible, so the two grids
+   can stay siblings.
+5. **Reordering is pointer-driven, not HTML5 drag and drop.** The app runs a
+   global HTML5 drag pipeline for files — `useFileDrag`, `dragStore`, and
+   `OnFileDrop` for Finder — and a `dragstart` on a header would enter it: every
+   folder row would light up as a drop target for a column. Pointer events keep
+   the two apart, and give decision 6 the threshold it needs.
+6. **A header press stays a sort until the pointer moves 4px.** The header is
+   already the sort button, and a click that wandered two pixels must still sort.
+   Past the threshold the press becomes a reorder and the mouseup no longer
+   sorts.
+7. **Name moves like the rest.** Finder pins it; the request did not, and there
+   is no technical reason to — the icon, the alias badge and the inline rename
+   editor travel with the cell, not with the position.
+8. **Cells render in layout order, not fixed order.** `Row` maps the same
+   ordered array the header does, so the DOM order a screen reader announces is
+   the order on screen. The cheaper trick — fixed DOM order with CSS
+   `grid-column` placement — would leave the two disagreeing the moment anything
+   is moved.
+9. **`Row` keeps its memoisation.** It gains one prop: the ordered column array,
+   held in the store as a stable reference and re-created only when the layout
+   changes. The template string is computed once per render in the parent and
+   applied to both grids. Scrolling must not become a re-render of every row —
+   `Row` is hand-memoised precisely because the compiler skips this file.
+10. **The layout is global, not per folder.** `viewMode` and `sort` are
+    per-folder because they are about the *contents*; how wide Size is is about
+    how the user reads a table, and finding Downloads laid out differently from
+    Documents would read as a bug. One JSON row in `settings`, like
+    `hashAlgorithm` — **no migration**, because `settings` is a key-value table.
+11. **The stored layout is validated on the way out**, the M13 / M14 / M18
+    lesson for the fourth time. A row written by a later build can name a fifth
+    column, omit one this build has, or carry weights that no longer sum to 1.
+    Reading it drops unknown ids, appends missing ones in registry order,
+    renormalises the weights and lifts anything under its floor. The failure it
+    prevents is not cosmetic: a layout with an empty column list renders a table
+    with no columns at all.
+12. **Keyboard and menu parity, or it is a mouse-only feature.** Right-click a
+    header for Move Left / Move Right / Reset Columns, and Shift+←/→ on a focused
+    header nudges its width through the same `nudge` the split dividers use.
+    **Reset Columns earns its place on its own**: a column dragged to its floor
+    is hard to grab again, and without a reset the only way back is deleting a
+    database row.
+13. **Non-goal, but enabled: hiding columns and adding new ones.** `FileItem`
+    already carries `createdAt`, so Date Created is a registry entry away — and
+    that is exactly why the registry is shaped this way. This milestone ships the
+    four columns named, reorderable and resizable, and nothing else.
+
+What it touches:
+
+- `constants/columns.ts` — new. The registry, the default layout, `isColumnId`,
+  and the two pure functions worth testing on their own: `normaliseLayout`
+  (decision 11) and `moveColumn`.
+- `stores/uiStore.ts` — `columnLayout: { order: ColumnId[]; weights: number[] }`
+  plus `setColumnLayout` / `resetColumns`. Plain data, as everything there is.
+- `services/db/repositories/settings.ts` + `persistence.ts` — one more key,
+  hydrated and persisted through the subscription that already exists.
+- `hooks/useSplitResize.ts` — the `minFraction` option.
+- `components/explorer/DetailsView.tsx` — the template computed from state, a
+  data-driven header with rules between the columns, cells mapped in layout
+  order, and the pointer-drag reorder with its insertion indicator.
+- `constants/contextMenus.ts` + `useMenuCommands` — the header context menu, so
+  the three commands go through the one implementation every other command does.
+
+Tests to write:
+
+- **Pure, in `columns.test.ts`:** `moveColumn` for every from/to pair including
+  the no-ops; `normaliseLayout` against a layout with an unknown id, a missing
+  id, weights that sum to 0.6, and a weight below the floor; the invariant that
+  the weights always sum to 1 after any resize.
+- **Component, in `DetailsView.test.tsx`:** a 2px press sorts and does not
+  reorder; a 40px drag reorders and does not sort; the header order and the cell
+  order match after a move; a divider drag changes the template and leaves the
+  sum at 1; the renderer map covers the registry.
+- **Persistence:** a layout survives a simulated relaunch, and a hand-written bad
+  row comes back as a sane default rather than an empty header.
+
+Risks this adds to §3:
+
+| Risk | Mitigation |
+| --- | --- |
+| **Header and body grids drifting** — two grids that must agree, and today they agree only because one constant is shared | One template computed per render and applied to both; a test asserts the header's column count and a row's cell count are equal (§M19 decision 4) |
+| **A reorder drag entering the file drag pipeline** — every folder lighting up as a drop target for a column | Pointer events in the header, never `dragstart`, so the two systems never meet (§M19 decision 5) |
+| **A column dragged to nothing**, then impossible to grab again | A per-column floor, plus Reset Columns in the header menu — otherwise the way back is a database edit (§M19 decisions 3, 12) |
+| **A stored layout from a later build** — a fifth column, or weights that no longer sum to 1 | Validated on read: unknown ids dropped, missing appended, weights renormalised; an empty column list would render a table with no columns (§M19 decision 11) |
+
+#### What was built, and what changed on contact
+
+Three decisions were revised while building, all in the same direction — less
+machinery:
+
+- **Decision 12 lost its header context menu.** The plan wanted Move Left /
+  Move Right / Reset Columns on a right-clicked header, routed through
+  `useMenuCommands` like every other command. But that pipeline resolves labels
+  and handlers from `APP_MENUS`, and Move Left has no meaning in an app menu:
+  the column it acts on is the one under the pointer, and the menu bar has no
+  pointer. Reordering and resizing are the focused header's own keyboard
+  business — Alt+←/→ moves, Shift+←/→ resizes, exactly the seam
+  `constants/shortcuts.ts` rule 1 already draws around `useListKeyboard`. Only
+  **Reset Columns** became a command, because it is the one with no target, and
+  it sits in View and in the native menu with the rest.
+- **The drop index reads plain containment, not midpoints.** The first version
+  moved a column once the pointer passed the midpoint of a neighbour, which also
+  meant a press in the right half of a column's *own* span read as "move me one
+  right": pressing Name and twitching 5px relocated it. Requiring the pointer to
+  actually be over another column makes a small drag the no-op it looks like.
+- **The resize rule is not `role="separator"`.** It was, briefly, and
+  `getAllByRole('separator')` in the split-layout tests then counted **fourteen**
+  dividers in a 2 × 2 split instead of two. The right fix was not to scope the
+  query: the pane dividers are focusable splitters carrying `aria-valuenow`,
+  while this is a mouse affordance for something the keyboard reaches through the
+  header. It is `aria-hidden` now, and four unrelated tests going red is what
+  said so.
+
+One decision got *stronger* than planned: the cells are a
+`Record<ColumnId, ReactNode>`, so adding a column to the registry fails to
+compile until it can be drawn. The runtime "the renderer map covers the
+registry" test the plan called for would have been strictly weaker, so it was
+not written.
+
+- **Verified in the running app, with a real pointer.** Not the packaged binary
+  this time: `wails dev` serves the same frontend against the same Go backend at
+  `localhost:34115`, which is a real browser and therefore a real drag — the
+  macOS window's WebKit tree is not reachable from AX without enabling
+  `AXManualAccessibility`, and a synthetic CGEvent drag would have been the M18
+  double-click problem again. Against the user's own `/Volumes/Ddrive`:
+  **Modified dragged onto Name** put Modified first and **took its dates with
+  it**, while the sort arrow stayed on Name — decisions 6 and 8, visible in one
+  screenshot. **Type dragged from last to first** while the sort stayed on Size.
+  A **resize** grew Name to 636px with the header and the first row reporting
+  the identical computed `grid-template-columns` — decision 4's invariant, read
+  off the live DOM rather than asserted. The floor held exactly: dragging past it
+  parked Modified at **0.08**, its `minWeight`, and the row persisted to SQLite
+  as `{"order":["type","name","modified","size"], …}`. **Reset Columns** from
+  the in-window menu put all four back; run from the *native* menu against the
+  packaged build it did the same, and was correctly **greyed out** when the
+  layout was already default.
+- **A stale coordinate is what a drag bug looks like.** Two of the attempts
+  above grabbed a header when they meant to grab a resize rule, because the
+  handle had moved since the coordinates were read — the same lesson §M18 wrote
+  down about row coordinates going stale between an AX walk and a click. Re-read
+  the rects immediately before every drag; a reorder that "fired instead of a
+  resize" is far more likely to be a 7px error than a broken threshold.
+
 ### M12 — Polish, testing, packaging
 Animations and reduced-motion support; light theme; empty/loading/error states;
 perf pass on a 10k-file directory; Vitest coverage of services, stores and hooks

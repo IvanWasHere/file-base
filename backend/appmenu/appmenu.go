@@ -137,6 +137,8 @@ var sections = []section{
 			{ID: "view.toggleSidebar", Label: "Show Sidebar"},
 			{ID: "view.togglePreview", Label: "Show Preview"},
 			separator(),
+			{ID: "view.resetColumns", Label: "Reset Columns"},
+			separator(),
 			{ID: "view.refresh", Label: "Refresh"},
 		},
 	},
