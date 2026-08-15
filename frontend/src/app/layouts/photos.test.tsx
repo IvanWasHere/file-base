@@ -215,6 +215,24 @@ describe('the Photos view', () => {
     }
   })
 
+  it('gives every card the same 16:9 frame', async () => {
+    const { user } = renderApp()
+    await goToCameraRoll(user)
+
+    const cards = within(filmstrip()).getAllByRole('option')
+    const sizes = cards.map((card) => ({
+      width: Number.parseFloat(card.style.width),
+      height: Number.parseFloat(card.style.height),
+    }))
+
+    // One frame for the whole strip, whatever shape the photos in it are.
+    expect(new Set(sizes.map((size) => `${size.width}x${size.height}`)).size).toBe(1)
+
+    const [first] = sizes
+    expect(first).toBeDefined()
+    expect(first!.width / first!.height).toBeCloseTo(16 / 9, 2)
+  })
+
   it('keeps plain arrows away from the shortcut registry', async () => {
     const { user } = renderApp()
     await goToCameraRoll(user)
