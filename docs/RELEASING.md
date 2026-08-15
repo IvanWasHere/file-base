@@ -23,8 +23,22 @@ The tag is the version: `v0.1.0` becomes `0.1.0` in `wails.json`'s
 `CFBundleVersion` are built from — so Get Info and the About panel agree with the
 release the download came from. Don't set the version in `wails.json` by hand.
 
-The workflow runs the full suite first — typecheck, lint, ~640 frontend tests,
-`go vet`, `go test ./backend/...` — so a red build cannot become a release.
+The workflow runs the full suite first — lint, ~650 frontend tests, the
+production frontend build, `go vet`, `go test ./backend/...` — so a red build
+cannot become a release.
+
+**The frontend is built before any Go command runs, and that order is load
+bearing.** `main.go` carries `//go:embed all:frontend/dist`, and `frontend/dist`
+is gitignored — so on a fresh checkout it does not exist, and anything covering
+the root package dies with:
+
+```
+main.go:24:12: pattern all:frontend/dist: no matching files found
+```
+
+Locally this never shows up, because a previous `wails build` has always left a
+`dist` behind. It cost one release run to find. If you add a Go step, put it
+after `npm run build` or scope it to `./backend/...`.
 
 ## What you get without signing, and what that costs
 

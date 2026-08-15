@@ -1835,6 +1835,18 @@ code-signing/notarization notes"; the notes are
   darwin/universal -clean` succeeds in 27s and `lipo -archs` reports
   `x86_64 arm64`; the `ditto` round trip produces a 15MB zip that unzips back to
   a valid bundle. The jq stamp was run against a copy of `wails.json`.
+- **The first run failed, and the reason is worth keeping.** `go vet ./...`
+  covers the root package, which carries `//go:embed all:frontend/dist` — and
+  `frontend/dist` is gitignored, so a fresh checkout has none:
+  `pattern all:frontend/dist: no matching files found`. It passed every local
+  check because a previous `wails build` had always left a `dist` behind, which
+  is the shape of a whole class of CI failure: **the local tree is never the
+  checkout**. The fix is one line of ordering — build the frontend before any Go
+  command — and the verification was to `git clone` the repo to a temp directory
+  and run the entire sequence there, which is the only way to see what the runner
+  sees. That clone now goes lint → tests → frontend build → vet → go test → jq
+  stamp → universal build, ending in a bundle reporting
+  `CFBundleShortVersionString 0.1.0` and `x86_64 arm64`.
 - **The unsigned state was measured, not assumed**: `codesign -dv` reports
   `flags=0x2(adhoc)` and `spctl -a -vv -t exec` reports **`rejected`**. That is
   exactly what a downloader hits — macOS phrases it as "damaged", which is a lie

@@ -78,12 +78,21 @@ jobs:
         run: npm ci
 
       # A release must not ship a red build. This is the same suite that runs
-      # locally: ~640 frontend tests against the mock bridge, plus the Go side.
+      # locally: ~650 frontend tests against the mock bridge, plus the Go side.
+      #
+      # **Order matters, and cost a release to learn.** `main.go` carries
+      # `//go:embed all:frontend/dist`, and `frontend/dist` is gitignored — so on
+      # a fresh checkout it does not exist and *any* Go command covering the root
+      # package fails with "pattern all:frontend/dist: no matching files found".
+      # It passed locally because a previous build had left a dist behind.
+      # Building the frontend first is what makes `go vet ./...` compile; it also
+      # proves the production bundle builds before the Go side is touched, and
+      # `npm run build` runs typecheck itself.
       - name: Test
         run: |
-          npm --prefix frontend run typecheck
           npm --prefix frontend run lint
           npm --prefix frontend test
+          npm --prefix frontend run build
           go vet ./...
           go test ./backend/...
 
