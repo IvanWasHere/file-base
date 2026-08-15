@@ -38,6 +38,20 @@
 
 ---
 
+## Install
+
+Grab the latest zip from [Releases](https://github.com/IvanWasHere/file-base/releases),
+unzip it, and drag **file-base.app** to Applications. Universal — Apple silicon
+and Intel — and needs macOS 10.13 or later.
+
+> ⚠️ **Builds are not signed yet.** macOS will say the app "is damaged and can't
+> be opened", which is a lie about a real thing: the app is intact, it just has
+> no Developer ID, and downloads carry a quarantine flag. Right-click it →
+> **Open** → **Open**, once, and it will launch from then on. Signing removes
+> this entirely — see [docs/RELEASING.md](docs/RELEASING.md).
+
+---
+
 ## Features
 
 ### 🗂️ Tabs, panes and split layouts

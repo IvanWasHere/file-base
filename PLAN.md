@@ -1787,12 +1787,52 @@ be read synchronously, so the first frame is dark whatever is stored. Go could
 read that one row itself at startup and set `BackgroundColour` from it, which is
 the cheapest fix if it grates.
 
+#### Release pipeline ✅ done
+
+`.github/workflows/release.yml`: push a `v*` tag, get a **draft** release with a
+universal zip attached. The M12 line item was "`wails build` +
+code-signing/notarization notes"; the notes are
+[docs/RELEASING.md](docs/RELEASING.md).
+
+1. **The tag is the version.** It is stamped into `wails.json`'s
+   `info.productVersion` before the build, which is what `CFBundleVersion` and
+   `CFBundleShortVersionString` come from — so Get Info cannot disagree with the
+   release the download came from. Setting it by hand is the mistake this
+   prevents.
+2. **The full suite runs before the build**, not after: typecheck, lint, ~640
+   frontend tests, `go vet`, `go test ./backend/...`. A red build cannot become
+   a release.
+3. **Signing is gated on secrets, not on edits.** Every signing step is
+   `if: env.MACOS_… != ''`, so the workflow works today unsigned and starts
+   signing the moment six secrets exist. **`secrets` is not an allowed context
+   in an `if`** — only `env` is — so they are lifted to job-level `env` first,
+   which is the whole reason that block exists.
+4. **The release is a draft.** Nothing is public until it is read.
+5. **Packaged with `ditto`, not `zip`.** A `.app` is a tree of symlinks and
+   permission bits and `zip` flattens both; `--keepParent` keeps the bundle as
+   the top-level entry so it unzips as an app rather than as loose `Contents/`.
+
+- **Verified locally rather than by burning a tag**: `wails build -platform
+  darwin/universal -clean` succeeds in 27s and `lipo -archs` reports
+  `x86_64 arm64`; the `ditto` round trip produces a 15MB zip that unzips back to
+  a valid bundle. The jq stamp was run against a copy of `wails.json`.
+- **The unsigned state was measured, not assumed**: `codesign -dv` reports
+  `flags=0x2(adhoc)` and `spctl -a -vv -t exec` reports **`rejected`**. That is
+  exactly what a downloader hits — macOS phrases it as "damaged", which is a lie
+  about a real problem — so it is written into the README and the release notes
+  instead of being discovered by the first person who downloads it.
+
 #### Remaining in M12
 
 Animations and reduced-motion (a `prefers-reduced-motion` block exists in
 `global.css`; nothing else has been audited), empty/loading/error states, the
-10k-file perf pass, the coverage sweep, Playwright — not started, and the
-largest single piece left — and `wails build` + signing/notarization notes.
+10k-file perf pass, the coverage sweep, and Playwright — not started, and the
+largest single piece left.
+
+Notarization itself is no longer a code question but a money one: the pipeline
+is written and skips itself until an Apple Developer membership and six secrets
+exist (§3 has said "deferred to M12" since M0; it is now "deferred to a
+subscription").
 
 ---
 
