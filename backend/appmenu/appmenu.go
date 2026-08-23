@@ -138,6 +138,11 @@ var sections = []section{
 				item{ID: "view.themeSystem", Label: "Match System"},
 				item{ID: "view.themeLight", Label: "Light"},
 				item{ID: "view.themeDark", Label: "Dark"},
+				// Light and Dark mean the two stock themes. The rest — the other
+				// built-ins and anything in the themes folder — are in Settings,
+				// because a native menu cannot be rebuilt when a file appears in
+				// a folder (§M24).
+				item{ID: "view.moreThemes", Label: "More Themes…"},
 			),
 			separator(),
 			{ID: "view.toggleHidden", Label: "Show Hidden Files"},

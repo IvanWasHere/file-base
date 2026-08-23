@@ -13,7 +13,7 @@
  */
 
 import { splitLabel } from '@/constants/splitModes'
-import { themeLabel } from '@/constants/themes'
+import { MENU_THEMES, themeLabel } from '@/constants/themes'
 
 export type MenuCommandId =
   // File
@@ -67,6 +67,7 @@ export type MenuCommandId =
   | 'view.themeSystem'
   | 'view.themeLight'
   | 'view.themeDark'
+  | 'view.moreThemes'
   | 'view.toggleHidden'
   | 'view.toggleSidebar'
   | 'view.togglePreview'
@@ -198,12 +199,20 @@ export const APP_MENUS: MenuDefinition[] = [
       // Beside Split Layout rather than in the toggle group below it: the three
       // are one choice, and a checkable row per theme flattened into View would
       // read as three independent switches (§M12).
+      //
+      // Still three rows after §M24 brought the count of themes to five and made
+      // it unbounded, because this menu is also built natively in Go and cannot
+      // be rebuilt when a file appears in a folder. Light and Dark mean *the
+      // stock light and dark themes*; the row below opens the list that knows
+      // about the rest, and shows no checkmark because it is a door, not a
+      // choice.
       {
         label: 'Theme',
         items: [
-          { id: 'view.themeSystem', label: themeLabel('system'), checkable: true },
-          { id: 'view.themeLight', label: themeLabel('light'), checkable: true },
-          { id: 'view.themeDark', label: themeLabel('dark'), checkable: true },
+          { id: 'view.themeSystem', label: themeLabel(MENU_THEMES.system), checkable: true },
+          { id: 'view.themeLight', label: themeLabel(MENU_THEMES.light), checkable: true },
+          { id: 'view.themeDark', label: themeLabel(MENU_THEMES.dark), checkable: true },
+          { id: 'view.moreThemes', label: 'More Themes…' },
         ],
       },
       { separator: true },

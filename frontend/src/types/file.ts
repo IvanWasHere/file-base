@@ -68,6 +68,8 @@ export interface StandardPaths {
   trash: string
   /** Where custom file templates live (M15). Beside the database, not in home. */
   templates: string
+  /** Where external colour themes live (§M24). Beside the templates folder. */
+  themes: string
 }
 
 export interface ReadDirectoryOptions {

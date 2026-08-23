@@ -2168,6 +2168,93 @@ Decisions:
 
 ---
 
+### M24 — Themes ✅ complete
+
+Two palettes lived in `styles/theme.css`, a light one and a dark one, and both
+were CSS. That made a theme something only a rebuild could add — and it had
+already produced the failure the file's own comment warns about: a
+`prefers-color-scheme` block that was a hand-copied subset of the light theme
+and had drifted out of sync with it. §M24 turns a palette into **data**: five
+built-in themes, and any number more read from JSON files in a folder.
+
+Decisions:
+
+1. **One file holds every colour in the app, and it is not a stylesheet.**
+   `constants/palette.ts` declares thirty-three named tokens and the five
+   palettes that fill them. No component and no CSS file may write a hex, an
+   `rgb()` or a colour keyword — the moment one does, that pixel stops following
+   the theme and an external palette can never reach it. Extracting them found
+   the leaks that had accumulated since M6: seven `bg-black/50` dialog
+   backdrops, three `text-white`-on-accent labels and a `hover:text-black`,
+   every one of which was a light theme drawn slightly wrong. They are tokens
+   now (`overlay`, `scrim`, `on-accent`, `on-danger`).
+2. **A theme is only colours.** Not fonts, not sizes, not radii, not layout.
+   That constraint is what makes it safe to load a theme from a file someone
+   downloaded: the worst a malformed one can do is look wrong. Values are still
+   checked before they reach a custom property — `url()` and `image-set()` are
+   the two colour positions that can reach the network, and a colour list has no
+   business fetching anything.
+3. **External themes are files, not rows** — the §M15 call for custom file
+   templates, made again for the same reasons. This is a file explorer; someone
+   who wants their own palette writes a small JSON file and drops it in
+   `~/Library/Application Support/MacFileExplorer/Themes`. No import format, no
+   theme editor, no migration, and the themes are portable, syncable, diffable
+   and shareable for free. Deleting one is deleting a file. The only new thing
+   Go needed was the folder's location, beside `Templates` in `StandardPaths`.
+4. **A theme file may name as few colours as it likes.** Everything it leaves
+   out comes from the built-in theme of its mode, so "the stock dark theme but
+   with a green accent" is a four-line file rather than a copy of thirty-three
+   values that stops tracking the app the moment a token is added.
+5. **The palette reaches the document as inline custom properties**, written by
+   `services/theme` and by nothing else. It is the only mechanism available —
+   an external theme has no stylesheet, it is thirty-three strings that arrived
+   as JSON a moment ago. `data-theme` still carries the *mode*, because
+   `color-scheme` is the one thing that has two values however many themes are
+   installed. `main.tsx` paints the default palette before React renders, since
+   no stylesheet declares a colour any more.
+6. **Sixteen tokens are derived, not declared.** `--accent-glow` and the nine
+   `--ft-bg-*` plates are `color-mix` of their base colour at 12%, `--shadow-menu`
+   is fixed offsets over a themed `--shadow-color`. A theme author sets eight
+   file-type colours and gets sixteen, and the tinted plate behind an icon
+   cannot drift from the icon. `theme.css` survives holding only this
+   arithmetic — and no literal colour at all.
+7. **Settings gained a Themes section; View ▸ Theme kept its three rows.** The
+   menu bar is built natively in Go and cannot grow a row when a file appears in
+   a folder, so Light and Dark there mean *the stock pair* and a fourth row —
+   More Themes… — is a door to the panel that knows about the rest. This is the
+   first thing that genuinely could not live in the View menu, which is why it
+   went into Settings rather than bending §M22's rule.
+8. **Export Current Theme is how anyone learns the format.** Nobody should read
+   a documentation page to discover thirty-three token names: press the button,
+   get a complete file named after a theme you already like, change four lines,
+   press Reload. It exports the theme *on screen* rather than a blank template,
+   because a palette is edited by nudging.
+9. **`light` and `dark` are migrated on the way out of the settings table.**
+   They were the two palettes and are now the ids of two of five themes.
+   Without the migration everyone who had ever touched the theme menu would come
+   back from the upgrade on the fallback. The preference guard had to weaken to
+   a shape check at the same time — an id can be the path of a file that exists
+   on one Mac and not another — so "does this name a theme" is answered in
+   `resolveTheme`, where the installed themes are known and an id that names
+   nothing falls back without clearing the preference. Put the file back and the
+   theme returns.
+
+- **Verified in the running app**, not only under Vitest: all five themes apply
+  the instant they are clicked, repainting the window behind the modal — sidebar,
+  icons, menus and the empty-pane grid included; Parchment flips `color-scheme`
+  to light with it; Export Current Theme wrote `Parchment.json`, listed it as
+  "Parchment Copy" under *From the themes folder* and selected it; and the
+  derived tokens resolve as they should (`--ft-bg-image` paints
+  `color(srgb 0.66 0.26 0.48 / 0.12)`, exactly the `rgba(…, 0.12)` it replaced).
+  One rough edge was found there rather than in a test: the Match System row's
+  explanation was long enough to squeeze its own label down to "Mat…".
+  Fifty-three tests across `theme.test.ts`, `themeFile.test.ts` and
+  `themeFiles.test.ts` cover resolution, the file format's every rejection, the
+  folder, and the export; seven in `settings.test.tsx` drive the panel through
+  the real chrome, including a theme dropped into the folder and a broken one.
+
+---
+
 ## 3. Risks
 
 | Risk | Mitigation |

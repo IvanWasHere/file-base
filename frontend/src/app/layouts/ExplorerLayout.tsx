@@ -26,6 +26,7 @@ import { hydrate, startPersistence } from '@/services/db/persistence'
 import { standardPathsQuery } from '@/services/filesystem/queries'
 import { startWatchInvalidation } from '@/services/filesystem/watch'
 import { startThemeSync } from '@/services/theme/theme'
+import { refreshExternalThemes } from '@/services/theme/themeFiles'
 import { usePaneSelection } from '@/stores/selectionStore'
 import { useUiStore } from '@/stores/uiStore'
 import { useActivePane, useActiveTab, useWorkspaceStore } from '@/stores/workspaceStore'
@@ -73,6 +74,18 @@ export function ExplorerLayout() {
   // a failed home lookup are drawn in the user's theme rather than in whatever
   // the document happens to be before hydration (§M12).
   useEffect(() => startThemeSync(), [])
+
+  // The themes folder, read once at startup (§M24). Separate from `hydrate`
+  // because it is not persistence — the files *are* the record — and because it
+  // must not be behind the same guard: a database failure costs session restore,
+  // and it should not also cost the user the theme they are looking at.
+  // `startThemeSync` re-applies when the list lands.
+  useEffect(() => {
+    if (!paths?.themes) return
+    void refreshExternalThemes(paths.themes).catch((error: unknown) => {
+      console.warn('[themes] could not read the themes folder:', error)
+    })
+  }, [paths?.themes])
 
   // Change events are subscribed to once for the whole app, not per pane: the
   // watcher reports directories, and which panes care is the query cache's

@@ -766,6 +766,9 @@ export const bridge: Bridge = {
         // seeded — the folder starts absent here exactly as it does on a fresh
         // install, so the "create it on first open" path is the one tests take.
         templates: join(HOME, 'Library/Application Support/MacFileExplorer/Templates'),
+        // Same story as Templates: absent on a fresh install, so the tests take
+        // the "create it the first time someone looks" path (§M24).
+        themes: join(HOME, 'Library/Application Support/MacFileExplorer/Themes'),
       }),
     exists: (path) => Promise.resolve(nodes.has(normalize(path))),
     readFileInfos: async (paths) =>

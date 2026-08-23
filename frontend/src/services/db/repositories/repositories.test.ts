@@ -18,6 +18,7 @@ import { clearRecents, forgetPath, listRecents, recordVisit } from './recents'
 import { getFolderPrefs, loadAllFolderPrefs, saveFolderPrefs } from './folderPrefs'
 import { clearSession, loadSession, saveSession } from './session'
 import { bridge } from '@/services/bridge'
+import { DEFAULT_THEME } from '@/constants/themes'
 import { DEFAULT_SORT } from '@/services/filesystem/sort'
 import type { Pane, Tab } from '@/types/workspace'
 
@@ -41,12 +42,36 @@ describe('settings', () => {
   })
 
   it('overwrites rather than duplicating a key', async () => {
-    await saveSetting('theme', 'light')
-    await saveSetting('theme', 'dark')
+    await saveSetting('theme', 'nocturne')
+    await saveSetting('theme', 'graphite')
 
     const rows = await bridge.db.query('select key from settings where key = ?', ['theme'])
     expect(rows).toHaveLength(1)
-    expect((await loadSettings()).theme).toBe('dark')
+    expect((await loadSettings()).theme).toBe('graphite')
+  })
+
+  // The two values a database written before §M24 can hold, when `light` and
+  // `dark` were the only palettes rather than the ids of two of five themes.
+  it('brings a pre-§M24 theme preference forward on the way out', async () => {
+    await saveSetting('theme', 'dark')
+    expect((await loadSettings()).theme).toBe('vault-dark')
+
+    await saveSetting('theme', 'light')
+    expect((await loadSettings()).theme).toBe('vault-light')
+  })
+
+  // Not validated against the installed themes here, deliberately: an id can
+  // name a file that exists on one Mac and not another, so the fallback lives
+  // in `resolveTheme` where the themes are known.
+  it('keeps a theme id it does not recognise, and drops one of the wrong type', async () => {
+    await saveSetting('theme', 'external:/themes/ocean.json')
+    expect((await loadSettings()).theme).toBe('external:/themes/ocean.json')
+
+    await bridge.db.exec(
+      'insert into settings (key, value) values (?, ?) on conflict (key) do update set value = excluded.value',
+      ['theme', JSON.stringify(7)],
+    )
+    expect((await loadSettings()).theme).toBe(DEFAULT_THEME)
   })
 
   it('saves several settings at once', async () => {

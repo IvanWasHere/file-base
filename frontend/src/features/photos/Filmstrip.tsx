@@ -109,7 +109,7 @@ const Thumb = memo(function Thumb({
           <FileIcon category={item.category} size={20} />
         </div>
       )}
-      <span className="absolute inset-x-0 bottom-0 truncate bg-black/70 px-1 py-0.5 text-[9px] text-[var(--text-secondary)]">
+      <span className="absolute inset-x-0 bottom-0 truncate bg-scrim px-1 py-0.5 text-[9px] text-[var(--text-secondary)]">
         {item.name}
       </span>
     </div>

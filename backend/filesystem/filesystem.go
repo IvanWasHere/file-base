@@ -79,6 +79,10 @@ type StandardPaths struct {
 	// well-known location — it is the only new thing M15 needed from Go besides
 	// CreateFile's content.
 	Templates string `json:"templates"`
+	// Themes is where external colour themes live (PLAN.md §M24 decision 2).
+	// Beside Templates, and resolved here for the same reason: a well-known
+	// location is native knowledge, not a string built in TypeScript.
+	Themes string `json:"themes"`
 }
 
 // ReadDirectory lists every entry in path, hidden ones included and flagged.
@@ -239,6 +243,7 @@ func (f *FS) StandardPaths() (StandardPaths, error) {
 		Pictures:     filepath.Join(home, "Pictures"),
 		Trash:        filepath.Join(home, ".Trash"),
 		Templates:    filepath.Join(config, "MacFileExplorer", "Templates"),
+		Themes:       filepath.Join(config, "MacFileExplorer", "Themes"),
 	}, nil
 }
 

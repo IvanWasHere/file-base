@@ -48,7 +48,7 @@ function PasswordDialog({ request }: { request: PasswordRequest }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-6"
       onMouseDown={(event) => {
         if (!panelRef.current?.contains(event.target as Node)) resolveDialog(null)
       }}
@@ -156,7 +156,7 @@ function ChoiceDialog() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-6"
       // A click on the backdrop is a dismissal, matching every other modal on
       // the platform. `false` is the safe answer for both dialog kinds.
       onMouseDown={(event) => {
@@ -204,7 +204,7 @@ function ChoiceDialog() {
                 onClick={() => resolveDialog(choice.value)}
                 className={`rounded-md px-3 py-1.5 text-[13px] transition-colors ${
                   choice.destructive
-                    ? 'bg-[var(--danger)] text-white hover:opacity-90'
+                    ? 'bg-danger text-on-danger hover:opacity-90'
                     : choice.primary
                       ? 'text-accent bg-[var(--accent-glow)] hover:opacity-90'
                       : 'border-edge text-secondary hover:bg-hover hover:text-primary border'

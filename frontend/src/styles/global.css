@@ -8,6 +8,8 @@
 @import '@fontsource/space-grotesk/latin-700.css';
 
 @import 'tailwindcss';
+/* Derived tokens only. The palettes themselves are data — constants/palette.ts
+   — and are written onto the document as custom properties at runtime (§M24). */
 @import './theme.css';
 
 /*
@@ -36,9 +38,18 @@
   --color-accent-dim: var(--accent-dim);
   --color-accent-glow: var(--accent-glow);
 
+  --color-on-accent: var(--on-accent);
+  --color-on-danger: var(--on-danger);
+
   --color-danger: var(--danger);
   --color-success: var(--success);
   --color-info: var(--info);
+
+  /* The washes: a dialog's backdrop, and the plate under a caption printed
+     over someone's photo. Themed rather than `black/50`, so a light theme can
+     stop dimming its window to half-black. */
+  --color-overlay: var(--overlay);
+  --color-scrim: var(--scrim);
 }
 
 /*

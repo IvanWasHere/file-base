@@ -100,7 +100,7 @@ function CompressPanel({ sources, parent }: { sources: string[]; parent: string 
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-6"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay p-6"
       onMouseDown={(event) => {
         if (!panelRef.current?.contains(event.target as Node)) close()
       }}

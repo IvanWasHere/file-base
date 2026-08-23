@@ -1,17 +1,22 @@
 /**
- * §M22 acceptance: the Settings modal, the two columns it can switch on, and
- * the tag picker — driven through the real chrome against the mock filesystem.
+ * §M22 and §M24 acceptance: the Settings modal, the columns it can switch on,
+ * the tag picker, and the theme list — driven through the real chrome against
+ * the mock filesystem.
  */
 
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ExplorerLayout } from './ExplorerLayout'
 import { createQueryClient } from '@/app/providers/queryClient'
 import { DEFAULT_LAYOUT, visibleColumns } from '@/constants/columns'
 import { CONTEXT_COMMANDS, CONTEXT_MENUS } from '@/constants/contextMenus'
+import { BUILTIN_THEMES, baseThemeFor } from '@/constants/palette'
+import { DEFAULT_THEME } from '@/constants/themes'
 import { bridge } from '@/services/bridge'
+import { ensureThemesFolder } from '@/services/theme/themeFiles'
+import { useThemeStore } from '@/stores/themeStore'
 import { useClipboardStore } from '@/stores/clipboardStore'
 import { useSelectionStore } from '@/stores/selectionStore'
 import { useToastStore } from '@/stores/toastStore'
@@ -20,6 +25,7 @@ import { __resetIdCounter, useWorkspaceStore } from '@/stores/workspaceStore'
 
 const HOME = '/Users/dev'
 const WORK = `${HOME}/Documents/Work`
+const THEMES = `${HOME}/Library/Application Support/MacFileExplorer/Themes`
 
 function renderApp() {
   return {
@@ -48,6 +54,18 @@ async function openSettings(user: User) {
   return settings()
 }
 
+/**
+ * Opens Settings and walks to one of its sections.
+ *
+ * §M24 put Themes first, so the column and context-menu tests below have to say
+ * which panel they mean rather than assuming the one that happened to open.
+ */
+async function openSection(user: User, label: string) {
+  const panel = await openSettings(user)
+  await user.click(within(panel).getByRole('button', { name: label }))
+  return panel
+}
+
 async function goTo(user: User, ...folders: string[]) {
   for (const folder of folders) {
     await user.dblClick(await rowFor(folder))
@@ -70,6 +88,9 @@ beforeEach(() => {
     hiddenContextCommands: [],
   })
   useClipboardStore.setState({ paths: [], mode: null, sourceDir: null })
+  useUiStore.setState({ theme: DEFAULT_THEME })
+  useThemeStore.setState({ external: [], loaded: false })
+  document.documentElement.removeAttribute('style')
   useToastStore.getState().clear()
   __resetIdCounter()
 })
@@ -94,7 +115,7 @@ describe('the Settings modal', () => {
     await rowFor('Documents')
     expect(headerLabels()).toEqual(['Name', 'Size', 'Type', 'Modified'])
 
-    const panel = await openSettings(user)
+    const panel = await openSection(user, 'Columns')
     await user.click(within(panel).getByRole('checkbox', { name: /^Tags/ }))
     await user.click(within(panel).getByRole('checkbox', { name: /^Created/ }))
 
@@ -108,7 +129,7 @@ describe('the Settings modal', () => {
     const { user } = renderApp()
     await rowFor('Documents')
 
-    const panel = await openSettings(user)
+    const panel = await openSection(user, 'Columns')
     await user.click(within(panel).getByRole('checkbox', { name: /^Size/ }))
     await user.keyboard('{Escape}')
 
@@ -123,7 +144,7 @@ describe('the Settings modal', () => {
     const { user } = renderApp()
     await rowFor('Documents')
 
-    const panel = await openSettings(user)
+    const panel = await openSection(user, 'Columns')
     const name = within(panel).getByRole('checkbox', { name: /^Name/ })
     expect(name).toBeDisabled()
     expect(name).toHaveAttribute('aria-checked', 'true')
@@ -133,7 +154,7 @@ describe('the Settings modal', () => {
     const { user } = renderApp()
     await rowFor('Documents')
 
-    const panel = await openSettings(user)
+    const panel = await openSection(user, 'Columns')
     await user.click(within(panel).getByRole('checkbox', { name: /^Tags/ }))
     await waitFor(() => expect(headerLabels()).toHaveLength(5))
 
@@ -290,6 +311,127 @@ describe('the tag picker', () => {
     await waitFor(async () => {
       const info = await bridge.fs.readFileInfo(`${WORK}/Team Structure.xlsx`)
       expect(info.tags).toEqual([{ name: 'Q3 Budget', color: 3 }])
+    })
+  })
+})
+
+describe('themes', () => {
+  const themeRow = (panel: HTMLElement, name: string | RegExp) =>
+    within(panel).findByRole('radio', { name })
+
+  const accent = () => document.documentElement.style.getPropertyValue('--accent')
+
+  it('opens on Themes and lists every built-in', async () => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+
+    const panel = await openSettings(user)
+
+    for (const theme of BUILTIN_THEMES) {
+      expect(await themeRow(panel, new RegExp(`^${theme.name}\\b`))).toBeInTheDocument()
+    }
+    expect(await themeRow(panel, /^Match System/)).toBeInTheDocument()
+  })
+
+  /**
+   * The milestone in one test: a theme is only colours, and picking one repaints
+   * the window behind the modal rather than arming an OK button.
+   */
+  it('repaints the window the moment a theme is picked', async () => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+    expect(accent()).toBe(baseThemeFor('dark').colors.accent)
+
+    const panel = await openSettings(user)
+    await user.click(await themeRow(panel, 'Nocturne'))
+
+    const nocturne = BUILTIN_THEMES.find((theme) => theme.id === 'nocturne')
+    await waitFor(() => expect(accent()).toBe(nocturne?.colors.accent))
+    expect(useUiStore.getState().theme).toBe('nocturne')
+  })
+
+  // A light theme has to bring `color-scheme` with it, which is what flips the
+  // native scrollbars and the caret. `data-theme` carries the mode, not the id.
+  it('puts the mode on the document, not the theme name', async () => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+
+    const panel = await openSettings(user)
+    await user.click(await themeRow(panel, 'Parchment'))
+
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'))
+  })
+
+  it('is where View ▸ Theme ▸ More Themes… lands', async () => {
+    const { user } = renderApp()
+    await rowFor('Documents')
+
+    await user.click(screen.getByRole('menuitem', { name: 'View' }))
+    // Hovered, not clicked: a submenu opens on the pointer entering its row, and
+    // a click on the row would toggle it straight back shut.
+    await user.hover(await screen.findByRole('menuitem', { name: 'Theme' }))
+
+    // `fireEvent` for the row *inside* the flyout, for the reason MenuBar.test
+    // spells out: userEvent reports the move out of the parent row with a null
+    // `relatedTarget`, React synthesises a mouseleave on the wrapper that owns
+    // the open state, and the flyout closes before the click lands.
+    const themeMenu = await screen.findByRole('menu', { name: 'Theme' })
+    fireEvent.click(within(themeMenu).getByRole('menuitem', { name: 'More Themes…' }))
+
+    const panel = await settings()
+    expect(await themeRow(panel, /^Graphite/)).toBeInTheDocument()
+  })
+
+  describe('themes from the folder', () => {
+    it('offers one that was dropped in, and applies it', async () => {
+      // As if the user had written it in any editor.
+      await ensureThemesFolder(THEMES)
+      await bridge.fs.createFile(
+        THEMES,
+        'Ocean.json',
+        JSON.stringify({ name: 'Ocean', mode: 'dark', colors: { accent: '#38bdf8' } }),
+      )
+
+      const { user } = renderApp()
+      await rowFor('Documents')
+
+      const panel = await openSettings(user)
+      await user.click(await themeRow(panel, /^Ocean/))
+
+      await waitFor(() => expect(accent()).toBe('#38bdf8'))
+    })
+
+    // Listed with its reason rather than skipped: a file that silently did
+    // nothing reads as a bug in the app instead of a typo in the theme.
+    it('shows a broken one with its reason and refuses to use it', async () => {
+      await ensureThemesFolder(THEMES)
+      await bridge.fs.createFile(THEMES, 'Broken.json', '{ half an edit')
+
+      const { user } = renderApp()
+      await rowFor('Documents')
+
+      const panel = await openSettings(user)
+      const broken = await themeRow(panel, /Broken/)
+      expect(broken).toBeDisabled()
+      expect(within(panel).getByText('Not valid JSON')).toBeInTheDocument()
+      expect(accent()).toBe(baseThemeFor('dark').colors.accent)
+    })
+
+    /**
+     * How anyone finds out what the format is: press the button, get a complete
+     * file named after a theme you already like, change four lines.
+     */
+    it('exports the theme on screen as a file to edit', async () => {
+      const { user } = renderApp()
+      await rowFor('Documents')
+
+      const panel = await openSettings(user)
+      await user.click(within(panel).getByRole('button', { name: /Export Current Theme/ }))
+
+      await waitFor(async () =>
+        expect(await bridge.fs.exists(`${THEMES}/Vault Dark.json`)).toBe(true),
+      )
+      expect(await themeRow(panel, /^Vault Dark Copy/)).toBeInTheDocument()
     })
   })
 })

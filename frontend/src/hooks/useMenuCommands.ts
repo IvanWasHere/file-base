@@ -1,7 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useQuery } from '@tanstack/react-query'
 import type { MenuCommandId } from '@/constants/menus'
-import type { ThemePreference } from '@/constants/themes'
+import { MENU_THEMES, type ThemePreference } from '@/constants/themes'
+import { DEFAULT_SETTINGS_SECTION } from '@/constants/settingsSections'
 import { isDefaultLayout } from '@/constants/columns'
 import { useFavorites } from '@/hooks/useFavorites'
 import { useArchive } from '@/hooks/useArchive'
@@ -148,10 +149,14 @@ export function useMenuCommands(): MenuCommandState {
     'view.splitFour': 'grid-2x2',
   }
 
+  // Three rows for an unbounded set of themes, deliberately: see the note on
+  // the Theme submenu in constants/menus.ts. Light and Dark are the ids of the
+  // stock pair, so the checkmark logic below is unchanged by §M24 — a user on
+  // Nocturne simply has no tick in this submenu, and finds it in Settings.
   const themes: Partial<Record<MenuCommandId, ThemePreference>> = {
-    'view.themeSystem': 'system',
-    'view.themeLight': 'light',
-    'view.themeDark': 'dark',
+    'view.themeSystem': MENU_THEMES.system,
+    'view.themeLight': MENU_THEMES.light,
+    'view.themeDark': MENU_THEMES.dark,
   }
 
   const run = (id: MenuCommandId): void => {
@@ -247,7 +252,7 @@ export function useMenuCommands(): MenuCommandState {
         return
 
       case 'app.settings':
-        ui.openSettings()
+        ui.openSettings(DEFAULT_SETTINGS_SECTION)
         return
 
       case 'file.compress':
@@ -329,6 +334,11 @@ export function useMenuCommands(): MenuCommandState {
         return
       case 'view.resetColumns':
         ui.resetColumns()
+        return
+      // The overflow from a native menu that cannot list five themes, let alone
+      // however many are in the folder (§M24).
+      case 'view.moreThemes':
+        ui.openSettings('themes')
         return
       case 'view.refresh':
         if (pane) {

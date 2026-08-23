@@ -17,7 +17,8 @@
 
 import { BUILTIN_TEMPLATES, type FileTemplate } from '@/constants/fileTemplates'
 import { bridge } from '@/services/bridge'
-import { basename, dirname, stem as stemOf } from '@/utils/path'
+import { ensureFolder } from '@/services/filesystem/ensureFolder'
+import { stem as stemOf } from '@/utils/path'
 
 /**
  * A template is a starting point someone will read, so a megabyte is already
@@ -27,31 +28,14 @@ import { basename, dirname, stem as stemOf } from '@/utils/path'
 const MAX_TEMPLATE_BYTES = 1024 * 1024
 
 /**
- * Creates the templates folder if it is not there, including any missing
- * parents.
+ * Creates the templates folder if it is not there.
  *
- * Recursive because `createFolder` takes a parent that must already exist, and
- * on a fresh install the app-support folder may not — it is normally created by
- * whichever of the database or this runs first. Failures are swallowed: a
- * missing folder means no custom templates, which the dialog already handles,
- * and is never a reason to refuse to open.
+ * A named wrapper rather than a call to `ensureFolder` at each use site: the
+ * dialog asks for "the templates folder", not for a path to be created, and
+ * §M24 gave the generic half a second caller in the themes folder.
  */
 export async function ensureTemplatesFolder(path: string): Promise<void> {
-  if (!path) return
-  try {
-    if (await bridge.fs.exists(path)) return
-  } catch {
-    return
-  }
-
-  const parent = dirname(path)
-  if (parent && parent !== path) await ensureTemplatesFolder(parent)
-
-  try {
-    await bridge.fs.createFolder(parent, basename(path))
-  } catch {
-    // Already there, or not creatable. Either way the read below decides.
-  }
+  await ensureFolder(path)
 }
 
 /**

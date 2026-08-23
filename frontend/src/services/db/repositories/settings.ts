@@ -11,7 +11,12 @@ import {
   isHashAlgorithm,
   type HashAlgorithm,
 } from '@/constants/hashAlgorithms'
-import { DEFAULT_THEME, isThemePreference, type ThemePreference } from '@/constants/themes'
+import {
+  DEFAULT_THEME,
+  isThemePreference,
+  migrateThemePreference,
+  type ThemePreference,
+} from '@/constants/themes'
 import { DEFAULT_LAYOUT, normaliseLayout, type ColumnLayout } from '@/constants/columns'
 import { CONTEXT_COMMANDS } from '@/constants/contextMenus'
 import { isMenuCommandId, type MenuCommandId } from '@/constants/menus'
@@ -73,9 +78,18 @@ export async function loadSettings(): Promise<AppSettings> {
   // this one has never heard of, and the backend rejects an unknown one
   // outright — so the modal would open on a job that can never start.
   if (!isHashAlgorithm(stored.hashAlgorithm)) delete stored.hashAlgorithm
-  // Same for the theme: an unrecognised one would be written to `data-theme`
-  // and match no palette, leaving a window with no colours at all (§M12).
-  if (!isThemePreference(stored.theme)) delete stored.theme
+  // The theme is checked for *shape* only since §M24: a valid id can name a
+  // theme file that exists on one Mac and not another, so "does this name a
+  // theme" is answered where the installed themes are known and falls back to
+  // the default there. A number or an object, though, must never reach it.
+  if (!isThemePreference(stored.theme)) {
+    delete stored.theme
+  } else {
+    // `light` and `dark` were the two palettes before §M24 and are now the ids
+    // of the two stock themes. Without this, everyone who had ever touched the
+    // theme menu would come back from the upgrade on the fallback.
+    stored.theme = migrateThemePreference(stored.theme)
+  }
   // A template id points at something that may no longer exist — a custom file
   // the user deleted, a built-in a later build renamed. The dialog resolves it
   // against the list it actually has and falls back to none, so only the type

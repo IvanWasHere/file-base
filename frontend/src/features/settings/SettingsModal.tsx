@@ -4,16 +4,22 @@ import { COLUMNS, isColumnVisible } from '@/constants/columns'
 import { CONTEXT_COMMANDS, contextsFor, type ContextKind } from '@/constants/contextMenus'
 import { findMenuItem, type MenuCommandId } from '@/constants/menus'
 import { acceleratorFor } from '@/constants/shortcuts'
+import { SETTINGS_SECTIONS, type SettingsSection } from '@/constants/settingsSections'
+import { ThemesSection } from './ThemesSection'
 import { useUiStore } from '@/stores/uiStore'
 
 /**
- * File Base Settings (PLAN.md §M22).
+ * File Base Settings (PLAN.md §M22, §M24).
  *
- * Two sections, because §M22 adds exactly two things a user can configure:
- * which columns the details view shows, and which rows the right-click menus
- * offer. Everything else the app remembers — the theme, hidden files, the
- * sidebar — is a *toggle* reachable from the View menu, and moving those in here
- * would give each of them two homes that have to agree.
+ * §M22 opened with two sections — which columns the details view shows, and
+ * which rows the right-click menus offer — on the rule that everything else the
+ * app remembers is a *toggle* reachable from the View menu, and moving those in
+ * here would give each of them two homes that have to agree.
+ *
+ * Themes is the first thing that genuinely could not live in the View menu, and
+ * that is why §M24 put it here rather than bending the rule: the menu bar is
+ * built natively in Go and cannot grow a row when a file appears in a folder.
+ * View ▸ Theme keeps its three fixed rows and ends in a door to this panel.
  *
  * Nothing is applied on OK. Every checkbox writes straight to the store, which
  * persists through the same subscription every other setting uses, and the
@@ -25,16 +31,12 @@ export function SettingsModal() {
   return open ? <Panel /> : null
 }
 
-type Section = 'columns' | 'context'
-
-const SECTIONS: { id: Section; label: string; hint: string }[] = [
-  { id: 'columns', label: 'Columns', hint: 'What the details view shows for each file.' },
-  { id: 'context', label: 'Right-click Menu', hint: 'Which commands the context menus offer.' },
-]
-
 function Panel() {
   const closeSettings = useUiStore((state) => state.closeSettings)
-  const [section, setSection] = useState<Section>('columns')
+  // Seeded from the store rather than owned outright, so View ▸ Theme ▸ More
+  // Themes… can land on Themes, and kept locally after that because clicking a
+  // row in the sidebar is not a preference worth telling the store about.
+  const [section, setSection] = useState<SettingsSection>(useUiStore.getState().settingsSection)
   const panelRef = useRef<HTMLDivElement>(null)
 
   // Focus moves into the panel so Escape and Tab work without a click, the way
@@ -45,7 +47,7 @@ function Panel() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-6"
       onMouseDown={(event) => {
         if (!panelRef.current?.contains(event.target as Node)) closeSettings()
       }}
@@ -75,7 +77,7 @@ function Panel() {
             Settings
           </h2>
           <ul className="flex flex-col gap-0.5">
-            {SECTIONS.map((entry) => (
+            {SETTINGS_SECTIONS.map((entry) => (
               <li key={entry.id}>
                 <button
                   type="button"
@@ -96,7 +98,9 @@ function Panel() {
 
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-auto p-5">
-            {section === 'columns' ? <ColumnsSection /> : <ContextSection />}
+            {section === 'themes' && <ThemesSection />}
+            {section === 'columns' && <ColumnsSection />}
+            {section === 'context' && <ContextSection />}
           </div>
 
           <div className="border-edge flex justify-end border-t p-3">
@@ -241,7 +245,7 @@ function CheckRow({
       <span
         aria-hidden
         className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-          checked ? 'border-transparent bg-[var(--accent)] text-white' : 'border-[var(--border)]'
+          checked ? 'bg-accent text-on-accent border-transparent' : 'border-edge'
         }`}
       >
         {checked && <Check size={11} strokeWidth={3} />}

@@ -12,6 +12,7 @@ import type { MenuCommandId } from '@/constants/menus'
 import { DEFAULT_LAYOUT, setColumnVisible, type ColumnId, type ColumnLayout } from '@/constants/columns'
 import { DEFAULT_ALGORITHM, type HashAlgorithm } from '@/constants/hashAlgorithms'
 import { DEFAULT_THEME, type ThemePreference } from '@/constants/themes'
+import type { SettingsSection } from '@/constants/settingsSections'
 import type { ConflictPolicy } from '@/types/file'
 
 export interface ConfirmRequest {
@@ -152,6 +153,16 @@ interface UiState {
   /** Whether the Settings modal is open (§M22). */
   settingsOpen: boolean
   /**
+   * Which section it opens on (§M24).
+   *
+   * A field rather than a prop, because the modal is mounted once by the layout
+   * and opened from three places that disagree about where it should land:
+   * File ▸ Settings… wants the first section, and View ▸ Theme ▸ More Themes…
+   * wants Themes. Not persisted — where you were last time is not a preference,
+   * it is a leftover.
+   */
+  settingsSection: SettingsSection
+  /**
    * Persisted. Held here rather than read from the DOM: `system` is a real
    * value the menu has to be able to show a checkmark against, and
    * `data-theme` only ever carries the resolved one (§M12).
@@ -193,7 +204,7 @@ interface UiState {
   resetColumns: () => void
   setContextCommandVisible: (id: MenuCommandId, visible: boolean) => void
 
-  openSettings: () => void
+  openSettings: (section?: SettingsSection) => void
   closeSettings: () => void
 
   openTags: (paths: string[]) => void
@@ -235,6 +246,7 @@ export const useUiStore = create<UiState>()((set) => ({
   compress: null,
   tagsJob: null,
   settingsOpen: false,
+  settingsSection: 'themes',
   theme: DEFAULT_THEME,
   columnLayout: DEFAULT_LAYOUT,
   hiddenContextCommands: [],
@@ -285,7 +297,8 @@ export const useUiStore = create<UiState>()((set) => ({
 
   // Settings is the one modal here with no target at all — it is about the
   // application, not about what is selected — so it does not guard on anything.
-  openSettings: () => set({ settingsOpen: true, renaming: null }),
+  openSettings: (section = 'themes') =>
+    set({ settingsOpen: true, settingsSection: section, renaming: null }),
   closeSettings: () => set({ settingsOpen: false }),
 
   // Nothing to tag would be a picker whose every toggle wrote to no files.

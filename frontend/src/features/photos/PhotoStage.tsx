@@ -124,7 +124,7 @@ export function PhotoStage({ item, hasPrevious, hasNext, onStep, onActivate }: P
       {hasPrevious && <StepButton direction="prev" onClick={() => onStep(-1)} />}
       {hasNext && <StepButton direction="next" onClick={() => onStep(1)} />}
 
-      <figcaption className="pointer-events-none absolute bottom-3 left-1/2 max-w-[70%] -translate-x-1/2 truncate rounded-full bg-black/70 px-3.5 py-1 text-xs text-[var(--text-secondary)]">
+      <figcaption className="pointer-events-none absolute bottom-3 left-1/2 max-w-[70%] -translate-x-1/2 truncate rounded-full bg-scrim px-3.5 py-1 text-xs text-[var(--text-secondary)]">
         {item.name}
       </figcaption>
     </figure>
@@ -138,7 +138,7 @@ function StepButton({ direction, onClick }: { direction: 'prev' | 'next'; onClic
       type="button"
       aria-label={direction === 'prev' ? 'Previous photo' : 'Next photo'}
       onClick={onClick}
-      className={`border-edge text-primary hover:bg-accent absolute top-1/2 z-10 flex size-10 -translate-y-1/2 items-center justify-center rounded-full border bg-black/60 transition-colors hover:text-black ${
+      className={`border-edge text-primary hover:bg-accent bg-scrim hover:text-on-accent absolute top-1/2 z-10 flex size-10 -translate-y-1/2 items-center justify-center rounded-full border transition-colors ${
         direction === 'prev' ? 'left-4' : 'right-4'
       }`}
     >
