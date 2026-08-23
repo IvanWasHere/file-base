@@ -1891,6 +1891,51 @@ is written and skips itself until an Apple Developer membership and six secrets
 exist (§3 has said "deferred to M12" since M0; it is now "deferred to a
 subscription").
 
+### M20 — Paste into the folder under the cursor ✅ complete
+
+Paste stops meaning only "into the folder on screen". A **selected** folder is a
+destination in its own right, so the clipboard can be dropped into a subfolder
+without opening it and navigating back out.
+
+The problem this had to solve first is that the details view has no background
+to click. Rows span the full pane width, so once anything is highlighted there
+is nowhere to press that means "never mind the row, I mean *this* folder" — the
+icon grids get that for free from the gaps between tiles.
+
+Decisions:
+
+1. **The destination follows the selection, not the pointer.** Exactly one
+   folder selected → that folder. A file, several items, or nothing → the folder
+   on screen, which is how paste behaved through M6. Reading the pointer instead
+   would make Cmd+V depend on where the mouse happened to be resting, and the
+   keyboard route has no pointer at all.
+2. **A 10px gutter down the left edge of the details list is the "background".**
+   `DetailsView` draws it last inside the virtualizer's sizing box, so it paints
+   over the rows' 12px left padding — never over an icon or a name — and spans
+   the scrolled height rather than the viewport. It carries **no handlers**:
+   being the event target is the entire job, because the container's existing
+   mousedown and contextmenu then find no `[data-file-row]` under the pointer and
+   already treat that as background. A press in it clears the selection; a
+   right-click in it raises the background menu. Drag-and-drop inherits the same
+   answer for free — `useDropZone` hit-tests `data-drop-path` the same way — so
+   hovering the gutter targets the open folder, which is the consistent reading.
+3. **Paste joins the folder context menu**, next to Cut and Copy. A right-click
+   selects what it points at, so that row *is* "paste inside this folder". It is
+   the discoverable route; the gutter is what makes the keyboard route
+   controllable.
+4. **A folder cannot receive itself.** `pasteTarget` falls back to the open
+   folder when any clipboard path is an ancestor of the destination (`isAncestor`
+   already existed for the same guard in drag-and-drop), so cut-a-folder-then-
+   paste is a no-op rather than an error surfaced from Go.
+
+- **Verified in the running app**, not only under Vitest: copy `Resume.pdf`,
+  single-click `Work`, Cmd+V → the file lands in `Documents/Work` with the pane
+  still showing Documents; click the gutter over that same row → the highlight
+  drops and Cmd+V produces `Resume copy.pdf` beside the original; right-clicking
+  the gutter over a row opens New Folder / Paste / Select All rather than the
+  folder menu. Five tests cover the same paths in `fileOperations.test.tsx` and
+  `menus.test.tsx`.
+
 ---
 
 ## 3. Risks

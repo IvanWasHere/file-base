@@ -25,6 +25,7 @@ import {
 import { describeFsError, isFsError } from '@/types/errors'
 import type { FileItem } from '@/types/file'
 import type { SplitMode, ViewMode } from '@/types/workspace'
+import { isAncestor } from '@/utils/path'
 
 export interface MenuCommandState {
   run: (id: MenuCommandId) => void
@@ -67,7 +68,7 @@ export function useMenuCommands(): MenuCommandState {
   const operations = useFileOperations()
   const archives = useArchive()
   const openSearch = useSearchStore((state) => state.open)
-  const clipboardCount = useClipboardStore((state) => state.paths.length)
+  const clipboardPaths = useClipboardStore((state) => state.paths)
   const undoDepth = useHistoryStore((state) => state.entries.length)
   const { isPinned, pin, unpin } = useFavorites()
 
@@ -104,6 +105,27 @@ export function useMenuCommands(): MenuCommandState {
   const favoriteTarget = (): string | undefined => {
     const selectedFolder = targets.find((path) => cachedItem(path)?.isDirectory)
     return selectedFolder ?? (targets.length === 0 ? pane?.path : undefined)
+  }
+
+  /**
+   * Where a paste lands.
+   *
+   * The selected folder, when exactly one folder is selected — so a folder can
+   * receive a paste without being opened first, which is what the details
+   * view's left gutter exists to make controllable: a press in that gutter
+   * clears the selection, and the destination falls back to the folder on
+   * screen. Anything else — a file, several items, nothing at all — means the
+   * open folder, which is how paste behaved before.
+   */
+  const pasteTarget = (): string | undefined => {
+    if (!pane) return undefined
+    const only = targets.length === 1 ? targets[0] : undefined
+    const item = only ? cachedItem(only) : undefined
+    if (!item?.isDirectory) return pane.path
+    // A folder cannot receive itself, and neither can anything inside it. The
+    // open folder takes the paste instead of the operation failing in Go.
+    if (clipboardPaths.some((source) => isAncestor(source, item.path))) return pane.path
+    return item.path
   }
 
   const viewModes: Partial<Record<MenuCommandId, ViewMode>> = {
@@ -258,9 +280,11 @@ export function useMenuCommands(): MenuCommandState {
       case 'edit.cut':
         if (pane) operations.cut(targets, pane.path)
         return
-      case 'edit.paste':
-        if (pane) void operations.paste(pane.path)
+      case 'edit.paste': {
+        const destination = pasteTarget()
+        if (destination) void operations.paste(destination)
         return
+      }
 
       case 'edit.find':
         if (pane) openSearch(pane.id)
@@ -372,7 +396,7 @@ export function useMenuCommands(): MenuCommandState {
       case 'view.resetColumns':
         return !isDefaultLayout(ui.columnLayout)
       case 'edit.paste':
-        return clipboardCount > 0
+        return clipboardPaths.length > 0
       case 'edit.undo':
         return undoDepth > 0
       case 'file.newFolder':

@@ -137,6 +137,35 @@ describe('context menus', () => {
     expect(selectedPaths()).toEqual([])
   })
 
+  // The details rows span the full width, so the 10px strip down the left edge
+  // is the only "empty space" there is — right-clicking it must reach the
+  // folder being shown even though a row sits underneath.
+  it('shows the background menu from the details gutter', async () => {
+    const { user } = renderApp()
+    await goToDocuments(user)
+
+    await user.click(await rowFor('Resume\\.pdf'))
+    await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId('details-gutter') })
+
+    const menu = await contextMenu()
+    expect(within(menu).getByRole('menuitem', { name: 'New Folder' })).toBeInTheDocument()
+    expect(selectedPaths()).toEqual([])
+  })
+
+  // Paste follows the selection, and a right-click selects what it points at —
+  // so this row is "paste into that folder" without opening it.
+  it('offers Paste on a folder', async () => {
+    const { user } = renderApp()
+    await goToDocuments(user)
+
+    await user.click(await rowFor('Resume\\.pdf'))
+    await user.keyboard('{Meta>}c{/Meta}')
+
+    await user.pointer({ keys: '[MouseRight]', target: await rowFor('Work') })
+    const menu = await contextMenu()
+    expect(within(menu).getByRole('menuitem', { name: 'Paste' })).toBeEnabled()
+  })
+
   it('runs the command that was picked', async () => {
     const { user } = renderApp()
     await goToDocuments(user)

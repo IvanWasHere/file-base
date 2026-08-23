@@ -32,7 +32,11 @@ export const CONTEXT_MENUS: Record<ContextKind, MenuCommandId[][]> = {
   // command drops the folders itself and says how many.
   folder: [
     ['file.open', 'file.openInNewTab'],
-    ['edit.cut', 'edit.copy', 'file.copyPath'],
+    // Paste is offered here as well as on the background, because the
+    // destination follows the selection: right-clicking a folder selects it,
+    // so this row puts the clipboard *inside* that folder without opening it
+    // (`useMenuCommands`, `pasteTarget`).
+    ['edit.cut', 'edit.copy', 'edit.paste', 'file.copyPath'],
     ['file.rename', 'file.duplicate'],
     ['file.compress'],
     ['file.calculateHashes'],

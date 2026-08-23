@@ -209,6 +209,61 @@ describe('copy and paste', () => {
     expect(useClipboardStore.getState().paths).toHaveLength(0)
   })
 
+  // A folder does not have to be opened to receive a paste: selecting it is
+  // enough, which is what makes the details view's left gutter meaningful.
+  it('pastes into the selected folder rather than the open one', async () => {
+    const { user } = renderApp()
+    await goToDocuments(user)
+
+    await user.click(await rowFor('Resume\\.pdf'))
+    await user.keyboard('{Meta>}c{/Meta}')
+
+    await user.click(await rowFor('Work'))
+    await user.keyboard('{Meta>}v{/Meta}')
+
+    await waitFor(async () => {
+      expect(await bridge.fs.exists(`${DOCUMENTS}/Work/Resume.pdf`)).toBe(true)
+    })
+    // The pane never moved, and the original stayed put.
+    expect(await rowFor('Work')).toBeInTheDocument()
+    expect(await bridge.fs.exists(`${DOCUMENTS}/Resume.pdf`)).toBe(true)
+  })
+
+  // The other half of the same rule: the gutter is how the user says "the
+  // folder I am looking at" while a row is highlighted.
+  it('pastes into the open folder after a press in the details gutter', async () => {
+    const { user } = renderApp()
+    await goToDocuments(user)
+
+    await user.click(await rowFor('Resume\\.pdf'))
+    await user.keyboard('{Meta>}c{/Meta}')
+
+    await user.click(await rowFor('Work'))
+    await user.click(screen.getByTestId('details-gutter'))
+    expect(selectedPaths()).toEqual([])
+
+    await user.keyboard('{Meta>}v{/Meta}')
+
+    // Copying into the folder the item came from is a duplicate, so it lands
+    // beside the original rather than raising a conflict.
+    expect(await rowFor('Resume copy\\.pdf')).toBeInTheDocument()
+    expect(await bridge.fs.exists(`${DOCUMENTS}/Work/Resume.pdf`)).toBe(false)
+  })
+
+  // A folder cannot receive itself; the open folder takes the paste instead of
+  // the move failing in Go.
+  it('does not paste a cut folder into itself', async () => {
+    const { user } = renderApp()
+    await goToDocuments(user)
+
+    await user.click(await rowFor('Work'))
+    await user.keyboard('{Meta>}x{/Meta}')
+    await user.keyboard('{Meta>}v{/Meta}')
+
+    expect(await bridge.fs.exists(`${DOCUMENTS}/Work/Work`)).toBe(false)
+    expect(await bridge.fs.exists(`${DOCUMENTS}/Work`)).toBe(true)
+  })
+
   // Copying into the folder an item already lives in is Duplicate, not a
   // conflict — it must not raise the dialog.
   it('duplicates in place with Cmd+D', async () => {

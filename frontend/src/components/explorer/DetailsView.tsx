@@ -43,6 +43,22 @@ import type { Rect } from '@/utils/selection'
 const ROW_HEIGHT = 34
 const HEADER_HEIGHT = 28
 
+/**
+ * The strip down the left edge that reads as "behind the rows".
+ *
+ * Details rows span the full width, so — unlike the icon grids — there is no
+ * empty space left to click when the user means the folder being shown rather
+ * than a row. This gutter is that space: a press in it reaches the container
+ * with no row under the pointer, so the selection clears and a right-click
+ * raises the background menu. That is what lets a selected folder be a paste
+ * destination in its own right (`useMenuCommands`, `edit.paste`) while the open
+ * folder stays one keystroke away.
+ *
+ * 10px, which sits entirely inside the rows' 12px left padding: it can never
+ * cover an icon or a name.
+ */
+const GUTTER_WIDTH = 10
+
 interface DetailsViewProps {
   paneId: string
   /** The folder being shown — the drop target when the pointer is not on a row. */
@@ -475,6 +491,19 @@ export function DetailsView({
               </div>
             )
           })}
+
+          {/* Last in the box, so it paints over the rows' left padding — and
+              inside it, so it spans the whole scrolled height rather than just
+              the viewport. It carries no handlers of its own: being the event
+              target *is* the job, since the container's own mousedown and
+              contextmenu then find no row under the pointer and treat the
+              press as background. */}
+          <div
+            data-testid="details-gutter"
+            aria-hidden
+            style={{ width: GUTTER_WIDTH }}
+            className="hover:bg-hover absolute top-0 bottom-0 left-0 transition-colors"
+          />
         </div>
 
         {marqueeStyle && (
