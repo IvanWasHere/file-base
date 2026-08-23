@@ -2057,7 +2057,14 @@ Decisions:
    Settings. Stored as what is hidden, so a command a later build adds appears
    for everyone. Hiding *every* row opens no menu at all: an empty panel that
    has to be dismissed is worse than a right-click that does nothing.
-9. **Settings sits at the foot of File, and keeps ⌘,.** macOS puts it in the
+9. **A timestamp is shown to the second, everywhere it is shown.** Modified and
+   Created were a date alone, which cannot tell two files saved a minute apart
+   from each other — most of what a Modified column is read for. There is one
+   `formatDateTime` rather than a column spelling and a preview spelling, so the
+   same file reads the same way in both; the cells carry a `title` as well,
+   because a full timestamp truncates in a pane of a 2 × 2 split and hovering
+   should not require dragging the column out.
+10. **Settings sits at the foot of File, and keeps ⌘,.** macOS puts it in the
    application menu, which Wails renders from a role this app cannot append to.
    The binding is the half users actually reach for, so it stays; the row goes
    where the in-window menu bar can also draw it. Nothing in the modal is
@@ -2073,12 +2080,91 @@ Decisions:
   as `kMDItemUserTags = (Red, "Q3 Budget")`, which is what makes Finder show the
   dots; the Tags column then announces "Tags: Red, Q3 Budget"; and unticking
   Duplicate under Right-click Menu removes exactly that row from a real
-  right-click while Rename, Tags… and the rest stay. Reset Columns puts the
-  four back. Eight tests in `backend/filesystem` cover the round trip, the
+  right-click while Rename, Tags… and the rest stay; and two files written a
+  second apart list as `8:11:50 PM` and `8:11:51 PM` rather than as the same
+  day. Reset Columns puts the four back. Eight tests in `backend/filesystem` cover the round trip, the
   listing, an untagged file, clearing the attribute, both spellings and the
   garbage case; twenty-eight in `columns.test.ts`, `tags.test.ts`,
   `sort.test.ts` and `settings.test.tsx` cover the layout repair, the upgrade
   path, the picker's mixed state and the menu filtering.
+
+### M23 — What an image says about itself ✅ complete
+
+Selecting a photograph showed the same six rows a text file shows: type, size,
+modified, created, permissions, path. Everything that makes an image *an image*
+— how big it is, what colour space it is in, which camera took it and at what
+shutter speed — was in the file and invisible. §M23 reads it and puts it in the
+preview panel, the way an image editor does.
+
+Decisions:
+
+1. **ImageIO reads the metadata, not a Go decoder and not an EXIF library.**
+   It is the framework Preview and Photos use, so it knows every format the
+   system knows — HEIC, camera RAW, multi-page TIFF — where a pure-Go decoder
+   knows three. It reads headers only, so a 200MP RAW answers as fast as a
+   thumbnail. And it is already on the machine: the alternative was an
+   unmaintained third-party parser that knows less. The cost is one cgo file.
+2. **The cgo half hands back one binary property list and stops.** Everything
+   else is ordinary Go over a `map[string]any`, which is why `fromProperties`
+   has fourteen tests and none of them needs a photograph on disk. Filling a
+   struct field by field in C would have been thirty `CFDictionaryGetValue`
+   calls that nothing could test.
+3. **Go reports codes; TypeScript names them.** Metering mode 5 crosses the
+   bridge as 5, and `constants/exif.ts` decides it reads "Pattern" — the §M22
+   decision about Finder's colour index, applied again, for the reason PLAN.md
+   §1 gives. It also means the flash tag is read where it can be read properly:
+   it is a *bit field*, not an enumeration, and the lookup table everyone writes
+   for it gets "fired, auto" and "fired, forced" the wrong way round.
+4. **A capture time is a wall clock, not an instant.** EXIF records "18:22:07"
+   with no zone. Converting that to a timestamp means inventing one, and then a
+   photo taken at 18:22 in Lisbon reads as 19:22 to someone browsing it in
+   Berlin. So the string crosses the bridge as the camera wrote it, is formatted
+   in UTC to keep those digits, and the recorded offset is printed *beside* it
+   rather than folded into it.
+5. **Zero means absent — except where zero is an answer.** No photograph has an
+   ISO of 0, an f-number of 0 or a focal length of 0mm, so a zero is a missing
+   value and its row is not drawn. White balance is the one tag where 0 is real
+   ("auto"), so it crosses as -1 when absent; without that, every screenshot in
+   the world claimed its white balance was set automatically.
+6. **A fact with no value is not a row, and a group with no facts is not a
+   group.** A screenshot shows six rows under Image and no Camera section at
+   all; a geotagged raw file shows three groups. The alternative — every row
+   always present, most of them showing "—" — is how a metadata panel becomes
+   something nobody reads. Nothing is ever rendered as "Unknown (7)": a code
+   this build does not recognise is left out.
+7. **The values are formatted the way photographic tools print them**, and that
+   judgement lives in `imageFacts.ts` where it can be tested without React:
+   `1/250 s` rather than 0.004, `ƒ/1.8`, `6.8 mm (24 mm equivalent)` because the
+   equivalent is the number that means something across cameras, `−0.5 EV` with
+   a real minus, `4,032 × 3,024 px`, `RGB, 8-bit + alpha`, and `22.90680° S,
+   43.17290° W` — with a Copy button that yields the *signed* pair, because that
+   is the form every map and spreadsheet takes and the hemisphere notation is
+   the form worth reading.
+8. **An aspect ratio is named when a name exists.** An exact reduction wins
+   (1,920 × 1,080 is 16:9); failing that, a ratio within 0.5% is named, because
+   500 × 667 is a 3:4 photograph that has been through a resize and saying
+   "500:667" helps nobody; failing both, a decimal, because an arbitrary crop
+   has no name. The tolerance is tight enough that a 3:2 frame is never called
+   4:3 — that difference is a decision somebody made.
+9. **A file that is not an image produces no section, not an error.** An SVG,
+   a format the system cannot identify, a text file named `.png`: the panel
+   above has already said everything that is known, and an error box would be
+   claiming something went wrong when nothing did.
+
+- **Verified in the running app**, not only under Vitest and `go test`:
+  selecting `coast.jpg` shows Image (500 × 667 px, 0.3 MP, 3:4, 300 dpi, RGB
+  8-bit, sRGB IEC61966-2.1, JPEG), Camera (Google Pixel 3, 1/3906 s, ƒ/1.8, ISO
+  71, 4.4 mm (27 mm equivalent), Program AE, Center-weighted, "Did not fire,
+  suppressed", Auto, taken Jun 18 2019 at 11:32:01 AM (UTC+01:00), GIMP 2.10.8)
+  and Location (37.08103° N, 8.67060° W, 99.6 m) with its Copy button; a PNG
+  beside it shows six rows and no Camera or Location section at all. Both of the
+  panel's rough edges were found *there* rather than in a test — a row labelled
+  "Camera" inside a group headed Camera, and a portrait photo reading "0.75:1".
+  Sixteen tests in `backend/imagemeta` cover the mapping, the signed GPS, Null
+  Island, both number encodings and the cgo path end to end; forty in
+  `imageFacts.test.ts` and five in `preview.test.tsx` cover every formatting
+  judgement and what the panel does with a photograph, a screenshot and a file
+  that is not an image.
 
 ---
 
@@ -2108,6 +2194,8 @@ Decisions:
 | **RAR and 7z cannot be created** — proprietary, and no pure-Go encoder | Absent from the create list with the reason shown, rather than offered and failing at the end of a long job (§M18 decision 14) |
 | **A `getxattr` per directory entry** — tags are read with the listing, and cost ~16µs an entry (5,000 entries: 82ms with tags, ~21ms without) | Accepted for the folders anyone browses; the 100k-entry case is already answered by virtualization and chunked reads, and a listing that fetched tags per row could not sort by them (§M22 decision 3) |
 | **Tags written by anything on the machine** — the attribute is not ours, and holds whatever some other tagger put there | Repaired on both sides of the bridge: an unparseable plist reads as no tags, blank and duplicate names are dropped, and an index off the palette falls back to no colour (§M22 decision 5) |
+| **cgo in the build** — §M23 links ImageIO, so the backend is no longer pure Go | Confined to one file with a single function, behind a `_darwin` build tag; the package it serves is macOS-only already, as `stat_darwin.go` has been since M1 (§M23 decision 1) |
+| **Metadata from thirty years of cameras** — a tag absent, a string where a number was expected, a colour index off the palette | Repaired on both sides: `fromProperties` treats every lookup as a miss away from nothing, `toImageInfo` re-checks each field, and a value that survives neither costs one row rather than the panel (§M23 decision 6) |
 | **Notarization** for distribution | Deferred to M12; not blocking for local development |
 
 ---

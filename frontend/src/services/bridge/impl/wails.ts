@@ -28,6 +28,7 @@ import {
   toArchiveProgress,
   toFileItem,
   toFileSystemEvent,
+  toImageInfo,
   toHashDone,
   toHashProgress,
   toHashResult,
@@ -67,6 +68,7 @@ import {
   ReleaseMount,
 } from '../../../../wailsjs/go/archive/Archive'
 import { Generate } from '../../../../wailsjs/go/thumbs/Thumbs'
+import { Read as ReadImageInfo } from '../../../../wailsjs/go/imagemeta/ImageMeta'
 import { OpenFile, OpenWith, RevealInFinder } from '../../../../wailsjs/go/shell/Shell'
 import { Exec, Query, Tx } from '../../../../wailsjs/go/db/DB'
 import { Unwatch, Watch } from '../../../../wailsjs/go/watcher/Watcher'
@@ -187,6 +189,12 @@ export const bridge: Bridge = {
   },
   thumbs: {
     generate: (path, size) => guard(() => Generate(path, size)),
+  },
+  images: {
+    // Repaired on the way in, like every other wire type: EXIF is written by
+    // thirty years of cameras and editors, and a field of the wrong shape
+    // should cost a row rather than the panel (§M23).
+    read: (path) => guard(async () => toImageInfo(await ReadImageInfo(path))),
   },
   archives: {
     extract: (request) => guard(() => Extract(request)),

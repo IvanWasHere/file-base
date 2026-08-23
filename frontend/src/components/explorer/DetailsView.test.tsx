@@ -337,6 +337,22 @@ describe('column layout', () => {
     })
   })
 
+  // §M22: a Modified column that stops at the day cannot tell two files saved a
+  // minute apart from each other, which is most of what it is read for.
+  it('shows a time down to the second in both date columns', async () => {
+    renderPane()
+    await rowFor('Figma-Desktop-Setup\\.dmg')
+
+    useUiStore.getState().setColumnVisible('created', true)
+    await waitFor(() => expect(headerLabels()).toContain('Created'))
+
+    const [, , , modified, created] = firstRowCells()
+    // Asserted as a shape rather than a string: the format is the user's
+    // locale and the runner's timezone, neither of which the test picks.
+    expect(modified).toMatch(/\d{1,2}:\d{2}:\d{2}/)
+    expect(created).toMatch(/\d{1,2}:\d{2}:\d{2}/)
+  })
+
   it('reorders a column when the header is dragged past the threshold', async () => {
     renderPane()
     await rowFor('Figma-Desktop-Setup\\.dmg')

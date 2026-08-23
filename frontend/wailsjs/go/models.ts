@@ -303,6 +303,95 @@ export namespace hashing {
 
 }
 
+export namespace imagemeta {
+	
+	export class ImageInfo {
+	    width: number;
+	    height: number;
+	    format: string;
+	    frames: number;
+	    dpiWidth: number;
+	    dpiHeight: number;
+	    colorModel: string;
+	    bitDepth: number;
+	    hasAlpha: boolean;
+	    indexed: boolean;
+	    float: boolean;
+	    profileName: string;
+	    orientation: number;
+	    make: string;
+	    model: string;
+	    lens: string;
+	    software: string;
+	    artist: string;
+	    copyright: string;
+	    description: string;
+	    exposureTime: number;
+	    fNumber: number;
+	    iso: number;
+	    focalLength: number;
+	    focalLength35: number;
+	    exposureBias: number;
+	    exposureProgram: number;
+	    meteringMode: number;
+	    flash: number;
+	    whiteBalance: number;
+	    colorSpaceTag: number;
+	    dateTaken: string;
+	    dateTakenUtcOffset: string;
+	    hasGps: boolean;
+	    latitude: number;
+	    longitude: number;
+	    altitude: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImageInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.format = source["format"];
+	        this.frames = source["frames"];
+	        this.dpiWidth = source["dpiWidth"];
+	        this.dpiHeight = source["dpiHeight"];
+	        this.colorModel = source["colorModel"];
+	        this.bitDepth = source["bitDepth"];
+	        this.hasAlpha = source["hasAlpha"];
+	        this.indexed = source["indexed"];
+	        this.float = source["float"];
+	        this.profileName = source["profileName"];
+	        this.orientation = source["orientation"];
+	        this.make = source["make"];
+	        this.model = source["model"];
+	        this.lens = source["lens"];
+	        this.software = source["software"];
+	        this.artist = source["artist"];
+	        this.copyright = source["copyright"];
+	        this.description = source["description"];
+	        this.exposureTime = source["exposureTime"];
+	        this.fNumber = source["fNumber"];
+	        this.iso = source["iso"];
+	        this.focalLength = source["focalLength"];
+	        this.focalLength35 = source["focalLength35"];
+	        this.exposureBias = source["exposureBias"];
+	        this.exposureProgram = source["exposureProgram"];
+	        this.meteringMode = source["meteringMode"];
+	        this.flash = source["flash"];
+	        this.whiteBalance = source["whiteBalance"];
+	        this.colorSpaceTag = source["colorSpaceTag"];
+	        this.dateTaken = source["dateTaken"];
+	        this.dateTakenUtcOffset = source["dateTakenUtcOffset"];
+	        this.hasGps = source["hasGps"];
+	        this.latitude = source["latitude"];
+	        this.longitude = source["longitude"];
+	        this.altitude = source["altitude"];
+	    }
+	}
+
+}
+
 export namespace search {
 	
 	export class Criteria {

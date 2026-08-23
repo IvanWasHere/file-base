@@ -1,4 +1,12 @@
-/** Display formatting — ported from the mockup's `formatSize` / `formatDate`. */
+/**
+ * Display formatting — ported from the mockup's `formatSize` / `formatDate`.
+ *
+ * There is one spelling of a timestamp, and since §M22 it carries seconds: the
+ * details view's Modified and Created columns and the preview panel show the
+ * same file the same way, and a date alone could not tell two files saved a
+ * minute apart from each other — which is most of what a Modified column is
+ * read for.
+ */
 
 const KB = 1024
 const MB = KB * 1024
@@ -15,26 +23,20 @@ export function formatSize(bytes: number, placeholder = '—'): string {
   return `${(bytes / TB).toFixed(2)} TB`
 }
 
-const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-})
-
+// Built once, at module load: a listing formats two of these per row, and
+// constructing a formatter is the expensive half of the work.
 const DATE_TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
   year: 'numeric',
   month: 'short',
   day: 'numeric',
   hour: 'numeric',
   minute: '2-digit',
+  // Seconds included, and 2-digit so the column does not jog left and right as
+  // the value changes. `numeric` would render 7:05:3.
+  second: '2-digit',
 })
 
 /** `timestamp` is unix epoch milliseconds; 0 means "unknown". */
-export function formatDate(timestamp: number, placeholder = '—'): string {
-  if (!timestamp) return placeholder
-  return DATE_FORMAT.format(new Date(timestamp))
-}
-
 export function formatDateTime(timestamp: number, placeholder = '—'): string {
   if (!timestamp) return placeholder
   return DATE_TIME_FORMAT.format(new Date(timestamp))

@@ -31,6 +31,7 @@ import type {
 } from '@/types/file'
 import { FsError } from '@/types/errors'
 import { normaliseTags, type FileTag } from '@/constants/tags'
+import type { ImageInfo } from '@/types/image'
 import { categorize } from '@/utils/fileCategory'
 import {
   basename,
@@ -162,6 +163,77 @@ const SEED_TAGS: Record<string, FileTag[]> = {
   ],
   'Documents/Personal/Travel Plans.docx': [{ name: 'Green', color: 2 }],
 }
+
+/**
+ * Metadata for the seeded images (§M23).
+ *
+ * A camera photo with the full EXIF, and a screenshot with none of it — which
+ * is the distinction the panel is built around: one shows three groups, the
+ * other shows four rows and no Camera section. Keyed by path relative to home.
+ */
+const SEED_IMAGE_META: Record<string, Partial<ImageInfo>> = {
+  'Pictures/Camera Roll/IMG_20250101_001.jpg': {
+    width: 4032,
+    height: 3024,
+    format: 'JPEG',
+    dpiWidth: 72,
+    dpiHeight: 72,
+    colorModel: 'RGB',
+    bitDepth: 8,
+    profileName: 'Display P3',
+    orientation: 6,
+    make: 'Apple',
+    model: 'iPhone 15 Pro',
+    lens: 'iPhone 15 Pro back triple camera 6.765mm f/1.78',
+    exposureTime: 0.004,
+    fNumber: 1.78,
+    iso: 64,
+    focalLength: 6.765,
+    focalLength35: 24,
+    exposureBias: -0.5,
+    exposureProgram: 2,
+    meteringMode: 5,
+    flash: 16,
+    whiteBalance: 0,
+    colorSpaceTag: 65535,
+    dateTaken: '2025-01-01 18:22:07',
+    dateTakenUtcOffset: '+01:00',
+    hasGps: true,
+    latitude: -22.9068,
+    longitude: -43.1729,
+    altitude: 12.5,
+  },
+  'Pictures/Screenshots/bug-report-01.png': {
+    width: 2880,
+    height: 1800,
+    format: 'PNG',
+    colorModel: 'RGB',
+    bitDepth: 8,
+    hasAlpha: true,
+    profileName: 'sRGB IEC61966-2.1',
+  },
+}
+
+/** Every field present, so the mock returns the shape the wire does. */
+const EMPTY_IMAGE_META: ImageInfo = {
+  width: 0, height: 0, format: '', frames: 1,
+  dpiWidth: 0, dpiHeight: 0, colorModel: '', bitDepth: 0,
+  hasAlpha: false, indexed: false, float: false, profileName: '', orientation: 0,
+  make: '', model: '', lens: '', software: '', artist: '', copyright: '', description: '',
+  exposureTime: 0, fNumber: 0, iso: 0, focalLength: 0, focalLength35: 0, exposureBias: 0,
+  // -1, not 0: white balance 0 means "auto", so absent has to be something
+  // else (§M23 decision 5).
+  exposureProgram: 0, meteringMode: 0, flash: 0, whiteBalance: -1, colorSpaceTag: 0,
+  dateTaken: '', dateTakenUtcOffset: '',
+  hasGps: false, latitude: 0, longitude: 0, altitude: 0,
+}
+
+const MOCK_IMAGE_META: Record<string, ImageInfo> = Object.fromEntries(
+  Object.entries(SEED_IMAGE_META).map(([relative, info]) => [
+    join(HOME, relative),
+    { ...EMPTY_IMAGE_META, ...info },
+  ]),
+)
 
 const DAY = 86_400_000
 
@@ -835,6 +907,19 @@ export const bridge: Bridge = {
       const node = requireNode(path)
       if (node.isDirectory) throw new FsError('unknown', 'a folder has no thumbnail', path)
       return `data:image/png;base64,${TRANSPARENT_PIXEL}`
+    },
+  },
+  images: {
+    // Metadata for the seeded images, so the panel — and the tests that cover
+    // it — have a photograph, a screenshot and a not-an-image to work with
+    // without a real file on disk.
+    read: async (path) => {
+      const node = requireNode(path)
+      const info = MOCK_IMAGE_META[node.path]
+      if (!info) {
+        throw new FsError('unknown', `${basename(node.path)} is not an image`, node.path)
+      }
+      return { ...info }
     },
   },
   archives: {

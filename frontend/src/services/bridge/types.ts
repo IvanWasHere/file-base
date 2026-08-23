@@ -28,6 +28,7 @@ import type {
   Volume,
 } from '@/types/file'
 import type { HashDone, HashProgress, HashRequest, HashResult } from '@/types/hashing'
+import type { ImageInfo } from '@/types/image'
 import type {
   ArchiveDone,
   ArchiveProgress,
@@ -171,6 +172,18 @@ export interface DatabaseApi {
   transaction(statements: Statement[]): Promise<void>
 }
 
+export interface ImagesApi {
+  /**
+   * What an image says about itself: dimensions, colour, and the EXIF a camera
+   * left behind (§M23).
+   *
+   * Rejects for anything the system cannot identify as an image, which the
+   * caller treats as "no metadata section" rather than as an error worth
+   * showing — an `.svg` and a `.txt` named `.png` both land here.
+   */
+  read(path: string): Promise<ImageInfo>
+}
+
 export interface ThumbsApi {
   /**
    * Renders a thumbnail and returns it as a `data:` URL, ready for an `img`
@@ -243,6 +256,7 @@ export interface Bridge {
   dialogs: DialogsApi
   db: DatabaseApi
   thumbs: ThumbsApi
+  images: ImagesApi
   hashing: HashApi
   archives: ArchiveApi
 }

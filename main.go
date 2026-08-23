@@ -9,6 +9,7 @@ import (
 	"file-base/backend/db"
 	"file-base/backend/filesystem"
 	"file-base/backend/hashing"
+	"file-base/backend/imagemeta"
 	"file-base/backend/search"
 	"file-base/backend/shell"
 	"file-base/backend/thumbs"
@@ -134,6 +135,9 @@ func main() {
 			hasher,
 			archives,
 			thumbs.New(),
+			// Stateless, like shell and thumbs: a header read per call, with
+			// nothing to start or stop (§M23).
+			imagemeta.New(),
 		},
 	})
 

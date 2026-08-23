@@ -28,7 +28,7 @@ import { useDragStore } from '@/stores/dragStore'
 import { useUiStore } from '@/stores/uiStore'
 import type { FileItem } from '@/types/file'
 import { typeLabel } from '@/utils/fileCategory'
-import { formatDate, formatSize } from '@/utils/format'
+import { formatDateTime, formatSize } from '@/utils/format'
 import type { Rect } from '@/utils/selection'
 
 /**
@@ -150,14 +150,25 @@ const Row = memo(function Row({
         {typeLabel(item.extension, item.isDirectory)}
       </span>
     ),
+    // Both dates carry a `title`: a full timestamp is wide, and in a pane of a
+    // 2 × 2 split it truncates — hovering is then the way to read the seconds
+    // without dragging the column out.
     modified: (
-      <span role="gridcell" className="text-secondary truncate text-xs">
-        {formatDate(item.modifiedAt)}
+      <span
+        role="gridcell"
+        title={formatDateTime(item.modifiedAt)}
+        className="text-secondary truncate text-xs"
+      >
+        {formatDateTime(item.modifiedAt)}
       </span>
     ),
     created: (
-      <span role="gridcell" className="text-secondary truncate text-xs">
-        {formatDate(item.createdAt)}
+      <span
+        role="gridcell"
+        title={formatDateTime(item.createdAt)}
+        className="text-secondary truncate text-xs"
+      >
+        {formatDateTime(item.createdAt)}
       </span>
     ),
     tags: (

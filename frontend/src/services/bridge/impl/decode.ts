@@ -23,6 +23,7 @@ import type {
 } from '@/types/file'
 import type { HashDone, HashProgress, HashResult } from '@/types/hashing'
 import type { ArchiveDone, ArchiveProgress } from '@/types/archive'
+import type { ImageInfo } from '@/types/image'
 import type { FsErrorCode } from '@/types/errors'
 import { FsError } from '@/types/errors'
 import type { ExternalDrop } from '../types'
@@ -116,6 +117,72 @@ export function toFileItem(wire: filesystem.FileItem): FileItem {
     // application on the machine can write, and Go sends a nil slice as null
     // (§M22 decision 4).
     tags: normaliseTags(wire.tags),
+  }
+}
+
+/**
+ * Repairs an image's metadata (§M23).
+ *
+ * The same treatment the layout and the tags get, and for a sharper reason: the
+ * values come from EXIF blocks written by cameras, phones and editors going
+ * back thirty years, and a field being absent, a string, or a number where the
+ * other was expected is ordinary rather than exceptional. Nothing here can
+ * throw, so a strange photo shows fewer rows rather than an error.
+ */
+export function toImageInfo(wire: unknown): ImageInfo {
+  const raw = (typeof wire === 'object' && wire !== null ? wire : {}) as Record<string, unknown>
+
+  const text = (key: string): string => (typeof raw[key] === 'string' ? raw[key].trim() : '')
+  // Negative is as meaningless as absent for every measurement here except the
+  // two coordinates and the altitude, which are read directly below.
+  const size = (key: string): number => {
+    const value = raw[key]
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+  }
+  const signed = (key: string): number => {
+    const value = raw[key]
+    return typeof value === 'number' && Number.isFinite(value) ? value : 0
+  }
+
+  return {
+    width: size('width'),
+    height: size('height'),
+    format: text('format'),
+    frames: size('frames'),
+    dpiWidth: size('dpiWidth'),
+    dpiHeight: size('dpiHeight'),
+    colorModel: text('colorModel'),
+    bitDepth: size('bitDepth'),
+    hasAlpha: raw.hasAlpha === true,
+    indexed: raw.indexed === true,
+    float: raw.float === true,
+    profileName: text('profileName'),
+    orientation: size('orientation'),
+    make: text('make'),
+    model: text('model'),
+    lens: text('lens'),
+    software: text('software'),
+    artist: text('artist'),
+    copyright: text('copyright'),
+    description: text('description'),
+    exposureTime: size('exposureTime'),
+    fNumber: size('fNumber'),
+    iso: size('iso'),
+    focalLength: size('focalLength'),
+    focalLength35: size('focalLength35'),
+    // Compensation is signed: −0.5 EV is as real as +0.5.
+    exposureBias: signed('exposureBias'),
+    exposureProgram: size('exposureProgram'),
+    meteringMode: size('meteringMode'),
+    flash: size('flash'),
+    whiteBalance: signed('whiteBalance'),
+    colorSpaceTag: size('colorSpaceTag'),
+    dateTaken: text('dateTaken'),
+    dateTakenUtcOffset: text('dateTakenUtcOffset'),
+    hasGps: raw.hasGps === true,
+    latitude: signed('latitude'),
+    longitude: signed('longitude'),
+    altitude: signed('altitude'),
   }
 }
 

@@ -1,4 +1,5 @@
 import { Info, X } from 'lucide-react'
+import { ImageMetadata } from '@/features/preview/ImageMetadata'
 import { PreviewContent } from '@/features/preview/PreviewContent'
 import { useUiStore } from '@/stores/uiStore'
 import type { FileItem } from '@/types/file'
@@ -11,6 +12,10 @@ import { formatDateTime, formatSize } from '@/utils/format'
  * Metadata is rendered from what the listing already carries, so it appears
  * instantly; the content above it loads separately and falls back to the file's
  * icon when there is nothing to show.
+ *
+ * Since §M23 an image adds a section of its own below the common rows —
+ * dimensions, colour, and whatever the camera recorded. It loads separately
+ * again, and is simply absent for everything that is not an image.
  */
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -56,6 +61,11 @@ export function PreviewPanel({ item }: { item: FileItem | null }) {
           <InfoRow label="Created" value={formatDateTime(item.createdAt)} />
           <InfoRow label="Permissions" value={item.permissions} />
           {item.symlink && <InfoRow label="Alias of" value={item.symlinkTarget ?? '—'} />}
+
+          {/* Below the rows every file has, because it answers a second
+              question — what *kind* of image is this — and above the path,
+              which is the panel's footnote. */}
+          <ImageMetadata item={item} />
 
           <div className="text-muted mt-3 text-[10px] break-all opacity-70">{item.path}</div>
 

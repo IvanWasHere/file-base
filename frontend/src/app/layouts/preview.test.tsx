@@ -199,6 +199,95 @@ describe('metadata', () => {
   })
 })
 
+// §M23: what an image editor shows about an image, read from the file's header.
+describe('image metadata', () => {
+  const metadata = async () =>
+    within(await preview()).findByRole('region', { name: 'Image metadata' })
+
+  const rowValue = async (label: string) => {
+    const section = await metadata()
+    const term = within(section).getByText(label)
+    // The value is the `dd` beside the `dt`, which is the row's other child.
+    return term.parentElement?.lastElementChild?.textContent
+  }
+
+  it('shows the camera data a photograph carries', async () => {
+    const { user } = renderApp()
+    await user.dblClick(await rowFor('Pictures'))
+    await user.dblClick(await rowFor('Camera Roll'))
+    await user.click(await rowFor('IMG_20250101_001\\.jpg'))
+
+    const section = await metadata()
+    expect(within(section).getByText('Image')).toBeInTheDocument()
+    expect(within(section).getByText('Camera')).toBeInTheDocument()
+
+    expect(await rowValue('Dimensions')).toBe('4,032 × 3,024 px')
+    expect(await rowValue('Megapixels')).toBe('12.2 MP')
+    expect(await rowValue('Aspect ratio')).toBe('4:3')
+    expect(await rowValue('Color mode')).toBe('RGB, 8-bit')
+    expect(await rowValue('Color profile')).toBe('Display P3')
+    expect(await rowValue('Model')).toBe('Apple iPhone 15 Pro')
+    expect(await rowValue('Shutter')).toBe('1/250 s')
+    expect(await rowValue('Aperture')).toBe('ƒ/1.8')
+    expect(await rowValue('ISO')).toBe('64')
+    expect(await rowValue('Focal length')).toBe('6.8 mm (24 mm equivalent)')
+  })
+
+  it('shows where a geotagged photo was taken, in hemispheres', async () => {
+    const { user } = renderApp()
+    await user.dblClick(await rowFor('Pictures'))
+    await user.dblClick(await rowFor('Camera Roll'))
+    await user.click(await rowFor('IMG_20250101_001\\.jpg'))
+
+    const section = await metadata()
+    expect(within(section).getByText('Location')).toBeInTheDocument()
+    expect(await rowValue('Coordinates')).toBe('22.90680° S, 43.17290° W')
+    expect(await rowValue('Altitude')).toBe('12.5 m')
+  })
+
+  // A screenshot has dimensions and nothing else, and the panel has to say so
+  // by falling silent rather than by printing a column of dashes (§M23).
+  it('shows only what a screenshot actually knows', async () => {
+    const { user } = renderApp()
+    await user.dblClick(await rowFor('Pictures'))
+    await user.dblClick(await rowFor('Screenshots'))
+    await user.click(await rowFor('bug-report-01\\.png'))
+
+    const section = await metadata()
+    expect(within(section).getByText('Image')).toBeInTheDocument()
+    expect(within(section).queryByText('Camera')).toBeNull()
+    expect(within(section).queryByText('Location')).toBeNull()
+    expect(await rowValue('Color mode')).toBe('RGB, 8-bit + alpha')
+  })
+
+  it('says nothing at all about a file that is not an image', async () => {
+    const { user } = renderApp()
+    await user.dblClick(await rowFor('Movies'))
+    await user.click(await rowFor('tutorial-react-hooks\\.mp4'))
+
+    await preview()
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Image metadata' })).toBeNull())
+  })
+
+  // An image the system cannot identify — an SVG, or a text file named .png —
+  // is not an error worth showing: the rows above already said what is known.
+  it('stays quiet when the metadata cannot be read', async () => {
+    const { FsError } = await import('@/types/errors')
+    vi.spyOn(bridge.images, 'read').mockRejectedValue(
+      new FsError('unknown', 'not an image', `${HOME}/x`),
+    )
+
+    const { user } = renderApp()
+    await user.dblClick(await rowFor('Pictures'))
+    await user.dblClick(await rowFor('Wallpapers'))
+    await user.click(await rowFor('neon-city\\.jpg'))
+
+    const panel = await preview()
+    expect(await within(panel).findByText('neon-city.jpg')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Image metadata' })).toBeNull())
+  })
+})
+
 describe('thumbnails', () => {
   it('shows rendered thumbnails in an icon grid, not for every file', async () => {
     const generate = vi.spyOn(bridge.thumbs, 'generate')
