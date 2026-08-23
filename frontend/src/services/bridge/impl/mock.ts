@@ -17,6 +17,7 @@ import type {
   SearchHandlers,
 } from '../types'
 import { mockDb } from './mockDb'
+import { MOUNT_PREFIX } from '@/services/archives/mountPaths'
 import { algorithmSpec } from '@/constants/hashAlgorithms'
 import type { HashResult } from '@/types/hashing'
 import type {
@@ -536,8 +537,6 @@ const archiveCancelled = new Set<string>()
 let archiveCounter = 0
 let mountCounter = 0
 
-const MOCK_MOUNT_ROOT = `${HOME}/.mock-mounts`
-
 /**
  * A mock archive is a JSON manifest stored as the file's content.
  *
@@ -926,18 +925,27 @@ export const bridge: Bridge = {
       archiveCancelled.add(id)
     },
 
+    // Beside the archive under a hashed, hidden name, as `backend/archive` does
+    // (§M21). The location is the part the UI can see — the breadcrumb, the
+    // session guard and "is this pane inside a mount" all read the path — so a
+    // mock that kept extracting somewhere else would be testing a layout the
+    // app no longer has.
     newMount: async (archivePath) => {
-      mountCounter += 1
-      const root = `${MOCK_MOUNT_ROOT}/mount-${mountCounter}`
-      for (const segment of [MOCK_MOUNT_ROOT, root]) {
-        if (!nodes.has(segment)) {
-          nodes.set(segment, {
-            path: segment, isDirectory: true, size: 0,
-            createdAt: FIXED_NOW, modifiedAt: FIXED_NOW,
-          })
-        }
+      const archive = normalize(archivePath)
+      const beside = dirname(archive)
+      let root = join(beside, `${MOUNT_PREFIX}${syntheticDigest(archive, 16)}`)
+      // The backend falls back to a sibling with a random name when the hashed
+      // one is already taken — a second pane opening the same archive while the
+      // first extraction is still running.
+      if (nodes.has(root)) {
+        mountCounter += 1
+        root = join(beside, `${MOUNT_PREFIX}${mountCounter}`)
       }
-      const mount = join(root, basename(normalize(archivePath)))
+
+      nodes.set(root, {
+        path: root, isDirectory: true, size: 0, createdAt: FIXED_NOW, modifiedAt: FIXED_NOW,
+      })
+      const mount = join(root, basename(archive))
       nodes.set(mount, {
         path: mount, isDirectory: true, size: 0, createdAt: FIXED_NOW, modifiedAt: FIXED_NOW,
       })
@@ -946,9 +954,10 @@ export const bridge: Bridge = {
 
     releaseMount: async (mountPath) => {
       const root = dirname(normalize(mountPath))
-      // Mirrors the backend's guard: this deletes recursively, so anything that
-      // is not one of ours is refused rather than trusted.
-      if (!basename(root).startsWith('mount-') || dirname(root) !== MOCK_MOUNT_ROOT) {
+      // Mirrors the backend's guard: this deletes recursively — and now inside
+      // the user's own folders — so anything without the app's prefix is
+      // refused rather than trusted.
+      if (!basename(root).startsWith(MOUNT_PREFIX)) {
         throw new FsError('unknown', 'that is not an archive mount', mountPath)
       }
       for (const descendant of descendantsOf(root)) nodes.delete(descendant.path)

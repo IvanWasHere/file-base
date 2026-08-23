@@ -19,6 +19,7 @@ import { DEFAULT_ALGORITHM } from '@/constants/hashAlgorithms'
 import { bridge } from '@/services/bridge'
 import { startCreate } from '@/services/archives/archiveService'
 import { __mountState, __releaseAllMounts } from '@/services/archives/mountRegistry'
+import { MOUNT_PREFIX } from '@/services/archives/mountPaths'
 import { useClipboardStore } from '@/stores/clipboardStore'
 import { useHistoryStore } from '@/stores/historyStore'
 import { useSelectionStore } from '@/stores/selectionStore'
@@ -123,6 +124,53 @@ describe('browsing an archive', () => {
     expect(await rowFor('Resume\\.pdf')).toBeInTheDocument()
     expect(await rowFor('Meeting Notes\\.docx')).toBeInTheDocument()
     expect(__mountState()).toHaveLength(1)
+  })
+
+  // §M21: the extraction lands beside the archive rather than in a temp folder
+  // under the user account, so nothing is copied onto another volume — and it is
+  // hidden, so the folder it lands in does not visibly gain one.
+  it('extracts beside the archive, out of sight', async () => {
+    await makeArchive('bundle.zip', [`${DOCUMENTS}/Resume.pdf`])
+
+    const { user } = renderApp()
+    await goToDocuments(user)
+    await user.dblClick(await rowFor('bundle\\.zip'))
+    await waitFor(() => expect(activePane()?.path).toMatch(/bundle\.zip$/))
+
+    const mount = __mountState()[0]?.mountPath ?? ''
+    expect(mount.startsWith(`${DOCUMENTS}/${MOUNT_PREFIX}`)).toBe(true)
+
+    // Back in Documents, the listing is what it was — the mount is hidden.
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(activePane()?.path).toBe(DOCUMENTS))
+    await rowFor('Resume\\.pdf')
+    expect(screen.queryByRole('row', { name: new RegExp(MOUNT_PREFIX) })).toBeNull()
+  })
+
+  // The whole point of a temp extraction: it goes away. Now that it goes away
+  // from a folder the user opens rather than from a temp directory, it matters
+  // that it really does — and that it takes nothing else with it.
+  it('reclaims the extraction from beside the archive and leaves the archive', async () => {
+    await makeArchive('bundle.zip', [`${DOCUMENTS}/Resume.pdf`])
+
+    const { user } = renderApp()
+    await goToDocuments(user)
+    await user.dblClick(await rowFor('bundle\\.zip'))
+    await waitFor(() => expect(activePane()?.path).toMatch(/bundle\.zip$/))
+    const mount = __mountState()[0]?.mountPath ?? ''
+    expect(await bridge.fs.exists(mount)).toBe(true)
+
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(activePane()?.path).toBe(DOCUMENTS))
+    // Leaving drops the reference; the reclaim itself is on a grace timer, so
+    // that Back-then-Forward is free. The timer is `archives.test.ts`'s
+    // business — what is checked here is what the reclaim does to the disk.
+    __releaseAllMounts()
+
+    await waitFor(async () => {
+      expect(await bridge.fs.exists(mount)).toBe(false)
+    })
+    expect(await bridge.fs.exists(`${DOCUMENTS}/bundle.zip`)).toBe(true)
   })
 
   it('holds a reference while the pane is inside and releases it on the way out', async () => {

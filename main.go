@@ -103,8 +103,10 @@ func main() {
 			hashing.Start(hasher, ctx)
 			archive.Start(archives, ctx)
 			// A crash cannot clean up after itself, so mounts left by a previous
-			// run are swept here — scoped by prefix inside the app's own temp
-			// root, so it can only remove what this package created.
+			// run are swept here — scoped by prefix inside the system temp
+			// directory, so it can only remove what this package created. Since
+			// §M21 a mount is made beside its archive instead; those are cleared
+			// by NewMount, on the one directory it has a reason to read.
 			if swept := archive.Sweep(); swept > 0 {
 				println("reclaimed", swept, "archive mounts left by a previous run")
 			}

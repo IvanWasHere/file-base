@@ -496,19 +496,33 @@ func TestSplittingProducesNumberedPartsThatReassemble(t *testing.T) {
 
 /* ---------- mounts ---------- */
 
-func TestMountIsCreatedNamedAndReleased(t *testing.T) {
+// §M21: the mount is made beside the archive, not in the system temp directory,
+// so browsing never copies the bytes onto another volume.
+func TestMountIsCreatedBesideTheArchiveNamedAndReleased(t *testing.T) {
+	dir := t.TempDir()
+	archivePath := filepath.Join(dir, "Photos.zip")
+	mustWrite(t, archivePath, "not really a zip")
+
 	a := New()
-	mount, err := a.NewMount("/somewhere/Photos.zip")
+	mount, err := a.NewMount(archivePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Random for uniqueness, named for the breadcrumb: `… / Photos.zip / holiday`.
+	root := filepath.Dir(mount)
+	if filepath.Dir(root) != dir {
+		t.Errorf("mount root is in %s, want beside the archive in %s", filepath.Dir(root), dir)
+	}
+	// Hashed for uniqueness and hidden so it is not litter; the archive's own
+	// name is the leaf, for the breadcrumb: `… / Photos.zip / holiday`.
+	if root != mountRoot(archivePath) {
+		t.Errorf("mount root is %q, want the hashed name %q", root, mountRoot(archivePath))
+	}
+	if !strings.HasPrefix(filepath.Base(root), ".") {
+		t.Errorf("mount root %q is not hidden", filepath.Base(root))
+	}
 	if filepath.Base(mount) != "Photos.zip" {
 		t.Errorf("mount leaf is %q, want the archive's name", filepath.Base(mount))
-	}
-	if !strings.HasPrefix(filepath.Base(filepath.Dir(mount)), mountPrefix) {
-		t.Errorf("mount is not under the app's own prefix: %s", mount)
 	}
 	if _, err := os.Stat(mount); err != nil {
 		t.Fatal(err)
@@ -517,8 +531,114 @@ func TestMountIsCreatedNamedAndReleased(t *testing.T) {
 	if err := a.ReleaseMount(mount); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Dir(mount)); err == nil {
-		t.Error("releasing left the random directory behind")
+	if _, err := os.Stat(root); err == nil {
+		t.Error("releasing left the mount root behind")
+	}
+	// And took nothing else with it.
+	if _, err := os.Stat(archivePath); err != nil {
+		t.Error("releasing removed the archive itself")
+	}
+}
+
+// The same archive always maps to the same folder. That is what lets a mount
+// stranded by a crash be replaced rather than accumulate a new one each browse.
+func TestMountRootIsStablePerArchiveAndDistinctBetweenThem(t *testing.T) {
+	dir := t.TempDir()
+	one := filepath.Join(dir, "Photos.zip")
+	two := filepath.Join(dir, "Music.zip")
+
+	if mountRoot(one) != mountRoot(one) {
+		t.Error("the same archive produced two different mount roots")
+	}
+	if mountRoot(one) == mountRoot(two) {
+		t.Error("two archives in one folder collided on the same mount root")
+	}
+}
+
+// A crash leaves the folder behind, and now it is beside the user's archive
+// rather than out of sight in a temp directory. Browsing anything in that folder
+// is the moment the app has a reason to read it, so that is when it is cleared.
+func TestNewMountSweepsAStrandedMountBesideTheArchive(t *testing.T) {
+	dir := t.TempDir()
+	archivePath := filepath.Join(dir, "Photos.zip")
+	mustWrite(t, archivePath, "not really a zip")
+
+	// One stranded mount for this archive, one for another that is now gone.
+	stranded := mountRoot(archivePath)
+	mustMkdir(t, stranded)
+	mustWrite(t, filepath.Join(stranded, "leftovers.bin"), "gigabytes")
+	other := filepath.Join(dir, mountPrefix+"deadbeefdeadbeef")
+	mustMkdir(t, other)
+
+	a := New()
+	mount, err := a.NewMount(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = a.ReleaseMount(mount) }()
+
+	if _, err := os.Stat(filepath.Join(stranded, "leftovers.bin")); err == nil {
+		t.Error("the stranded mount for this archive survived")
+	}
+	if _, err := os.Stat(other); err == nil {
+		t.Error("a stranded mount for another archive survived")
+	}
+	// The sweep runs inside the user's own folder, so it must be blind to
+	// everything without the app's prefix.
+	if _, err := os.Stat(archivePath); err != nil {
+		t.Error("the sweep removed the archive itself")
+	}
+}
+
+// A mount another pane is using is not stranded, however much it looks like it.
+func TestNewMountLeavesALiveMountBesideItAlone(t *testing.T) {
+	dir := t.TempDir()
+	one := filepath.Join(dir, "Photos.zip")
+	two := filepath.Join(dir, "Music.zip")
+	mustWrite(t, one, "not really a zip")
+	mustWrite(t, two, "not really a zip either")
+
+	a := New()
+	live, err := a.NewMount(one)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.NewMount(two); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(live); err != nil {
+		t.Error("browsing a second archive swept the first one's live mount")
+	}
+}
+
+// A read-only volume, or an archive nested inside a mount — whose contents are
+// deliberately unwritable. Browsing must still work, from the temp directory
+// every mount used before §M21.
+func TestMountFallsBackToTempWhenTheArchiveFolderIsNotWritable(t *testing.T) {
+	dir := t.TempDir()
+	locked := filepath.Join(dir, "readonly")
+	mustMkdir(t, locked)
+	archivePath := filepath.Join(locked, "Photos.zip")
+	mustWrite(t, archivePath, "not really a zip")
+
+	if err := os.Chmod(locked, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+
+	a := New()
+	mount, err := a.NewMount(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = a.ReleaseMount(mount) }()
+
+	if filepath.Dir(filepath.Dir(mount)) != filepath.Clean(os.TempDir()) {
+		t.Errorf("mount is at %s, want the temp-directory fallback", mount)
+	}
+	if filepath.Base(mount) != "Photos.zip" {
+		t.Errorf("mount leaf is %q, want the archive's name", filepath.Base(mount))
 	}
 }
 
@@ -534,6 +654,25 @@ func TestReleaseMountRefusesAnythingItDidNotCreate(t *testing.T) {
 		t.Fatal("ReleaseMount accepted a path it did not create")
 	}
 	if _, err := os.Stat(filepath.Join(precious, "thesis.txt")); err != nil {
+		t.Fatal("it deleted the folder anyway")
+	}
+}
+
+// Since §M21 the delete happens inside the user's folders, so the prefix alone
+// is no longer enough: the root has to be one this process actually handed out.
+// A stranded one is NewMount's business, on a directory it has a reason to read.
+func TestReleaseMountRefusesAPrefixedFolderItNeverHandedOut(t *testing.T) {
+	dir := t.TempDir()
+	stranded := filepath.Join(dir, mountPrefix+"deadbeefdeadbeef")
+	mustMkdir(t, stranded)
+	inside := filepath.Join(stranded, "Photos.zip")
+	mustMkdir(t, inside)
+
+	a := New()
+	if err := a.ReleaseMount(inside); err == nil {
+		t.Fatal("ReleaseMount accepted a root it never created")
+	}
+	if _, err := os.Stat(inside); err != nil {
 		t.Fatal("it deleted the folder anyway")
 	}
 }
@@ -577,11 +716,17 @@ func TestReadOnlyMountCannotBeWrittenTo(t *testing.T) {
 
 // A crash cannot clean up after itself, and a temp folder that is never
 // reclaimed is a disk leak measured in gigabytes.
+// Sweep covers the temp directory: the §M21 fallback, and every mount made by a
+// version of the app that put them all there. `/somewhere/Left.zip` has no real
+// folder to sit beside, so NewMount lands in exactly that fallback.
 func TestSweepRemovesOrphanedMounts(t *testing.T) {
 	a := New()
 	orphan, err := a.NewMount("/somewhere/Left.zip")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if filepath.Dir(filepath.Dir(orphan)) != filepath.Clean(os.TempDir()) {
+		t.Fatalf("expected the temp fallback, got %s", orphan)
 	}
 	// Forget it, as a crashed process would.
 	a.mounts = map[string]bool{}

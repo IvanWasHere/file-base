@@ -1936,6 +1936,69 @@ Decisions:
   folder menu. Five tests cover the same paths in `fileOperations.test.tsx` and
   `menus.test.tsx`.
 
+### M21 — A browse mount lives beside its archive ✅ complete
+
+Browsing an archive extracted it into `os.TempDir()` — on macOS a folder under
+the user account, on the boot volume, whatever the archive was on. Now the
+extraction is made **in the archive's own directory**, under a hashed, hidden
+name, and reclaimed from there when the user leaves.
+
+The change is one function, `NewMount`, and everything downstream of it holds
+because §M18 decision 3 still holds: a mount is a real folder, so moving where
+that folder is costs the watcher, preview, search, hashing and drag-and-drop
+nothing at all.
+
+Decisions:
+
+1. **Beside the archive, not in a temp directory.** Browsing a 20GB archive on
+   an external drive used to require 20GB free on the boot volume and copy it
+   all across. Next to the archive the bytes never leave the volume they came
+   from, and the space is reclaimed where it was taken. It also makes §M18
+   decision 9 exact rather than approximate: a pane restored from a reclaimed
+   mount already fell back to "the parent of the mount root", which is now
+   precisely the folder the archive is in.
+2. **`.file-base-mount-<hash>`, hashed from the archive's full path.** Sixteen
+   hex digits of SHA-256 — two archives in one folder cannot collide. Hashed
+   rather than random *because* it is deterministic: one archive always maps to
+   one folder, so a mount stranded by a crash is recognised and replaced on the
+   next browse instead of a second one accumulating beside it. Where that
+   determinism is wrong — a second pane opening the same archive while the first
+   extraction is still running — the fallback is a randomly-named sibling, which
+   is still beside the archive.
+3. **Hidden, because it now lands where the user is looking.** A leading dot is
+   the whole mechanism: `ReadDirectory` already flags dot-names and the listing
+   already filters them, so the folder that used to be out of sight in
+   `/var/folders` is out of sight here too. With Show Hidden Files on it appears,
+   which is honest.
+4. **Two fallbacks, both toward the archive.** A name already taken → a random
+   sibling in the same folder. A folder that cannot be written to — a read-only
+   volume, or an archive nested inside another mount, whose contents are made
+   read-only by design — → the system temp directory, which is where every mount
+   lived before this and is therefore known to work.
+5. **Orphans are swept where they land.** `Sweep()` at startup still clears the
+   temp directory, which is the fallback location and where every pre-§M21 mount
+   is, but it cannot see a mount beside an archive. `NewMount` sweeps the
+   archive's own directory instead — the one moment the app has a reason to read
+   it. Mounts this process is holding are skipped, so browsing a second archive
+   in a folder cannot reclaim the first one's live mount.
+6. **The release guard gains a second half.** `ReleaseMount` deletes
+   recursively, and now does so inside the user's own folders rather than in a
+   temp directory — so the app's prefix is no longer enough on its own. The root
+   must also be one this process actually handed out. A prefixed folder it never
+   created is refused; clearing that is `NewMount`'s job, on a directory it is
+   already reading.
+
+- **Verified in the running app**, not only under Vitest and `go test`:
+  compressing `Resume.pdf` in Documents and double-clicking the result puts the
+  pane at `Users / dev / Documents / .file-base-mount-145cea57abdf955c /
+  Resume.pdf.zip`; Documents still lists eight items on the way back out, and
+  nine with Show Hidden Files on; re-browsing the same archive produces the same
+  hash; and after the grace period a refresh shows the folder gone with the
+  archive and everything else untouched. Nine tests in `backend/archive` cover
+  the location, the stable hash, both sweeps, the read-only fallback and both
+  halves of the release guard, and two in `archives.test.tsx` cover what the app
+  can see.
+
 ---
 
 ## 3. Risks

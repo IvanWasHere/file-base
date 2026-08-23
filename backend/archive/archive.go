@@ -22,6 +22,10 @@ package archive
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -38,11 +42,15 @@ const (
 	DoneEvent     = "archive:done"
 )
 
-// mountPrefix names every temp folder this package creates.
+// mountPrefix names every mount folder this package creates.
 //
-// The startup sweep and every release are scoped to it, so neither can touch a
-// directory the app did not make — which matters, because both of them delete.
-const mountPrefix = "file-base-mount-"
+// Every sweep and every release is scoped to it, so none of them can touch a
+// directory the app did not make — which matters, because all of them delete.
+//
+// Leading dot: since §M21 a mount is created beside the archive rather than in
+// the system temp directory, which means it lands in a folder the user is
+// looking at. Hidden is the difference between a temp folder and litter.
+const mountPrefix = ".file-base-mount-"
 
 // Progress reports one job mid-flight.
 type Progress struct {
@@ -127,12 +135,16 @@ func (a *Archive) stopAll() {
 
 func Stop(a *Archive) { a.stopAll() }
 
-// Sweep removes mounts left behind by a crash or a force-quit.
+// Sweep removes mounts left behind by a crash or a force-quit, in the system
+// temp directory.
 //
-// A temp folder that is never reclaimed is a disk leak measured in gigabytes,
-// and the one thing that cannot clean up after itself is a process that died.
-// Scoped by prefix inside the system temp directory, so it can only ever remove
-// something this package created.
+// That is no longer where mounts are made — they sit beside their archive since
+// §M21 — but it is still where the fallback puts them, and it is where every
+// mount made by an earlier version of the app is. Orphans beside an archive are
+// swept by NewMount instead, which is the one moment the app has a reason to
+// read that directory.
+//
+// Scoped by prefix, so it can only ever remove something this package created.
 func Sweep() int {
 	entries, err := os.ReadDir(os.TempDir())
 	if err != nil {
@@ -151,19 +163,30 @@ func Sweep() int {
 	return removed
 }
 
-// NewMount creates the temp folder a browsed archive is extracted into.
+// NewMount creates the folder a browsed archive is extracted into.
 //
-// The random component is a *directory* and the archive's own name is the leaf
-// inside it, so the breadcrumb reads `… / Photos.zip / holiday` rather than
-// `/var/folders/xy/T/file-base-mount-8f3k2` — unique either way, legible only
-// this way (§M18 decision 7).
+// It sits **beside the archive** (§M21), not in the system temp directory.
+// Browsing a 20GB archive on an external drive used to need 20GB free on the
+// boot volume and copy it all there; next to the archive the bytes never leave
+// the volume they came from, and the space is reclaimed where it was taken.
+//
+// The folder is `.file-base-mount-<hash>`, hashed from the archive's own path:
+//
+//   - **Hashed, not random**, so one archive always maps to one folder. That is
+//     what lets a mount stranded by a crash be recognised and replaced on the
+//     next browse rather than accumulating a new one each time.
+//   - **Hidden**, because this folder now lands where the user is looking.
+//
+// The archive's own name is the leaf inside it, so the breadcrumb still reads
+// `… / Photos.zip / holiday` (§M18 decision 7).
 func (a *Archive) NewMount(archivePath string) (string, error) {
-	name := filepath.Base(filepath.Clean(archivePath))
+	clean := filepath.Clean(archivePath)
+	name := filepath.Base(clean)
 	if name == "" || name == "." || name == string(filepath.Separator) {
 		name = "archive"
 	}
 
-	root, err := os.MkdirTemp("", mountPrefix)
+	root, err := a.makeMountRoot(clean)
 	if err != nil {
 		return "", wrapError(archivePath, err)
 	}
@@ -180,23 +203,96 @@ func (a *Archive) NewMount(archivePath string) (string, error) {
 	return mount, nil
 }
 
-// ReleaseMount removes a mount and the random directory holding it.
+// mountRoot is the folder one archive extracts into: its own directory, under a
+// name derived from its full path. Sixteen hex digits of SHA-256 — enough that
+// two archives in one folder cannot collide, short enough to read.
+func mountRoot(archivePath string) string {
+	sum := sha256.Sum256([]byte(archivePath))
+	return filepath.Join(filepath.Dir(archivePath), mountPrefix+hex.EncodeToString(sum[:])[:16])
+}
+
+// makeMountRoot creates that folder, with two fallbacks that both keep the
+// mount as close to the archive as the disk allows.
+func (a *Archive) makeMountRoot(archivePath string) (string, error) {
+	beside := filepath.Dir(archivePath)
+	a.sweepStaleMounts(beside)
+
+	err := os.Mkdir(mountRoot(archivePath), 0o755)
+	switch {
+	case err == nil:
+		return mountRoot(archivePath), nil
+
+	case errors.Is(err, fs.ErrExist):
+		// The sweep leaves live mounts alone, so this is a second pane opening
+		// the same archive while the first extraction is still running. A
+		// randomly-named sibling is still beside the archive.
+		return os.MkdirTemp(beside, mountPrefix)
+
+	default:
+		// The archive's own folder cannot be written to — a read-only volume,
+		// or an archive nested inside another mount, whose contents are made
+		// read-only by design. The system temp directory is where every mount
+		// lived before §M21, so it is the fallback that is known to work.
+		return os.MkdirTemp("", mountPrefix)
+	}
+}
+
+// sweepStaleMounts clears mounts a crash left in one directory.
 //
-// Refuses anything that is not one of ours. This function deletes recursively,
-// so the guard is the whole safety story: a bug elsewhere that passed a user
-// path must not be able to erase it.
+// Orphans used to be invisible in the system temp directory and were swept once
+// at startup; beside an archive they sit in a folder the user opens, so they are
+// cleared whenever the app next browses anything in it — the one moment it has a
+// reason to read that directory anyway.
+//
+// Mounts this process is holding are skipped. That, and the prefix, is the whole
+// safety story for a recursive delete running inside the user's own folders:
+// nothing without the prefix is touched, and nothing in use is touched. Like the
+// startup sweep it assumes one running instance, which is the assumption Sweep
+// has made since §M18.
+func (a *Archive) sweepStaleMounts(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), mountPrefix) {
+			continue
+		}
+		root := filepath.Join(dir, entry.Name())
+
+		a.mu.Lock()
+		held := a.mounts[root]
+		a.mu.Unlock()
+		if held {
+			continue
+		}
+		_ = removeMount(root)
+	}
+}
+
+// ReleaseMount removes a mount and the hashed directory holding it.
+//
+// Refuses anything that is not one of ours. This function deletes recursively
+// and, since §M21, does so inside the user's own folders rather than in a temp
+// directory — so the guard is the whole safety story, and it is two checks: the
+// app's prefix, *and* a root this process actually handed out. A mount in the
+// system temp directory is accepted without the second, because that is where
+// the fallback and every pre-§M21 mount lives.
 func (a *Archive) ReleaseMount(mountPath string) error {
 	root := filepath.Dir(filepath.Clean(mountPath))
 	if !strings.HasPrefix(filepath.Base(root), mountPrefix) {
 		return archiveError(mountPath, "that is not an archive mount")
 	}
-	if filepath.Dir(root) != filepath.Clean(os.TempDir()) {
-		return archiveError(mountPath, "that is not an archive mount")
-	}
 
 	a.mu.Lock()
+	ours := a.mounts[root]
 	delete(a.mounts, root)
 	a.mu.Unlock()
+
+	if !ours && filepath.Dir(root) != filepath.Clean(os.TempDir()) {
+		return archiveError(mountPath, "that is not an archive mount")
+	}
 
 	if err := removeMount(root); err != nil {
 		return wrapError(mountPath, err)
@@ -335,8 +431,8 @@ func (a *Archive) runExtract(
 
 // removeIfOurs cleans up a failed extraction without ever touching a folder
 // that already held something. Uncompress extracts into a folder it just made,
-// and a mount into a temp directory, so both are safe to remove; anything else
-// is left alone.
+// and a browse into a mount root it just made, so both are safe to remove;
+// anything else is left alone.
 func removeIfOurs(destination string) error {
 	base := filepath.Base(filepath.Dir(filepath.Clean(destination)))
 	if strings.HasPrefix(base, mountPrefix) {
