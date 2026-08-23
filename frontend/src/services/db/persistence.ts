@@ -63,6 +63,7 @@ export async function hydrate(homePath: string): Promise<HydrationResult> {
     previewOpen: settings.previewOpen,
     theme: settings.theme,
     columnLayout: settings.columnLayout,
+    hiddenContextCommands: settings.hiddenContextCommands,
     hashAlgorithm: settings.hashAlgorithm,
     lastTemplate: settings.lastTemplate,
   })
@@ -161,6 +162,11 @@ export function startPersistence(now: () => number = Date.now): () => void {
     // Reference comparison is enough because the store replaces the layout
     // wholesale; a mutated one would be missed here and by React alike.
     if (state.columnLayout !== previous.columnLayout) changed.columnLayout = state.columnLayout
+    // Replaced wholesale by the store, like the layout above, so a reference
+    // comparison is exactly as strong here as a deep one would be.
+    if (state.hiddenContextCommands !== previous.hiddenContextCommands) {
+      changed.hiddenContextCommands = state.hiddenContextCommands
+    }
     if (state.hashAlgorithm !== previous.hashAlgorithm) changed.hashAlgorithm = state.hashAlgorithm
     if (state.lastTemplate !== previous.lastTemplate) changed.lastTemplate = state.lastTemplate
 

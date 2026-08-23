@@ -239,6 +239,16 @@ export function useMenuCommands(): MenuCommandState {
       case 'file.calculateHashes':
         ui.openHashes(targets)
         return
+      // Folders included, exactly as hashing includes them here: macOS tags a
+      // folder as readily as a file, and the picker reads the union of what is
+      // selected either way.
+      case 'file.tags':
+        ui.openTags(targets)
+        return
+
+      case 'app.settings':
+        ui.openSettings()
+        return
 
       case 'file.compress':
         if (pane) ui.openCompress(targets, pane.path)
@@ -369,6 +379,7 @@ export function useMenuCommands(): MenuCommandState {
       case 'file.moveToTrash':
       case 'file.delete':
       case 'file.open':
+      case 'file.tags':
         return selected.size > 0
       // Enabled when the selection could hold a file. An item the pane's cache
       // cannot classify counts as one: the alternative is a dead button

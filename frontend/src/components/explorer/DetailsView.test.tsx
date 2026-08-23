@@ -9,7 +9,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ExplorerPane } from '@/features/explorer/ExplorerPane'
 import { createQueryClient } from '@/app/providers/queryClient'
-import { DEFAULT_LAYOUT, weightsOf } from '@/constants/columns'
+import { DEFAULT_LAYOUT, visibleColumns, weightsOf } from '@/constants/columns'
 import { evenLayout } from '@/constants/splitModes'
 import { DEFAULT_SORT } from '@/services/filesystem/sort'
 import { useSelectionStore } from '@/stores/selectionStore'
@@ -344,7 +344,14 @@ describe('column layout', () => {
     dragHeader(/Name/, 100, 650)
 
     await waitFor(() => expect(headerLabels()).toEqual(['Size', 'Type', 'Name', 'Modified']))
-    expect(useUiStore.getState().columnLayout.order).toEqual(['size', 'type', 'name', 'modified'])
+    // `order` carries the hidden columns too since §M22, so it is the *visible*
+    // sequence that has to match what the header just showed.
+    expect(visibleColumns(useUiStore.getState().columnLayout)).toEqual([
+      'size',
+      'type',
+      'name',
+      'modified',
+    ])
   })
 
   // Decision 8: the cells move with the headers, so what a screen reader reads

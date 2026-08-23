@@ -103,8 +103,15 @@ var sections = []section{
 			{ID: "file.revealInFinder", Label: "Reveal in Finder"},
 			{ID: "file.copyPath", Label: "Copy Path"},
 			separator(),
+			{ID: "file.tags", Label: "Tags…"},
+			separator(),
 			{ID: "file.addToFavorites", Label: "Add to Favorites"},
 			{ID: "file.removeFromFavorites", Label: "Remove from Favorites"},
+			separator(),
+			// macOS puts Settings in the application menu, which is a Wails role
+			// this package cannot append to — so it sits at the foot of File,
+			// where the in-window menu bar also draws it (PLAN.md §M22).
+			{ID: "app.settings", Label: "Settings…"},
 		},
 	},
 	{

@@ -30,6 +30,7 @@ import type {
   TrashedItem,
 } from '@/types/file'
 import { FsError } from '@/types/errors'
+import { normaliseTags, type FileTag } from '@/constants/tags'
 import { categorize } from '@/utils/fileCategory'
 import {
   basename,
@@ -54,6 +55,8 @@ interface Node {
   executable?: boolean
   /** A browse mount is extracted read-only, and the listing has to show that. */
   readOnly?: boolean
+  /** Finder tags (§M22). Absent means untagged, which is almost every node. */
+  tags?: FileTag[]
 }
 
 /** 1×1 transparent PNG, shared by the image preview and the thumbnailer. */
@@ -145,6 +148,21 @@ const SEED: [string, number, number][] = [
   ['Projects/design-system/tokens.json', 12400, 10],
 ]
 
+/**
+ * Seeded tags, by path relative to home (§M22).
+ *
+ * Two files rather than none, because "the Tags column draws nothing" and "the
+ * Tags column is broken" look identical on an untagged tree — and browser dev
+ * has no Finder to tag anything with.
+ */
+const SEED_TAGS: Record<string, FileTag[]> = {
+  'Documents/Work/Contract Draft.pdf': [
+    { name: 'Urgent', color: 6 },
+    { name: 'Work', color: 4 },
+  ],
+  'Documents/Personal/Travel Plans.docx': [{ name: 'Green', color: 2 }],
+}
+
 const DAY = 86_400_000
 
 function buildTree(): Map<string, Node> {
@@ -172,6 +190,11 @@ function buildTree(): Map<string, Node> {
     } else {
       nodes.set(path, { path, isDirectory: false, size, createdAt: modifiedAt, modifiedAt })
     }
+  }
+
+  for (const [relative, tags] of Object.entries(SEED_TAGS)) {
+    const node = nodes.get(join(HOME, relative))
+    if (node) node.tags = tags.map((tag) => ({ ...tag }))
   }
 
   return nodes
@@ -248,6 +271,9 @@ function toFileItem(node: Node): FileItem {
     mimeType: node.isDirectory ? 'inode/directory' : 'application/octet-stream',
     category: categorize(extension, node.isDirectory),
     broken: false,
+    // Copied, not shared: a caller mutating the array it was handed would be
+    // editing the mock filesystem in place.
+    tags: node.tags ? node.tags.map((tag) => ({ ...tag })) : [],
   }
 }
 
@@ -695,6 +721,23 @@ export const bridge: Bridge = {
     copy: async (sources, destDir, policy) => transfer(sources, destDir, policy, 'copy'),
     trash: async (paths) => moveToTrash(paths),
     delete: async (paths) => remove(paths),
+    // Mirrors the backend: replaces rather than merges, and an empty list
+    // means untagged rather than "tagged with nothing".
+    setTags: async (paths, tags) => {
+      const applied = normaliseTags(tags)
+      for (const path of paths) {
+        const node = requireNode(path)
+        if (applied.length === 0) {
+          delete node.tags
+        } else {
+          node.tags = applied.map((tag) => ({ ...tag }))
+        }
+        // Setting an extended attribute is a change to the file's metadata, and
+        // the real watcher reports it as one — so the listing refreshes the
+        // same way it does after a chmod.
+        emit('chmod', path)
+      }
+    },
   },
   search: {
     find: async (criteria) => {

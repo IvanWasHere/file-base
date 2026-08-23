@@ -13,6 +13,8 @@ import {
 } from '@/constants/hashAlgorithms'
 import { DEFAULT_THEME, isThemePreference, type ThemePreference } from '@/constants/themes'
 import { DEFAULT_LAYOUT, normaliseLayout, type ColumnLayout } from '@/constants/columns'
+import { CONTEXT_COMMANDS } from '@/constants/contextMenus'
+import { isMenuCommandId, type MenuCommandId } from '@/constants/menus'
 
 export interface AppSettings {
   showHiddenFiles: boolean
@@ -30,8 +32,10 @@ export interface AppSettings {
    * the build, and a custom one's belongs to its file.
    */
   lastTemplate: string
-  /** The detail view's column order and widths (§M19). */
+  /** The detail view's column order, widths and which are shown (§M19, §M22). */
   columnLayout: ColumnLayout
+  /** The context-menu rows this user switched off in Settings (§M22). */
+  hiddenContextCommands: MenuCommandId[]
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -44,6 +48,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hashAlgorithm: DEFAULT_ALGORITHM,
   lastTemplate: '',
   columnLayout: DEFAULT_LAYOUT,
+  hiddenContextCommands: [],
 }
 
 export async function loadSettings(): Promise<AppSettings> {
@@ -81,6 +86,17 @@ export async function loadSettings(): Promise<AppSettings> {
   // anything — and dropping the whole row for one bad field would throw away a
   // layout the user built. `normaliseLayout` keeps what it can (§M19).
   if ('columnLayout' in stored) stored.columnLayout = normaliseLayout(stored.columnLayout)
+  // Filtered rather than validated wholesale, for the reason the layout beside
+  // it is repaired: an id this build no longer has would hide nothing, and an
+  // id that is not in a context menu at all would be a stored preference about
+  // a row that does not exist. Both are dropped and the rest is kept (§M22).
+  if ('hiddenContextCommands' in stored) {
+    stored.hiddenContextCommands = Array.isArray(stored.hiddenContextCommands)
+      ? stored.hiddenContextCommands.filter(
+          (id): id is MenuCommandId => isMenuCommandId(id) && CONTEXT_COMMANDS.includes(id),
+        )
+      : []
+  }
 
   return { ...DEFAULT_SETTINGS, ...stored }
 }

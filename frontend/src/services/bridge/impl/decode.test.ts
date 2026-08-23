@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { toFileItem, toFsError } from './decode'
-import type { filesystem } from '../../../../wailsjs/go/models'
+import { filesystem } from '../../../../wailsjs/go/models'
 
-/** Builds the wire shape Go sends, with sensible defaults. */
+/**
+ * Builds the wire shape Go sends, with sensible defaults.
+ *
+ * Through `createFrom` rather than as a literal since §M22: `FileItem` gained a
+ * nested `Tag[]`, so Wails now generates it as a class with a converter, and
+ * the class is what a real call hands back.
+ */
 function wire(overrides: Partial<filesystem.FileItem> = {}): filesystem.FileItem {
-  return {
+  return filesystem.FileItem.createFrom({
     path: '/Users/dev/notes.txt',
     name: 'notes.txt',
     size: 120,
@@ -17,8 +23,9 @@ function wire(overrides: Partial<filesystem.FileItem> = {}): filesystem.FileItem
     symlinkTarget: '',
     mimeType: 'text/plain',
     broken: false,
+    tags: [],
     ...overrides,
-  }
+  })
 }
 
 describe('toFsError', () => {

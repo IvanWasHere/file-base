@@ -14,6 +14,8 @@ require (
 	github.com/wailsapp/wails/v2 v2.13.0
 	github.com/yeka/zip v0.0.0-20231116150916-03d6312748a9
 	golang.org/x/image v0.44.0
+	golang.org/x/sys v0.46.0
+	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9
 	modernc.org/sqlite v1.55.0
 )
 
@@ -53,7 +55,6 @@ require (
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/net v0.54.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	modernc.org/libc v1.74.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

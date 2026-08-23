@@ -46,12 +46,20 @@ export function ReadFileInfos(arg1) {
   return window['go']['filesystem']['FS']['ReadFileInfos'](arg1);
 }
 
+export function ReadTags(arg1) {
+  return window['go']['filesystem']['FS']['ReadTags'](arg1);
+}
+
 export function ReadTextFile(arg1, arg2) {
   return window['go']['filesystem']['FS']['ReadTextFile'](arg1, arg2);
 }
 
 export function Rename(arg1, arg2) {
   return window['go']['filesystem']['FS']['Rename'](arg1, arg2);
+}
+
+export function SetTags(arg1, arg2) {
+  return window['go']['filesystem']['FS']['SetTags'](arg1, arg2);
 }
 
 export function StandardPaths() {

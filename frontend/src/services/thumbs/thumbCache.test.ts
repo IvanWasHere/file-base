@@ -29,6 +29,7 @@ function item(name: string, overrides: Partial<FileItem> = {}): FileItem {
     mimeType: 'image/png',
     category: 'image',
     broken: false,
+    tags: [],
     ...overrides,
   }
 }

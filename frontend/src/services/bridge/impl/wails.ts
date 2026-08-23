@@ -51,6 +51,7 @@ import {
   ReadFileInfos,
   ReadTextFile,
   Rename,
+  SetTags,
   StandardPaths,
   Trash,
 } from '../../../../wailsjs/go/filesystem/FS'
@@ -119,6 +120,7 @@ export const bridge: Bridge = {
         })),
       ),
     delete: (paths) => guard(() => Delete(paths)),
+    setTags: (paths, tags) => guard(() => SetTags(paths, tags)),
   },
   search: {
     find: (criteria) => guard(() => Find(criteria)),

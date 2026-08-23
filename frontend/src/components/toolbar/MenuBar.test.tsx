@@ -216,8 +216,9 @@ describe('menu bar', () => {
     await user.keyboard('{Escape}')
 
     useUiStore.getState().setColumnLayout({
-      order: ['size', 'name', 'type', 'modified'],
-      weights: { name: 0.3, size: 0.3, type: 0.2, modified: 0.2 },
+      order: ['size', 'name', 'type', 'modified', 'created', 'tags'],
+      weights: { name: 0.3, size: 0.3, type: 0.2, modified: 0.2, created: 0.2, tags: 0.2 },
+      hidden: ['created', 'tags'],
     })
 
     await user.click(screen.getByRole('menuitem', { name: 'View' }))

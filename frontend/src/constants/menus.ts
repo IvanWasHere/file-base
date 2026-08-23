@@ -35,6 +35,8 @@ export type MenuCommandId =
   | 'file.copyPath'
   | 'file.addToFavorites'
   | 'file.removeFromFavorites'
+  | 'file.tags'
+  | 'app.settings'
   // Edit
   | 'edit.undo'
   | 'edit.copy'
@@ -136,8 +138,16 @@ export const APP_MENUS: MenuDefinition[] = [
       { id: 'file.revealInFinder', label: 'Reveal in Finder' },
       { id: 'file.copyPath', label: 'Copy Path' },
       { separator: true },
+      { id: 'file.tags', label: 'Tags…' },
+      { separator: true },
       { id: 'file.addToFavorites', label: 'Add to Favorites' },
       { id: 'file.removeFromFavorites', label: 'Remove from Favorites' },
+      { separator: true },
+      // macOS would put this in the application menu, where ⌘, lives. Wails
+      // renders that menu from a role we cannot append to, so it sits at the
+      // foot of File — and keeps ⌘,, which is the part users actually reach for
+      // (§M22 decision 9).
+      { id: 'app.settings', label: 'Settings…' },
     ],
   },
   {

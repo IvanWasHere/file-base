@@ -69,6 +69,12 @@ export const SHORTCUTS: Shortcut[] = [
   // Uncompress has none: it acts on whatever is selected and is destructive of
   // disk space rather than of data, so a binding nobody would guess is clutter.
   { id: 'file.compress', accelerator: 'Cmd+Alt+K' },
+  // Finder's own binding for the tag picker, and free here: ⌃ is not a
+  // modifier this registry uses, so nothing else claims it.
+  { id: 'file.tags', accelerator: 'Cmd+Alt+T' },
+  // The binding every macOS application has for its settings, which is the
+  // reason Settings keeps ⌘, even though the row lives under File (§M22).
+  { id: 'app.settings', accelerator: 'Cmd+Comma' },
 
   // Edit
   { id: 'edit.undo', accelerator: 'Cmd+Z' },

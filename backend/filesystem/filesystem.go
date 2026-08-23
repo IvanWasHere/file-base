@@ -47,6 +47,12 @@ type FileItem struct {
 	// symlink, or a mount that went away. The entry is still returned so the UI
 	// can show it as unavailable rather than silently omitting it.
 	Broken bool `json:"broken"`
+	// Tags are Finder's own tags, read from the extended attribute Finder
+	// writes (§M22). Reported with every entry rather than fetched per row: the
+	// Tags column has to sort, and a column that cannot sort until every visible
+	// row has answered a separate call is a column that reorders itself while
+	// being read.
+	Tags []Tag `json:"tags"`
 }
 
 type Volume struct {
@@ -356,6 +362,11 @@ func Describe(path string, followSymlinks bool) FileItem {
 		Symlink:       isSymlink,
 		SymlinkTarget: target,
 		MimeType:      mimeTypeFor(name, info.IsDir()),
+		// One getxattr per entry, on top of the lstat this already does. It is
+		// the same order of cost as the stat itself, and the alternative — a
+		// second pass over the listing — would make tags arrive after the rows
+		// they belong to (§M22 decision 3).
+		Tags: readTags(path),
 	}
 }
 

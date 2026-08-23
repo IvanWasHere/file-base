@@ -1999,6 +1999,87 @@ Decisions:
   halves of the release guard, and two in `archives.test.tsx` cover what the app
   can see.
 
+### M22 — Choosing your columns, Finder tags, and a Settings modal ✅ complete
+
+Three things that turn out to be one: the details view could show four columns
+and only those four, the app had no place to configure anything, and macOS files
+carry a piece of metadata — Finder tags — the explorer could not see at all.
+So §M22 adds **Created** and **Tags** columns, makes every column and every
+right-click row a checkbox in a new **Settings** modal, and teaches Go to read
+and write the extended attribute Finder itself uses.
+
+Decisions:
+
+1. **A layout says which columns are *off*, not which are on.** `ColumnLayout`
+   gains `hidden: ColumnId[]` while `order` keeps the complete roster, so a
+   column switched off holds its place and its width and comes back where it
+   was rather than at the end. The registry keeps describing every column the
+   build can draw — that list is what Settings offers, and a registry pruned to
+   the visible ones would have nothing to offer.
+2. **A column added by a later build arrives in the state its spec says**, which
+   is the whole upgrade path: `defaultVisible: false` on Created and Tags means
+   `normaliseLayout` appends them *hidden* to a stored four-column layout, so
+   nobody's window rearranges itself on update. `required: true` on Name means
+   the one column a listing cannot do without is ticked and inert rather than
+   left off the list — the row is where someone looks to find out why.
+3. **Tags are read with the listing, not fetched per row.** `Describe` does one
+   `getxattr` per entry beside the `lstat` it already does. The Tags column has
+   to *sort*, and a column that cannot sort until every visible row has answered
+   a separate call is a column that reorders itself while being read. The cost
+   is real and measured — see the risk table — and it is one syscall on a path
+   that already makes several.
+4. **Go reports the palette index, not a colour.** The attribute holds
+   `"Name\nIndex"` strings, and the number is what is on disk; turning 6 into
+   "red" would be a UI decision in Go (§1) and could not express the user who
+   renamed Finder's red tag to "Urgent" and kept the dot. `constants/tags.ts`
+   owns the swatches, exactly as `themes.ts` owns the theme labels.
+5. **The attribute is written the way Finder writes it** — a *binary* property
+   list, colour index always present — and read the way anything might have
+   written it: the older bare-name spelling decodes, a malformed list reads as
+   no tags, and a name that is blank or repeated is dropped. Nothing here owns
+   this data; every other application on the machine can write it.
+6. **Sorting by tags sorts by the names shown.** A set has no inherent order, so
+   `tagSortValue` lowercases, sorts and joins the names: "Admin" before "Work",
+   untagged files gathered at one end, and two files tagged the same way in
+   different orders comparing equal rather than shuffling.
+7. **The picker is a dialog, not a submenu.** Finder uses a submenu of dots.
+   Context menus here are a flat list of command ids by design (§M11), and
+   adding one nested case for a single caller would be a renderer feature built
+   for one row — and a submenu has nowhere to *type* a tag that does not exist
+   yet. It edits a set and writes on Done: each write is a syscall per file and
+   a refetch behind it, and picking three tags on forty files should cost that
+   once. A tag that only some of the selection carries reads as **mixed** and
+   stays mixed unless it is touched, so "I did not change that one" is a state
+   the picker can actually express.
+8. **Hiding a context-menu row is a second filter, not a change to `isVisible`.**
+   `useMenuCommands.isVisible` is about the moment — a pinned folder shows
+   Remove rather than Add — and this is about what the user asked for once, in
+   Settings. Stored as what is hidden, so a command a later build adds appears
+   for everyone. Hiding *every* row opens no menu at all: an empty panel that
+   has to be dismissed is worse than a right-click that does nothing.
+9. **Settings sits at the foot of File, and keeps ⌘,.** macOS puts it in the
+   application menu, which Wails renders from a role this app cannot append to.
+   The binding is the half users actually reach for, so it stays; the row goes
+   where the in-window menu bar can also draw it. Nothing in the modal is
+   applied on OK — every checkbox writes straight to the store, and the window
+   behind it updates as it is ticked, which is the confirmation.
+
+- **Verified in the running app**, not only under Vitest and `go test`: ⌘,
+  opens Settings on a real window; ticking Created and Tags puts six headers on
+  the listing with real birth times and an em dash where a file has no tags;
+  ⌥⌘T on `Notes.md` opens the picker, and Red plus a typed "Q3 Budget" in purple
+  land on disk as `com.apple.metadata:_kMDItemUserTags` holding
+  `Red\n6`, `Q3 Budget\n3` — a binary plist `plutil` reads and Spotlight reports
+  as `kMDItemUserTags = (Red, "Q3 Budget")`, which is what makes Finder show the
+  dots; the Tags column then announces "Tags: Red, Q3 Budget"; and unticking
+  Duplicate under Right-click Menu removes exactly that row from a real
+  right-click while Rename, Tags… and the rest stay. Reset Columns puts the
+  four back. Eight tests in `backend/filesystem` cover the round trip, the
+  listing, an untagged file, clearing the attribute, both spellings and the
+  garbage case; twenty-eight in `columns.test.ts`, `tags.test.ts`,
+  `sort.test.ts` and `settings.test.tsx` cover the layout repair, the upgrade
+  path, the picker's mixed state and the menu filtering.
+
 ---
 
 ## 3. Risks
@@ -2025,6 +2106,8 @@ Decisions:
 | **Deleting a mount with the user's work inside it** | Mounts are extracted read-only, so nothing can be edited in place to be lost; changing something means Uncompress or dragging out (§M18 decision 6) |
 | **Temp folders leaking after a crash** | Swept by prefix inside the app's own temp root at startup, and removed at quit (§M18 decision 8) |
 | **RAR and 7z cannot be created** — proprietary, and no pure-Go encoder | Absent from the create list with the reason shown, rather than offered and failing at the end of a long job (§M18 decision 14) |
+| **A `getxattr` per directory entry** — tags are read with the listing, and cost ~16µs an entry (5,000 entries: 82ms with tags, ~21ms without) | Accepted for the folders anyone browses; the 100k-entry case is already answered by virtualization and chunked reads, and a listing that fetched tags per row could not sort by them (§M22 decision 3) |
+| **Tags written by anything on the machine** — the attribute is not ours, and holds whatever some other tagger put there | Repaired on both sides of the bridge: an unparseable plist reads as no tags, blank and duplicate names are dropped, and an index off the palette falls back to no colour (§M22 decision 5) |
 | **Notarization** for distribution | Deferred to M12; not blocking for local development |
 
 ---

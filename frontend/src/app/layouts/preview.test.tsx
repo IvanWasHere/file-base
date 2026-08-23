@@ -47,6 +47,7 @@ function fileLike(overrides: Partial<FileItem>): FileItem {
     hidden: false,
     symlink: false,
     mimeType: '',
+    tags: [],
     category: 'default',
     broken: false,
     ...overrides,

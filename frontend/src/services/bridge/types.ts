@@ -13,6 +13,7 @@
  * no search-result ranking, no navigation. Go decides nothing.
  */
 
+import type { FileTag } from '@/constants/tags'
 import type {
   ConflictPolicy,
   FileItem,
@@ -73,6 +74,14 @@ export interface FilesystemApi {
   trash(paths: string[]): Promise<TrashedItem[]>
   /** Permanent, unrecoverable delete. Always confirmed in the UI first. */
   delete(paths: string[]): Promise<void>
+  /**
+   * Replaces the Finder tags on every path with `tags` (§M22).
+   *
+   * Replaces rather than merges, because the picker shows the union of the
+   * selection and lets it be edited — a merge would make unticking impossible.
+   * Reading them needs no method: every `FileItem` already carries its tags.
+   */
+  setTags(paths: string[], tags: FileTag[]): Promise<void>
 }
 
 export interface SearchHandlers {

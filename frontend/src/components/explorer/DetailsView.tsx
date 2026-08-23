@@ -7,11 +7,13 @@ import {
   columnSpec,
   gridTemplate,
   minWeightsOf,
-  moveColumn,
+  moveVisibleColumn,
+  visibleColumns,
   weightsOf,
   withWeights,
   type ColumnId,
 } from '@/constants/columns'
+import { TagDots } from '@/components/common/TagDots'
 import { useColumnReorder } from '@/hooks/useColumnReorder'
 import { useSplitResize } from '@/hooks/useSplitResize'
 import { useContextMenu } from '@/hooks/useContextMenu'
@@ -88,8 +90,9 @@ const Row = memo(function Row({
 }: {
   item: FileItem
   /**
-   * Display order. A stable reference held in the store, so a row that is
-   * merely scrolled past does not re-render (§M19 decision 9).
+   * Display order — the visible columns only. A stable reference, memoised
+   * from the stored layout, so a row that is merely scrolled past does not
+   * re-render (§M19 decision 9).
    */
   columns: ColumnId[]
   template: string
@@ -150,6 +153,16 @@ const Row = memo(function Row({
     modified: (
       <span role="gridcell" className="text-secondary truncate text-xs">
         {formatDate(item.modifiedAt)}
+      </span>
+    ),
+    created: (
+      <span role="gridcell" className="text-secondary truncate text-xs">
+        {formatDate(item.createdAt)}
+      </span>
+    ),
+    tags: (
+      <span role="gridcell" className="text-secondary flex min-w-0 items-center text-xs">
+        <TagDots tags={item.tags} />
       </span>
     ),
   }
@@ -215,6 +228,14 @@ export function DetailsView({
 
   const template = gridTemplate(layout)
   const weights = weightsOf(layout)
+  // The header, the rows and the resize handles all walk this one list, so a
+  // column switched off in Settings disappears from all three at once (§M22).
+  //
+  // Memoised because it is the identity §M19 decision 9 relies on: `Row` is
+  // memoised by hand, and a freshly-derived array every render would re-render
+  // every visible row on every scroll tick. The layout is replaced wholesale by
+  // the store, so this changes exactly when the columns do.
+  const columns = useMemo(() => visibleColumns(layout), [layout])
 
   const { startResize, nudge } = useSplitResize({
     containerRef: headerRef,
@@ -227,8 +248,10 @@ export function DetailsView({
   const { drag, startReorder, consumeClick } = useColumnReorder({
     containerRef: headerRef,
     weights,
+    // `moveVisibleColumn`, not `moveColumn`: the drag reports header positions,
+    // and with a column hidden those no longer index `order` (§M22).
     onReorder: (from, to) =>
-      setColumnLayout({ order: moveColumn(layout.order, from, to), weights: layout.weights }),
+      setColumnLayout({ ...layout, order: moveVisibleColumn(layout, from, to) }),
   })
 
   // Closing the editor unmounts the input, dropping focus to the document body
@@ -325,9 +348,9 @@ export function DetailsView({
 
     if (event.altKey) {
       event.preventDefault()
-      const next = moveColumn(layout.order, index, index + direction)
+      const next = moveVisibleColumn(layout, index, index + direction)
       if (next !== layout.order) {
-        setColumnLayout({ order: next, weights: layout.weights })
+        setColumnLayout({ ...layout, order: next })
         // Focus follows the column, not the position: the user is moving *this*
         // header and expects to keep moving it.
         requestAnimationFrame(() => {
@@ -343,7 +366,7 @@ export function DetailsView({
       event.preventDefault()
       // A column grows against the divider on its right; the last one has none,
       // so it grows by pulling the divider on its left the other way.
-      const last = index === layout.order.length - 1
+      const last = index === columns.length - 1
       nudge(last ? index - 1 : index, (last ? -direction : direction) as -1 | 1)
     }
   }
@@ -370,7 +393,7 @@ export function DetailsView({
         className="border-edge bg-surface text-muted grid shrink-0 border-b px-3 text-[11px] font-semibold tracking-[0.5px] uppercase"
         style={{ height: HEADER_HEIGHT, gridTemplateColumns: template }}
       >
-        {layout.order.map((id, index) => {
+        {columns.map((id, index) => {
           const spec = columnSpec(id)
           const active = sort.key === spec.sortKey
           const dragging = drag?.from === index
@@ -421,7 +444,7 @@ export function DetailsView({
                   second, unfocusable separator in the tree would be noise to a
                   screen reader — and it made `getAllByRole('separator')` count
                   fourteen dividers in a 2 × 2 split, which is how it was found. */}
-              {index < layout.order.length - 1 && (
+              {index < columns.length - 1 && (
                 <div
                   aria-hidden
                   data-testid={`column-resize-${id}`}
@@ -476,7 +499,7 @@ export function DetailsView({
               >
                 <Row
                   item={item}
-                  columns={layout.order}
+                  columns={columns}
                   template={template}
                   selected={selected.has(item.path)}
                   cut={cut.has(item.path)}

@@ -77,6 +77,9 @@ export function placeholderItem(parent: string, name: string, isDirectory: boole
     permissions: isDirectory ? 'drwxr-xr-x' : '-rw-r--r--',
     hidden: name.startsWith('.'),
     symlink: false,
+    // A file that does not exist yet cannot be tagged, so the placeholder is
+    // untagged — and the real entry replaces it moments later either way.
+    tags: [],
     mimeType: isDirectory ? 'inode/directory' : 'application/octet-stream',
     category: categorize(extension, isDirectory),
     broken: false,

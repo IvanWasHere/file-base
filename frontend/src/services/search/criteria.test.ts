@@ -32,6 +32,7 @@ function item(name: string, overrides: Partial<FileItem> = {}): FileItem {
     mimeType: 'application/octet-stream',
     category: 'default',
     broken: false,
+    tags: [],
     ...overrides,
   }
 }

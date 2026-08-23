@@ -27,6 +27,7 @@ function file(overrides: Partial<FileItem> = {}): FileItem {
     mimeType: 'text/plain',
     category: 'document',
     broken: false,
+    tags: [],
     ...overrides,
   }
 }

@@ -22,6 +22,7 @@ export const CONTEXT_MENUS: Record<ContextKind, MenuCommandId[][]> = {
     ['edit.cut', 'edit.copy', 'file.copyPath'],
     ['file.rename', 'file.duplicate'],
     ['file.compress', 'file.uncompress'],
+    ['file.tags'],
     ['file.calculateHashes'],
     ['file.moveToTrash', 'file.delete'],
     ['file.revealInFinder'],
@@ -39,6 +40,7 @@ export const CONTEXT_MENUS: Record<ContextKind, MenuCommandId[][]> = {
     ['edit.cut', 'edit.copy', 'edit.paste', 'file.copyPath'],
     ['file.rename', 'file.duplicate'],
     ['file.compress'],
+    ['file.tags'],
     ['file.calculateHashes'],
     ['file.addToFavorites', 'file.removeFromFavorites'],
     ['file.moveToTrash', 'file.delete'],
@@ -52,5 +54,31 @@ export const CONTEXT_MENUS: Record<ContextKind, MenuCommandId[][]> = {
     ['view.refresh', 'view.toggleHidden'],
     ['file.addToFavorites', 'file.removeFromFavorites'],
     ['file.revealInFinder', 'file.copyPath'],
+    ['app.settings'],
   ],
+}
+
+/**
+ * Every command that appears in a context menu, deduplicated, in the order the
+ * three menus above introduce them (§M22).
+ *
+ * This is what the Settings modal lists: the user is choosing which of *these*
+ * rows they want, and the list has to come from the menus themselves rather
+ * than from a hand-kept copy — a command added above but forgotten here would
+ * be a row nobody could switch off, and one removed would be a checkbox that
+ * controls nothing.
+ */
+export const CONTEXT_COMMANDS: MenuCommandId[] = [
+  ...new Set(Object.values(CONTEXT_MENUS).flat(2)),
+]
+
+/**
+ * Which of the three menus a command appears in — what lets the Settings modal
+ * say "File, Folder" beside a row, so hiding one is not a guess about where it
+ * will disappear from.
+ */
+export function contextsFor(id: MenuCommandId): ContextKind[] {
+  return (Object.keys(CONTEXT_MENUS) as ContextKind[]).filter((kind) =>
+    CONTEXT_MENUS[kind].some((group) => group.includes(id)),
+  )
 }

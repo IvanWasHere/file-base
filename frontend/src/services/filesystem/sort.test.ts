@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SORT, sortItems, type SortSpec } from './sort'
+import type { FileTag } from '@/constants/tags'
 import type { FileItem } from '@/types/file'
 import { categorize } from '@/utils/fileCategory'
 import { extname } from '@/utils/path'
 
-function item(name: string, options: { dir?: boolean; size?: number; modified?: number } = {}) {
+function item(
+  name: string,
+  options: {
+    dir?: boolean
+    size?: number
+    modified?: number
+    created?: number
+    tags?: FileTag[]
+  } = {},
+) {
   const isDirectory = options.dir ?? false
   const extension = isDirectory ? '' : extname(name)
   return {
@@ -14,7 +24,7 @@ function item(name: string, options: { dir?: boolean; size?: number; modified?: 
     extension,
     size: options.size ?? 0,
     isDirectory,
-    createdAt: 0,
+    createdAt: options.created ?? 0,
     modifiedAt: options.modified ?? 0,
     permissions: '',
     hidden: false,
@@ -22,6 +32,7 @@ function item(name: string, options: { dir?: boolean; size?: number; modified?: 
     mimeType: '',
     category: categorize(extension, isDirectory),
     broken: false,
+    tags: options.tags ?? [],
   } satisfies FileItem
 }
 
@@ -85,6 +96,48 @@ describe('sortItems', () => {
     const spec: SortSpec = { key: 'modified', direction: 'desc', foldersFirst: false }
     const input = [item('old', { modified: 1 }), item('new', { modified: 300 })]
     expect(names(sortItems(input, spec))).toEqual(['new', 'old'])
+  })
+
+  // §M22's two new keys.
+  it('sorts by creation time, which is not modification time', () => {
+    const spec: SortSpec = { key: 'created', direction: 'asc', foldersFirst: false }
+    const input = [
+      item('new', { created: 300, modified: 1 }),
+      item('old', { created: 1, modified: 300 }),
+    ]
+    expect(names(sortItems(input, spec))).toEqual(['old', 'new'])
+  })
+
+  it('sorts by tag name, with untagged files at one end', () => {
+    const spec: SortSpec = { key: 'tags', direction: 'asc', foldersFirst: false }
+    const input = [
+      item('work.txt', { tags: [{ name: 'Work', color: 4 }] }),
+      item('plain.txt'),
+      item('admin.txt', { tags: [{ name: 'Admin', color: 6 }] }),
+    ]
+    expect(names(sortItems(input, spec))).toEqual(['plain.txt', 'admin.txt', 'work.txt'])
+  })
+
+  // A set has no inherent order, so two files tagged the same way in different
+  // orders have to compare equal — otherwise the listing would shuffle.
+  it('treats a tag set as a set', () => {
+    const spec: SortSpec = { key: 'tags', direction: 'asc', foldersFirst: false }
+    const input = [
+      item('b.txt', {
+        tags: [
+          { name: 'Work', color: 4 },
+          { name: 'Admin', color: 6 },
+        ],
+      }),
+      item('a.txt', {
+        tags: [
+          { name: 'Admin', color: 6 },
+          { name: 'Work', color: 4 },
+        ],
+      }),
+    ]
+    // Tied on tags, so the name tiebreak decides — which is stability, not luck.
+    expect(names(sortItems(input, spec))).toEqual(['a.txt', 'b.txt'])
   })
 
   it('groups by type then name', () => {

@@ -5,6 +5,8 @@
  * filesystem has no stable numeric identity, and paths are unique per-volume.
  */
 
+import type { FileTag } from '@/constants/tags'
+
 export type FileCategory =
   'folder' | 'image' | 'document' | 'code' | 'music' | 'video' | 'archive' | 'data' | 'default'
 
@@ -34,6 +36,12 @@ export interface FileItem {
    * than silently dropping it.
    */
   broken: boolean
+  /**
+   * Finder's own tags, read from the extended attribute Finder writes (§M22).
+   * Always present, empty for the overwhelming majority of files — an optional
+   * field would mean every reader deciding for itself what `undefined` meant.
+   */
+  tags: FileTag[]
 }
 
 /** A mounted volume, for the sidebar's Drives section. */

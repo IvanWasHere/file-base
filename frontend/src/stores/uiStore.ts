@@ -8,7 +8,8 @@
 
 import { create } from 'zustand'
 import type { ContextKind } from '@/constants/contextMenus'
-import { DEFAULT_LAYOUT, type ColumnLayout } from '@/constants/columns'
+import type { MenuCommandId } from '@/constants/menus'
+import { DEFAULT_LAYOUT, setColumnVisible, type ColumnId, type ColumnLayout } from '@/constants/columns'
 import { DEFAULT_ALGORITHM, type HashAlgorithm } from '@/constants/hashAlgorithms'
 import { DEFAULT_THEME, type ThemePreference } from '@/constants/themes'
 import type { ConflictPolicy } from '@/types/file'
@@ -127,6 +128,18 @@ export interface NewFileRequest {
   paneId: string
 }
 
+/**
+ * The open tag picker, and what it will tag (§M22).
+ *
+ * Its own field rather than a `DialogRequest`, for the reason `hashJob` and
+ * `newFile` have one: `DialogResult` settles a promise, and this resolves a set
+ * of tags written to disk with nothing awaiting them.
+ */
+export interface TagsJob {
+  /** The selection as it was when the picker opened. */
+  paths: string[]
+}
+
 interface UiState {
   previewOpen: boolean
   sidebarOpen: boolean
@@ -135,6 +148,9 @@ interface UiState {
   hashJob: HashJob | null
   newFile: NewFileRequest | null
   compress: CompressRequest | null
+  tagsJob: TagsJob | null
+  /** Whether the Settings modal is open (§M22). */
+  settingsOpen: boolean
   /**
    * Persisted. Held here rather than read from the DOM: `system` is a real
    * value the menu has to be able to show a checkmark against, and
@@ -155,6 +171,15 @@ interface UiState {
    * for the memoised rows that receive it.
    */
   columnLayout: ColumnLayout
+  /**
+   * Persisted: the context-menu rows this user has switched off (§M22).
+   *
+   * Stored as what is *hidden* rather than what is shown, so a command added by
+   * a later build appears for everyone rather than being invisible to anyone
+   * who has ever opened Settings — the same reasoning `columnLayout.hidden`
+   * follows one field above.
+   */
+  hiddenContextCommands: MenuCommandId[]
   renaming: RenameTarget | null
   contextMenu: ContextMenuRequest | null
 
@@ -164,7 +189,15 @@ interface UiState {
   toggleHiddenFiles: () => void
   setTheme: (theme: ThemePreference) => void
   setColumnLayout: (layout: ColumnLayout) => void
+  setColumnVisible: (id: ColumnId, visible: boolean) => void
   resetColumns: () => void
+  setContextCommandVisible: (id: MenuCommandId, visible: boolean) => void
+
+  openSettings: () => void
+  closeSettings: () => void
+
+  openTags: (paths: string[]) => void
+  closeTags: () => void
 
   openHashes: (paths: string[]) => void
   closeHashes: () => void
@@ -200,8 +233,11 @@ export const useUiStore = create<UiState>()((set) => ({
   hashJob: null,
   newFile: null,
   compress: null,
+  tagsJob: null,
+  settingsOpen: false,
   theme: DEFAULT_THEME,
   columnLayout: DEFAULT_LAYOUT,
+  hiddenContextCommands: [],
   hashAlgorithm: DEFAULT_ALGORITHM,
   lastTemplate: '',
   renaming: null,
@@ -215,6 +251,19 @@ export const useUiStore = create<UiState>()((set) => ({
   // `data-theme`, so the store stays plain data (§M12).
   setTheme: (theme) => set({ theme }),
   setColumnLayout: (columnLayout) => set({ columnLayout }),
+  // The rebalancing lives in the registry, not here: what a column is worth
+  // when it comes back is a property of the layout, and a store that spread the
+  // arithmetic across its actions would be a second place that decides it.
+  setColumnVisible: (id, visible) =>
+    set((state) => ({ columnLayout: setColumnVisible(state.columnLayout, id, visible) })),
+  setContextCommandVisible: (id, visible) =>
+    set((state) => ({
+      hiddenContextCommands: visible
+        ? state.hiddenContextCommands.filter((entry) => entry !== id)
+        : state.hiddenContextCommands.includes(id)
+          ? state.hiddenContextCommands
+          : [...state.hiddenContextCommands, id],
+    })),
   // Its own action rather than `setColumnLayout(DEFAULT_LAYOUT)` at the call
   // site: the default belongs to the registry, and a caller reaching for it
   // would be a second place that decides what "reset" means.
@@ -233,6 +282,15 @@ export const useUiStore = create<UiState>()((set) => ({
   openCompress: (sources, parent) =>
     set(sources.length > 0 ? { compress: { sources, parent }, renaming: null } : {}),
   closeCompress: () => set({ compress: null }),
+
+  // Settings is the one modal here with no target at all — it is about the
+  // application, not about what is selected — so it does not guard on anything.
+  openSettings: () => set({ settingsOpen: true, renaming: null }),
+  closeSettings: () => set({ settingsOpen: false }),
+
+  // Nothing to tag would be a picker whose every toggle wrote to no files.
+  openTags: (paths) => set(paths.length > 0 ? { tagsJob: { paths }, renaming: null } : {}),
+  closeTags: () => set({ tagsJob: null }),
   setHashAlgorithm: (algorithm) => set({ hashAlgorithm: algorithm }),
   setLastTemplate: (id) => set({ lastTemplate: id }),
 

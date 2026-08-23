@@ -7,6 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { hydrate, startPersistence } from './persistence'
+import { visibleColumns } from '@/constants/columns'
 import { loadSettings, saveSetting } from './repositories/settings'
 import { addFavorite, listFavorites } from './repositories/favorites'
 import { listRecents } from './repositories/recents'
@@ -87,19 +88,29 @@ describe('hydrate', () => {
     stop = startPersistence(now)
 
     useUiStore.getState().setColumnLayout({
-      order: ['modified', 'name', 'size', 'type'],
-      weights: { name: 0.4, size: 0.2, type: 0.2, modified: 0.2 },
+      order: ['modified', 'name', 'size', 'type', 'created', 'tags'],
+      weights: { name: 0.4, size: 0.2, type: 0.2, modified: 0.2, created: 0.2, tags: 0.2 },
+      hidden: ['created', 'tags'],
     })
     await settle()
 
-    expect((await loadSettings()).columnLayout.order).toEqual(['modified', 'name', 'size', 'type'])
+    const stored = (await loadSettings()).columnLayout
+    expect(visibleColumns(stored)).toEqual(['modified', 'name', 'size', 'type'])
+    // The hidden pair survives the round trip too — it is half of what a
+    // §M22 layout says (decision 1).
+    expect(stored.hidden).toEqual(['created', 'tags'])
 
     stop()
     stop = undefined
 
     resetStores()
     await hydrate(HOME)
-    expect(useUiStore.getState().columnLayout.order).toEqual(['modified', 'name', 'size', 'type'])
+    expect(visibleColumns(useUiStore.getState().columnLayout)).toEqual([
+      'modified',
+      'name',
+      'size',
+      'type',
+    ])
   })
 
   // A row a later build could have written. The repair happens in the
@@ -109,16 +120,20 @@ describe('hydrate', () => {
     // two of them rather than before the first.
     await hydrate(HOME)
     await saveSetting('columnLayout', {
-      order: ['created', 'modified'],
-      weights: { created: 0.5, modified: 0.5 },
+      order: ['owner', 'modified'],
+      weights: { owner: 0.5, modified: 0.5 },
     } as never)
 
     resetStores()
     await hydrate(HOME)
 
     const layout = useUiStore.getState().columnLayout
-    expect(layout.order).toEqual(['modified', 'name', 'size', 'type'])
-    expect(Object.values(layout.weights).reduce((sum, weight) => sum + weight, 0)).toBeCloseTo(1, 6)
+    // The unknown id is gone, the missing ones are back, and the two §M22
+    // introduced come back switched off rather than rearranging the window.
+    expect(visibleColumns(layout)).toEqual(['modified', 'name', 'size', 'type'])
+    expect(
+      visibleColumns(layout).reduce((sum, id) => sum + layout.weights[id], 0),
+    ).toBeCloseTo(1, 6)
   })
 
   // The theme is the one setting a wrong answer is visible in every pixel of,

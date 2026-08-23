@@ -26,7 +26,7 @@ interface FolderPrefsRow {
   folders_first: number
 }
 
-const SORT_KEYS: SortKey[] = ['name', 'modified', 'size', 'type']
+const SORT_KEYS: SortKey[] = ['name', 'modified', 'size', 'type', 'created', 'tags']
 
 /**
  * Values are validated on the way out, not trusted. The database outlives any

@@ -6,9 +6,10 @@
  * choice per folder.
  */
 
+import { tagSortValue } from '@/constants/tags'
 import type { FileItem } from '@/types/file'
 
-export type SortKey = 'name' | 'modified' | 'size' | 'type'
+export type SortKey = 'name' | 'modified' | 'size' | 'type' | 'created' | 'tags'
 export type SortDirection = 'asc' | 'desc'
 
 export interface SortSpec {
@@ -37,6 +38,13 @@ function compareBy(key: SortKey, a: FileItem, b: FileItem): number {
       return a.size - b.size
     case 'type':
       return collator.compare(a.extension, b.extension) || collator.compare(a.name, b.name)
+    case 'created':
+      return a.createdAt - b.createdAt
+    // Alphabetically by the names on screen, which is the only ordering over
+    // *sets* of tags that reads as an ordering. Untagged files gather at one
+    // end, since the empty string sorts before everything (§M22 decision 6).
+    case 'tags':
+      return collator.compare(tagSortValue(a.tags), tagSortValue(b.tags))
   }
 }
 

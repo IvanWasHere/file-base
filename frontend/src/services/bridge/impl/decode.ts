@@ -26,6 +26,7 @@ import type { ArchiveDone, ArchiveProgress } from '@/types/archive'
 import type { FsErrorCode } from '@/types/errors'
 import { FsError } from '@/types/errors'
 import type { ExternalDrop } from '../types'
+import { normaliseTags } from '@/constants/tags'
 import { categorize } from '@/utils/fileCategory'
 import { extname } from '@/utils/path'
 import type { filesystem } from '../../../../wailsjs/go/models'
@@ -111,6 +112,10 @@ export function toFileItem(wire: filesystem.FileItem): FileItem {
     mimeType: wire.mimeType,
     category: categorize(extension, wire.isDirectory),
     broken: wire.broken,
+    // Repaired, not trusted: tags come from an extended attribute any
+    // application on the machine can write, and Go sends a nil slice as null
+    // (§M22 decision 4).
+    tags: normaliseTags(wire.tags),
   }
 }
 
