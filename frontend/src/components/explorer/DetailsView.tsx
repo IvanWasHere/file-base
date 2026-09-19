@@ -19,6 +19,7 @@ import { useSplitResize } from '@/hooks/useSplitResize'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { useDragSource, useDropZone } from '@/hooks/useFileDrag'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
+import { useRevealTop } from '@/hooks/useRevealTop'
 import { useMarqueeSelection } from '@/hooks/useMarqueeSelection'
 import { useReclaimFocus } from '@/hooks/useReclaimFocus'
 import { useSelection } from '@/hooks/useSelection'
@@ -71,6 +72,11 @@ interface DetailsViewProps {
   onActivate: (item: FileItem) => void
   onFocus: () => void
   onRename: (path: string, newName: string) => void
+  /**
+   * Identifies the items pinned to the top right now, so the listing can scroll
+   * back up to show them (§M26). Undefined when nothing is pinned.
+   */
+  reveal?: string | undefined
 }
 
 /** Memoised so scrolling re-renders only rows entering the window. */
@@ -218,6 +224,7 @@ export function DetailsView({
   onActivate,
   onFocus,
   onRename,
+  reveal,
 }: DetailsViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -304,6 +311,9 @@ export function DetailsView({
     onClear: clear,
     onScrollToIndex: (index) => virtualizer.scrollToIndex(index),
   })
+
+  // A pinned arrival is at row zero; this is what makes row zero visible.
+  useRevealTop(reveal, () => virtualizer.scrollToIndex(0))
 
   const handleContextMenu = useContextMenu(paneId, items)
 

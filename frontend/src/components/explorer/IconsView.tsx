@@ -6,6 +6,7 @@ import { InlineRename } from '@/components/explorer/InlineRename'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { useDragSource, useDropZone } from '@/hooks/useFileDrag'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
+import { useRevealTop } from '@/hooks/useRevealTop'
 import { useThumbnail } from '@/hooks/useThumbnail'
 import { useMarqueeSelection } from '@/hooks/useMarqueeSelection'
 import { useReclaimFocus } from '@/hooks/useReclaimFocus'
@@ -172,6 +173,11 @@ interface IconsViewProps {
   onActivate: (item: FileItem) => void
   onFocus: () => void
   onRename: (path: string, newName: string) => void
+  /**
+   * Identifies the items pinned to the top right now, so the grid can scroll
+   * back up to show them (§M26). Undefined when nothing is pinned.
+   */
+  reveal?: string | undefined
 }
 
 export function IconsView({
@@ -182,6 +188,7 @@ export function IconsView({
   onActivate,
   onFocus,
   onRename,
+  reveal,
 }: IconsViewProps) {
   const spec = SPECS[mode]
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -254,6 +261,10 @@ export function IconsView({
     onClear: clear,
     onScrollToIndex: (index) => virtualizer.scrollToIndex(Math.floor(index / columns)),
   })
+
+  // A pinned arrival is in the first row of tiles; this is what makes that row
+  // visible.
+  useRevealTop(reveal, () => virtualizer.scrollToIndex(0))
 
   const handleContextMenu = useContextMenu(paneId, items)
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SORT, sortItems, type SortSpec } from './sort'
+import { DEFAULT_SORT, pinFirst, sortItems, type SortSpec } from './sort'
 import type { FileTag } from '@/constants/tags'
 import type { FileItem } from '@/types/file'
 import { categorize } from '@/utils/fileCategory'
@@ -151,5 +151,45 @@ describe('sortItems', () => {
     const snapshot = names(input)
     sortItems(input, DEFAULT_SORT)
     expect(names(input)).toEqual(snapshot)
+  })
+})
+
+describe('pinFirst', () => {
+  const listing = (...names: string[]): FileItem[] => names.map((name) => item(name))
+  const namesOf = (items: FileItem[]) => items.map((entry) => entry.name)
+
+  it('lifts the named items to the front, leaving the rest in order', () => {
+    const items = listing('Annual.pdf', 'Budget.xlsx', 'Resume.pdf')
+
+    expect(namesOf(pinFirst(items, ['/x/Resume.pdf']))).toEqual([
+      'Resume.pdf',
+      'Annual.pdf',
+      'Budget.xlsx',
+    ])
+  })
+
+  it('keeps pinned items in the order they arrived, not the sorted one', () => {
+    const items = listing('Annual.pdf', 'Budget.xlsx', 'Resume.pdf')
+
+    // A paste reports its files in the order it copied them; that is the order
+    // they should read in, not the one the listing happens to be sorted by.
+    const pinned = pinFirst(items, ['/x/Resume.pdf', '/x/Annual.pdf'])
+    expect(namesOf(pinned)).toEqual(['Resume.pdf', 'Annual.pdf', 'Budget.xlsx'])
+  })
+
+  it('returns the same array when nothing matches', () => {
+    const items = listing('Annual.pdf', 'Budget.xlsx')
+
+    // Identity, not equality: a pane whose arrival landed in another folder
+    // must not get a new array and re-render every row for it.
+    expect(pinFirst(items, ['/x/Elsewhere.pdf'])).toBe(items)
+    expect(pinFirst(items, [])).toBe(items)
+  })
+
+  it('ignores a path that is no longer in the listing', () => {
+    const items = listing('Annual.pdf', 'Budget.xlsx')
+
+    const pinned = pinFirst(items, ['/x/Gone.pdf', '/x/Budget.xlsx'])
+    expect(namesOf(pinned)).toEqual(['Budget.xlsx', 'Annual.pdf'])
   })
 })

@@ -61,3 +61,27 @@ export function sortItems(items: readonly FileItem[], spec: SortSpec): FileItem[
     return result === 0 ? collator.compare(a.name, b.name) : result * sign
   })
 }
+
+/**
+ * Lifts `paths` to the front of an already-sorted listing (§M26).
+ *
+ * Applied *after* `sortItems` rather than inside it, because this is not an
+ * ordering: it is a temporary exception to one, and folding it into the
+ * comparator would make "sorted by name" quietly mean something else. Pinned
+ * items keep the order they arrived in — for a paste of three files, the order
+ * the backend reported them — and everything else keeps the order the sort
+ * gave it.
+ *
+ * Returns the input array unchanged when nothing matches, so a pane whose
+ * arrival landed in a different folder does not re-render its rows.
+ */
+export function pinFirst(items: FileItem[], paths: readonly string[]): FileItem[] {
+  if (paths.length === 0) return items
+
+  const wanted = new Map(paths.map((path, index) => [path, index]))
+  const pinned = items.filter((item) => wanted.has(item.path))
+  if (pinned.length === 0) return items
+
+  pinned.sort((a, b) => (wanted.get(a.path) ?? 0) - (wanted.get(b.path) ?? 0))
+  return [...pinned, ...items.filter((item) => !wanted.has(item.path))]
+}

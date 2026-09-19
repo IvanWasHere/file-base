@@ -35,6 +35,7 @@ import {
 import { invert } from '@/services/operations/undo'
 import { useClipboardStore } from '@/stores/clipboardStore'
 import { useHistoryStore } from '@/stores/historyStore'
+import { useFreshStore } from '@/stores/freshStore'
 import { useSelectionStore } from '@/stores/selectionStore'
 import { toast, useToastStore } from '@/stores/toastStore'
 import { useUiStore } from '@/stores/uiStore'
@@ -173,9 +174,13 @@ export function useFileOperations(): FileOperations {
         path: created.path,
       })
       // Finder opens the name for editing straight away, which is what makes
-      // "untitled folder" an acceptable default rather than a chore.
+      // "untitled folder" an acceptable default rather than a chore — and §M26
+      // pins it to the top of the listing while that editor is open, because
+      // "untitled folder" sorts under U and the editor would otherwise open on
+      // a row four hundred items down, off-screen.
       useSelectionStore.getState().select(paneId, created.path)
       useUiStore.getState().beginRename(paneId, created.path)
+      useFreshStore.getState().mark(parent, [created.path], 'rename')
     },
     [queryClient, optimistically],
   )
@@ -212,8 +217,10 @@ export function useFileOperations(): FileOperations {
       useHistoryStore.getState().push({ kind: 'create', label: 'New File', path: created.path })
       useSelectionStore.getState().select(paneId, created.path)
       // As with Cmd+N: the name is open for editing straight away, which is what
-      // makes a typed-in-a-hurry name cheap to fix.
+      // makes a typed-in-a-hurry name cheap to fix, and pinned to the top while
+      // it is (§M26).
       useUiStore.getState().beginRename(paneId, created.path)
+      useFreshStore.getState().mark(parent, [created.path], 'rename')
       return created
     },
     [queryClient, optimistically],
@@ -302,6 +309,13 @@ export function useFileOperations(): FileOperations {
         if (mode === 'move') {
           useSelectionStore.getState().forgetPaths(real.map((moved) => moved.source))
         }
+
+        // Pasted, duplicated and dragged-in items land under their own names,
+        // scattered through the sort order — so they go to the top of the
+        // destination's listing until the user's next selection or re-sort
+        // (§M26). Reported order, which for a paste is the order they were
+        // named in the clipboard.
+        useFreshStore.getState().mark(destDir, real.map((moved) => moved.target), 'action')
 
         // Replacing destroyed whatever was there; there is nothing to restore,
         // so no undo is offered rather than one that would quietly fail.

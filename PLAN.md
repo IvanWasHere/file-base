@@ -2414,6 +2414,93 @@ Work, in the order it was done:
 
 ---
 
+### M26 — What just arrived goes to the top ✅ complete
+
+New Folder creates `untitled folder` and opens its inline rename editor. In
+Documents that is fine. In a folder of four hundred items it is not: the name
+sorts under U, the row is somewhere past the bottom of the pane, and the editor
+opens on a row nobody can see — so the first thing the user types goes into a
+text field they have to scroll to find. Paste has the same shape without the
+editor: the files land under their own names, scattered through the sort order,
+and finding them means knowing the alphabet.
+
+§M26 puts what just arrived at the top of the listing, and takes it away again
+as soon as it has done its job.
+
+Decisions:
+
+1. **The pin is an exception to the sort, not a change to it.** `pinFirst` runs
+   over an already-sorted listing rather than inside the comparator, because
+   folding it in would make "sorted by name" quietly mean something else — and
+   the column header would go on claiming the old thing. Pinned items keep the
+   order they *arrived* in, which for a paste is the order the backend reported
+   copying them; everything else keeps the order the sort gave it.
+2. **One record, not a map.** `freshStore` holds a single arrival: the user just
+   did one thing, and a second one replaces the first. There is no case where
+   two arrivals are both interesting, and a map would have needed a policy for
+   evicting entries nobody was looking at.
+3. **Keyed by directory, not by pane.** The operations that produce an arrival —
+   paste, duplicate, a drag onto a pane — know where the items landed and not
+   who is looking. Keying by pane would have meant threading a `paneId` through
+   `transfer`, and through `useExternalDrop`, which hit-tests a screen
+   coordinate and has no pane to give. Two panes showing that folder both pin
+   it, which is the same answer to the same question.
+4. **Two lifetimes, because there are two kinds of arrival.** A created item is
+   pinned *while its rename editor is open* and drops into place when the name
+   is settled — Enter, Escape or a click away, all the same. Everything else
+   holds until the user's next move. Both are "until it has been seen"; the
+   creation commands just have a better signal for it.
+5. **"The next thing you do" is watched through the selection**, not through a
+   list of gestures. A click, an arrow key, Select All, a marquee and the clear
+   that navigating away performs all land there, so one comparison covers them
+   and a gesture added later is covered for free. Re-sorting is the exception
+   that needs saying out loud, because it changes no selection — and asking for
+   a different order is the one request that most obviously means *the real
+   one*.
+6. **Nothing is selected that was not selected before.** A pasted file is pinned,
+   not highlighted. Selecting arrivals is Finder's behaviour and would be a
+   reasonable follow-up, but it reaches further than this milestone: the preview
+   panel opens itself on a file selection (§M13), so pasting would start
+   popping a panel open, and that is a different decision from where a row sits.
+7. **Pinning to row zero is half the job; the other half is scrolling there.**
+   A pane parked two hundred rows down puts the new folder exactly as far out of
+   sight as the alphabet did. `useRevealTop` is keyed on *which* items are
+   pinned rather than on their position, so it reveals an arrival once and then
+   leaves the scroll alone — the virtualizer hands back a fresh callback every
+   render, and a hook that fired on each of them would fight the user scrolling
+   away from what it had just shown them.
+8. **Search results are never pinned.** They are already ordered by the
+   backend's walk rather than by the sort, they span folders, and a pin from the
+   folder underneath means nothing among them.
+
+Work:
+
+- `stores/freshStore.ts` — the record, and the two ways it ends.
+- `services/filesystem/sort.ts` — `pinFirst`, returning its input untouched when
+  nothing matches, so a pane whose arrival landed elsewhere does not re-render
+  every row for it.
+- `hooks/useFileOperations.ts` — `createEntry` and `createFromTemplate` mark a
+  `rename` arrival; `transfer` marks an `action` one, which is what puts paste,
+  duplicate, an internal drag onto a pane and a Finder drop on the same path.
+- `features/explorer/ExplorerPane.tsx` — applies the pin after `useDirectory`
+  has ordered the listing, and owns the two effects that end it.
+- `hooks/useRevealTop.ts`, wired into `DetailsView` and `IconsView` through one
+  `reveal` prop.
+
+- **Verified in the running app**, not only under Vitest, and the scroll is the
+  half that needed it: a pane parked at the bottom of a folder of twenty-three
+  items, with Budget Template and Meeting Notes on screen, came back to the top
+  the instant New Folder was pressed — the new row first, Personal beneath it,
+  the rename editor focused and inside the viewport. Naming it Zebra and
+  pressing Enter dropped it twenty rows down to where the sort wants it. Thirteen
+  tests cover the rest: four on `pinFirst`, five on `useRevealTop` — where jsdom
+  gives every element zero height, so a virtualized listing never scrolls and
+  being *asked* to is the only observable thing — and eight in
+  `freshArrival.test.tsx` driving creation, rename, Escape, navigation, paste,
+  duplicate, the next click and a re-sort through the real chrome.
+
+---
+
 ## 3. Risks
 
 | Risk | Mitigation |

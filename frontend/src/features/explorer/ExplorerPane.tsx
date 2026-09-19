@@ -8,12 +8,14 @@ import { PhotosView } from '@/features/photos/PhotosView'
 import { SearchBar } from '@/features/search/SearchBar'
 import { SearchStatusBar } from '@/features/search/SearchStatusBar'
 import { useDirectory } from '@/hooks/useDirectory'
+import { pinFirst } from '@/services/filesystem/sort'
 import { useArchive, useMountReference } from '@/hooks/useArchive'
 import { useFileOperations } from '@/hooks/useFileOperations'
 import { useSearch } from '@/hooks/useSearch'
 import { usePaneSearch } from '@/stores/searchStore'
 import { bridge } from '@/services/bridge'
 import { toast } from '@/stores/toastStore'
+import { useFreshStore } from '@/stores/freshStore'
 import { usePaneSelection, useSelectionStore } from '@/stores/selectionStore'
 import { useUiStore } from '@/stores/uiStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
@@ -72,10 +74,85 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
     pane.path,
     items,
   )
+  /**
+   * What just arrived here, held at the top of the listing (§M26).
+   *
+   * A new folder is named "untitled folder" and sorts under U; in a folder of
+   * four hundred items the rename editor would open on a row nobody can see.
+   * The same is true of a paste: the files land under their own names, and
+   * finding them means knowing the alphabet and scrolling.
+   *
+   * The pin is an exception to the sort, not a change to it, so it is applied
+   * after `useDirectory` has ordered the listing and it ends as soon as it has
+   * done its job — with the rename editor for a created item, and with the
+   * user's next move for everything else.
+   */
+  const arrival = useFreshStore((state) => state.arrival)
+  const clearArrival = useFreshStore((state) => state.clear)
+  const renaming = useUiStore((state) => state.renaming)
+
+  const editingArrival =
+    arrival !== null && renaming !== null && arrival.paths.includes(renaming.path)
+  const pinning =
+    arrival !== null &&
+    arrival.dir === pane.path &&
+    (arrival.until === 'action' || editingArrival)
+
+  const ordered = useMemo(
+    () => (pinning && arrival ? pinFirst(items, arrival.paths) : items),
+    [items, pinning, arrival],
+  )
+
+  /**
+   * "The next thing you do" — the rule that ends an `action` arrival.
+   *
+   * Watched through the selection rather than through a list of gestures,
+   * because every one of them lands there: a click, an arrow key, Select All,
+   * a marquee, and the clear that navigating away performs. The selection at
+   * the moment the arrival appeared is the baseline; the first one that differs
+   * puts the rows back where the sort wants them.
+   */
+  const watched = useRef<{ arrival: typeof arrival; selection: typeof selected } | null>(null)
+  useEffect(() => {
+    if (!arrival || arrival.until !== 'action') {
+      watched.current = null
+      return
+    }
+    if (watched.current?.arrival !== arrival) {
+      watched.current = { arrival, selection: selected }
+      return
+    }
+    if (watched.current.selection !== selected) clearArrival()
+  }, [arrival, selected, clearArrival])
+
+  /**
+   * And the rule that ends a `rename` one: the editor closing, however it
+   * closed. Tracked rather than read directly, because the arrival and the
+   * rename are two store writes — seeing the editor open once is what makes
+   * "it is not open any more" mean something.
+   */
+  const wasEditing = useRef(false)
+  useEffect(() => {
+    if (!arrival || arrival.until !== 'rename') {
+      wasEditing.current = false
+      return
+    }
+    if (editingArrival) {
+      wasEditing.current = true
+      return
+    }
+    if (wasEditing.current) clearArrival()
+  }, [arrival, editingArrival, clearArrival])
+
   // Results replace the listing while a search is on. They are already ordered
   // by the backend's walk or the filter's input order; re-sorting a recursive
-  // result set by name would scatter siblings across the list.
-  const shown = searching ? results : items
+  // result set by name would scatter siblings across the list — and a pin from
+  // the folder underneath means nothing among them.
+  const shown = searching ? results : ordered
+
+  // What the views scroll to the top for. Identifies the pinned set, so it
+  // reveals a new arrival once and leaves later scrolling alone.
+  const reveal = pinning && !searching && arrival ? arrival.paths.join('\n') : undefined
 
   /**
    * Selecting a *file* reveals the preview if it was closed. Driven by the
@@ -195,10 +272,15 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
             path={pane.path}
             items={shown}
             sort={pane.sort}
-            onSortChange={(sort) => setSort(pane.id, sort)}
+            onSortChange={(sort) => {
+              // Asking for a different order is asking for the real one.
+              clearArrival()
+              setSort(pane.id, sort)
+            }}
             onActivate={handleActivate}
             onFocus={onFocus}
             onRename={handleRename}
+            reveal={reveal}
           />
         ) : pane.viewMode === 'photos' ? (
           // No `onRename`: renaming is a text field over a filename, and the
@@ -220,6 +302,7 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
             onActivate={handleActivate}
             onFocus={onFocus}
             onRename={handleRename}
+            reveal={reveal}
           />
         )}
       </div>
