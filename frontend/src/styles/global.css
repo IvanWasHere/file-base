@@ -115,6 +115,22 @@
     outline: 2px solid var(--border-focus);
     outline-offset: -2px;
   }
+
+  /* The tab strip (§M27).
+
+     No scrollbar: the < and > buttons beside it are the affordance, and a 6px
+     bar drawn under the tabs would sit exactly on the line where the active
+     tab joins the pane below it — the one pixel the whole tab shape is built
+     around. Smooth is for the buttons; the wheel turns it off for its own
+     ticks, because animating each one makes the strip lag the fingers moving
+     it. */
+  .tab-strip {
+    scrollbar-width: none;
+    scroll-behavior: smooth;
+  }
+  .tab-strip::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -123,5 +139,11 @@
   *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+  }
+
+  /* Scroll animation is not covered by the durations above — it is a property
+     of the scrolling box, not a transition on it. */
+  .tab-strip {
+    scroll-behavior: auto;
   }
 }

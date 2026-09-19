@@ -2501,6 +2501,157 @@ Work:
 
 ---
 
+### M27 — The tab strip scrolls ✅ complete
+
+Tabs shrank as they multiplied and then simply ran out of window. Past about
+fifteen of them the bar overflowed with no scrollbar, no arrows and nothing to
+grab: the tabs past the edge existed, were switchable from the store, and could
+not be reached by pointer at all. Worse, **New Tab went with them** — the one
+control that had to survive a full bar was the first thing pushed off it.
+
+Decisions:
+
+1. **Shrink first, then scroll.** The tabs keep their `min-w-[80px]`, so a
+   moderately busy window behaves exactly as it always has and the strip only
+   starts scrolling once a name has been squeezed as far as it is worth
+   squeezing. Scrolling from the first extra tab would have been a bigger
+   change than the one being asked for. (Whether 80px is still the right floor
+   now that there is somewhere for the overflow to go is a separate question,
+   and a separate decision — taken in §M28, which replaces it with ten
+   characters of the name.)
+2. **The arrows and New Tab sit outside the scrolling area.** A control that
+   scrolls away is a control nobody can reach, which is the bug this milestone
+   started from. That also puts the ARIA right by accident: `role="tablist"`
+   now holds tabs and nothing else, where before the New Tab button was inside
+   it claiming to be part of the set.
+3. **Disabled at the end, not hidden.** An arrow that vanishes takes its width
+   with it, and the whole strip would shuffle sideways every time it reached an
+   edge — a jump caused by the very press that was trying to hold position.
+   The pair appears and disappears together, with overflow.
+4. **A press moves 60% of the visible width**, never less than 120px. A whole
+   screenful leaves nothing to recognise; a single tab needs a dozen presses to
+   cross a full bar. The fraction carries an item of context over.
+5. **A press is remembered for half a second** (`SETTLE_MS`). `scroll-behavior:
+   smooth` means `scrollLeft` reads where the strip *is*, not where it is going
+   — so a second press landing mid-animation measured from halfway, and two
+   quick presses travelled less than two steps. The destination is clamped when
+   it is recorded as well as by the element, so a press that runs into the end
+   leaves nothing past it for the next one to add to.
+6. **A vertical wheel is translated; a sideways one is not.** A trackpad's
+   horizontal gesture is already horizontal scrolling and the container handles
+   it natively — translating that too would double the distance. The listener
+   is registered by hand rather than through `onWheel`, because React attaches
+   `wheel` passively and a passive listener cannot claim the gesture. It claims
+   it only when there is somewhere to go, so a wheel over a strip that fits
+   belongs to whatever is behind it.
+7. **The wheel turns smooth scrolling off for its own ticks.** Animating every
+   tick makes the strip lag the fingers moving it. Smooth is for the buttons,
+   where it reads as the strip travelling rather than teleporting.
+8. **The strip hides its scrollbar.** A 6px bar would be drawn under the tabs,
+   which is exactly where the active tab meets the pane below it — the one
+   pixel the whole tab shape is built around. The arrows are the affordance.
+9. **`-mb-px pb-px` buys that pixel back.** An overflow container clips at its
+   padding box, so the active tab's `top-px` — the pixel that lifts it over the
+   bar's bottom border and joins it to the pane — was cut off the moment the
+   strip started clipping. The padding keeps the tab inside the box and the
+   negative margin reaches the box down to where the border is. This was found
+   by measuring the running app, not by reading the code.
+10. **Switching tab reveals it.** Otherwise Cmd+T on a full strip opens a tab
+    off the right-hand edge and the window appears not to have changed at all.
+    `inline: 'nearest'`, so a tab already on screen is left where it is.
+
+- **Verified in the running app**, where the interesting parts live: at 25 tabs
+  the strip reported 2048px of content in 1255px of box, both arrows appeared
+  with Left dead, one press travelled 753px (60% of the box), a second clamped
+  at 793 and disabled Right, four more presses did nothing at all, Left came
+  back 753, and a wheel of 200 moved it 200 and claimed the event. The
+  scrollbar takes no space, and the active tab measures one pixel past the
+  bar's content edge — over the border, where it belongs. One thing the
+  environment could not show: Chrome does not run smooth-scroll animations in a
+  hidden tab, so the arithmetic above was read with `scroll-behavior` forced to
+  `auto`; smoothness itself is a CSS property and is the one part taken on
+  faith. Nine tests in `TabBar.test.tsx` cover the rest against a scroll
+  container modelled in jsdom — which has no layout, so nothing overflows on
+  its own and `scrollLeft` is inert: the arithmetic, the clamping and the wheel
+  translation under test are the component's, and only the box it reads is the
+  double's.
+
+---
+
+### M28 — Ten characters of a name ✅ complete
+
+§M27 left tabs shrinking to a flat `min-w-[80px]`, and flagged the floor as an
+open question. It was the wrong kind of number: 80px is about four characters,
+and at four characters "Docum…" and "Downl…" are the same word. A tab you
+cannot read is a tab you have to click to identify, which is the whole job the
+bar exists to save. The floor is now **ten characters of the name, or all of it
+when the name is shorter**.
+
+Decisions:
+
+1. **The floor is measured, not calculated.** The first attempt priced it in
+   `ch` — `calc(11ch + 65px)`, ten characters plus an ellipsis plus the
+   furniture. It reads well and it is wrong: `ch` is the width of a zero, and a
+   zero is nothing like a Chinese character or a capital W. Measured in the
+   running app, that floor showed **five** characters of a CJK name, six of an
+   all-caps one and nine of a Cyrillic one. Only the browser knows how wide
+   text is, so the browser does the measuring.
+2. **A sizer in the same grid cell as the label.** Two texts share one cell:
+   the first is `visibility: hidden` and never painted, and holds the cell open
+   at exactly ten characters; the second is the label, truncating inside
+   whatever width that leaves. A `visibility: hidden` box still takes part in
+   layout, which is the entire mechanism. The tab needs no `min-width` at all
+   after that — a flex item's automatic minimum is its min-content width, and
+   the sizer is what that adds up to, along with the icon, the close button and
+   the padding. Nothing here has to be kept in step with the markup.
+3. **The ellipsis is part of the floor.** The sizer is ten characters *and the
+   mark that says there are more*, because a tab sized for ten characters
+   alone draws nine and a dot. A name that already fits gets neither, which is
+   what keeps a tab called "dev" from being padded out to the width of one
+   called "Screenshots".
+4. **A cap cannot argue with a floor, so it was moved out of the argument.**
+   This took three tries and all three failed the same way: CSS clamps a
+   content-based minimum by whatever fixed maximum is in force. `max-width` on
+   the tab did it — at 180px a ten-character CJK name was cut to eight *and the
+   close button was pushed out past the tab's own border, over the next tab*.
+   `max-width` on the label did it. A grid track's growth limit did it too,
+   with `minmax(auto, 115px)` and with `minmax(min-content, 115px)`, which fails
+   twice over: the label never wraps, so its *min-content* is its whole name,
+   and that track ignored the cap entirely. The answer is not a cleverer cap
+   but a higher one: **260px**, which sits above the widest floor there is —
+   ten full-width glyphs, an ellipsis and the furniture come to about 198px.
+   The cap goes on stopping one long name from eating the bar and is never the
+   thing that decides how much of a name is readable.
+5. **Tabs may now be wider than they were.** A ten-character CJK name is a
+   198px tab where the old cap said 180. That is the requirement working: the
+   floor is a promise about characters, and characters are not all the same
+   width.
+6. **The sizer is hidden from assistive technology.** `aria-hidden`, or every
+   tab would announce its name twice — once in full and once truncated.
+
+Consequences for §M27: the strip starts scrolling sooner, because tabs now
+bottom out at a readable width rather than at 80px. That is the intended trade
+— the two milestones are halves of one answer, and the scrolling is what makes
+a higher floor affordable.
+
+- **Verified in the running app**, which is the only place this could be
+  verified at all: folders were created with names chosen to break it —
+  `MMMMMMMMMMMMMM`, `文档文件夹文档文件夹文档`, `Документы папка длинная`,
+  `Client Proposals Draft` and `dev` — a tab opened on each, and the bar filled
+  until every tab sat exactly on its floor (each label's box measured equal to
+  its sizer's, to the pixel). Characters visible, counted against the label's
+  actual width in the font it is drawn in: ten, ten, ten, ten, and all three of
+  "dev". The close button stayed inside its tab in every case, which it had not
+  under the old cap. With room to spare, a 46-character name still stops at the
+  260px cap and truncates. Five tests in `TabBar.test.tsx` cover the contract —
+  which characters the tab holds room for, that a short name asks for no more
+  than it has, that a name of exactly ten needs no ellipsis allowance, that a
+  CJK name is counted in characters rather than in zeroes, and that the sizer
+  stays out of the accessible name. How wide that room turns out to be is the
+  browser's arithmetic, and jsdom has none.
+
+---
+
 ## 3. Risks
 
 | Risk | Mitigation |
