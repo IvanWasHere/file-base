@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { PaneGroup } from '@/features/explorer/PaneGroup'
 import { PreviewPanel } from '@/features/preview/PreviewPanel'
+import { PlacesRail } from '@/components/sidebar/PlacesRail'
 import { Sidebar } from '@/components/sidebar/Sidebar'
 import { StatusBar } from '@/components/common/StatusBar'
 import { Toaster } from '@/components/common/Toaster'
@@ -134,6 +135,9 @@ export function ExplorerLayout() {
       <Toolbar />
 
       <div className="flex min-h-0 flex-1">
+        {/* Always on screen, including when the wide sidebar is not — it is
+            what holds the button that brings that one back (§M29). */}
+        <PlacesRail />
         {sidebarOpen && <Sidebar />}
         {tab && <PaneGroup tab={tab} />}
         {previewOpen && <ActivePreview />}

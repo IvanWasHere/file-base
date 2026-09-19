@@ -2652,6 +2652,58 @@ a higher floor affordable.
 
 ---
 
+### M29 — The icon rail ✅ complete
+
+A second sidebar to the left of the first, one icon wide: the button that
+hides the wide sidebar, then Home, Desktop, Documents, Applications, Downloads
+and Trash.
+
+Decisions:
+
+1. **The collapse button lives in the rail, not in the sidebar it collapses.**
+   That is the whole reason the rail is always on screen. A control that
+   disappears with the thing it controls cannot bring it back, and View ▸ Show
+   Sidebar — the only other way — is a menu nobody thinks to open when the
+   thing they want is a panel they just closed.
+2. **Six places, not the nine next door.** Pictures, Music and Movies stay in
+   the wide sidebar. A rail long enough to need scrolling would be a sidebar
+   with the words taken off, and the point of it is that it never scrolls,
+   never moves, and its icons are always in the same place.
+3. **It shares the wide sidebar's colours and its idea of "here".** The same
+   icon in the same colour for the same place, and `aria-current` driven by the
+   same rule — any pane in the tab showing that location. Two sidebars
+   disagreeing about where you are would be worse than either of them being
+   wrong.
+4. **Its icons are drop targets too.** `useDropZone` and `data-drop-path`, the
+   same as `SidebarItem`. This matters more here than there: the rail is what
+   is left when the wide sidebar is hidden, and hiding a sidebar should not
+   quietly take away the ability to drag a file into Documents.
+5. **Both a `title` and an `aria-label`, with the same words.** The tooltip is
+   what makes an icon-only rail usable; the accessible name is what makes it
+   usable without one. It is the wide sidebar's label that is optional — there
+   the word is on screen.
+6. **A second navigation landmark, named "Quick places".** Distinguishable from
+   "Places" next to it by anyone listing the landmarks, which is the only way
+   two `nav`s in a row are not a nuisance.
+7. **The rule under the toggle is decorative, not a `separator`.** The only
+   separators this app exposes are the draggable dividers between panes, and a
+   `role` here put a seventh one in `getAllByRole('separator')` and broke four
+   split-layout tests — which is exactly the noise it would have made for
+   anyone navigating by separator.
+
+- **Verified in the running app**: the rail measures 44px, holds its seven
+  buttons in the order asked for, and every one of them moves the active pane —
+  Applications to `/Applications` and Trash to `~/.Trash`, which are the two
+  that prove it uses the paths Go resolved rather than names stuck onto the
+  home directory. Each marks itself as current when the pane arrives. Hiding
+  the sidebar leaves the rail at its full 44px with all six places still on it
+  and the toggle turned around to "Show sidebar". Six tests in
+  `placesRail.test.tsx` cover the order, the navigation, the current marker,
+  the collapse round trip, the label following a toggle made from the View menu
+  instead, and the drop path.
+
+---
+
 ## 3. Risks
 
 | Risk | Mitigation |
