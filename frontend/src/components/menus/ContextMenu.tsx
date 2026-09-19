@@ -1,5 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { MenuItemButton, MenuPanel, MenuSeparator } from '@/components/menus/MenuPanel'
+import {
+  MenuItemButton,
+  MenuPanel,
+  MenuSeparator,
+  MenuSubmenuButton,
+} from '@/components/menus/MenuPanel'
 
 /**
  * A context menu: positioned at the pointer, keyboard-traversable, dismissed by
@@ -17,6 +22,15 @@ export interface ContextMenuAction {
   checkable?: boolean | undefined
   checked?: boolean | undefined
   disabled?: boolean | undefined
+  /**
+   * Rows that open beside this one instead of it (§M25).
+   *
+   * A row with a submenu has no `onSelect` worth running — pressing it opens
+   * the flyout — so callers pass a no-op. One level only: the children are a
+   * flat list, and a submenu inside a submenu is a depth macOS allows and
+   * nobody enjoys.
+   */
+  submenu?: ContextMenuAction[] | undefined
   onSelect: () => void
 }
 
@@ -31,6 +45,21 @@ interface ContextMenuProps {
 /** Keeps the panel off the window edges when it opens near one. */
 const MARGIN = 8
 
+/**
+ * The next enabled row in `rows` from `from`, stepping by `delta`.
+ *
+ * Gives up after a full lap so a list with nothing enabled cannot spin
+ * forever, and returns -1 when there is nowhere to go.
+ */
+function nextEnabled(rows: ContextMenuAction[], from: number, delta: number): number {
+  let next = from
+  for (let i = 0; i < rows.length; i++) {
+    next = (next + delta + rows.length) % rows.length
+    if (!rows[next]?.disabled) return next
+  }
+  return -1
+}
+
 export function ContextMenu({ x, y, groups, onClose }: ContextMenuProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState({ left: x, top: y })
@@ -39,6 +68,17 @@ export function ContextMenu({ x, y, groups, onClose }: ContextMenuProps) {
   const actions = shown.flat()
   const firstEnabled = actions.findIndex((action) => !action.disabled)
   const [activeIndex, setActiveIndex] = useState(firstEnabled)
+
+  /**
+   * Which row's flyout is open, and where the cursor is inside it.
+   *
+   * Lifted out of `MenuSubmenuButton` because one key handler on the panel owns
+   * traversal here: the flyout's rows have to be reachable with the arrow keys,
+   * and a component holding its own open state could not be told to open.
+   */
+  const [openSubmenu, setOpenSubmenu] = useState<number | null>(null)
+  const [submenuIndex, setSubmenuIndex] = useState(-1)
+  const submenuRows = (openSubmenu === null ? undefined : actions[openSubmenu]?.submenu) ?? []
 
   // Layout effect, not an effect: measuring and flipping after paint would show
   // the menu hanging off the screen for a frame before it jumped.
@@ -90,20 +130,79 @@ export function ContextMenu({ x, y, groups, onClose }: ContextMenuProps) {
   }, [onClose])
 
   const step = (delta: number) => {
-    if (actions.length === 0) return
-    let next = activeIndex
-    // Skips disabled rows, and gives up after a full lap so a menu with nothing
-    // enabled cannot spin forever.
-    for (let i = 0; i < actions.length; i++) {
-      next = (next + delta + actions.length) % actions.length
-      if (!actions[next]?.disabled) {
-        setActiveIndex(next)
+    const next = nextEnabled(actions, activeIndex, delta)
+    if (next >= 0) setActiveIndex(next)
+  }
+
+  /** Opens a row's flyout with the cursor on its first enabled entry. */
+  const openSubmenuAt = (index: number) => {
+    const rows = actions[index]?.submenu
+    if (!rows || actions[index]?.disabled) return
+    setActiveIndex(index)
+    setOpenSubmenu(index)
+    // Re-entering the row that is already open must not throw the cursor back
+    // to the top of a flyout the pointer is halfway down.
+    if (openSubmenu !== index) setSubmenuIndex(rows.findIndex((row) => !row.disabled))
+  }
+
+  /** Closes the flyout and leaves the cursor on the row that owns it. */
+  const closeSubmenu = () => {
+    setOpenSubmenu(null)
+    setSubmenuIndex(-1)
+  }
+
+  const pick = (action: ContextMenuAction | undefined) => {
+    if (!action || action.disabled) return
+    onClose()
+    action.onSelect()
+  }
+
+  // Traversal inside an open flyout. Split out rather than folded into the
+  // switch below because every key means something different once a submenu has
+  // the cursor — Escape closes the flyout rather than the menu, and ArrowLeft
+  // is a step back rather than nothing at all.
+  const handleSubmenuKeyDown = (event: React.KeyboardEvent): void => {
+    switch (event.key) {
+      case 'ArrowDown':
+      case 'ArrowUp': {
+        event.preventDefault()
+        const next = nextEnabled(submenuRows, submenuIndex, event.key === 'ArrowDown' ? 1 : -1)
+        if (next >= 0) setSubmenuIndex(next)
         return
       }
+      case 'ArrowLeft':
+      case 'Escape':
+        event.preventDefault()
+        closeSubmenu()
+        return
+      case 'Enter':
+      case ' ':
+        event.preventDefault()
+        pick(submenuRows[submenuIndex])
+        return
+      case 'Tab':
+        event.preventDefault()
+        onClose()
+        return
+    }
+
+    if (event.key.length !== 1 || event.metaKey || event.ctrlKey || event.altKey) return
+    const letter = event.key.toLowerCase()
+    const found = submenuRows.findIndex(
+      (row) => !row.disabled && row.label.toLowerCase().startsWith(letter),
+    )
+    if (found >= 0) {
+      event.preventDefault()
+      setSubmenuIndex(found)
     }
   }
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (openSubmenu !== null) {
+      handleSubmenuKeyDown(event)
+      return
+    }
+
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault()
@@ -112,6 +211,13 @@ export function ContextMenu({ x, y, groups, onClose }: ContextMenuProps) {
       case 'ArrowUp':
         event.preventDefault()
         step(-1)
+        return
+      case 'ArrowRight':
+        // Only meaningful on a row that has somewhere to go.
+        if (actions[activeIndex]?.submenu) {
+          event.preventDefault()
+          openSubmenuAt(activeIndex)
+        }
         return
       case 'Home':
         event.preventDefault()
@@ -126,11 +232,13 @@ export function ContextMenu({ x, y, groups, onClose }: ContextMenuProps) {
       case 'Enter':
       case ' ': {
         event.preventDefault()
-        const action = actions[activeIndex]
-        if (action && !action.disabled) {
-          onClose()
-          action.onSelect()
+        // Enter on a submenu row opens it rather than running a handler there
+        // is no sensible one for.
+        if (actions[activeIndex]?.submenu) {
+          openSubmenuAt(activeIndex)
+          return
         }
+        pick(actions[activeIndex])
         return
       }
       case 'Escape':
@@ -153,6 +261,15 @@ export function ContextMenu({ x, y, groups, onClose }: ContextMenuProps) {
     }
   }
 
+  // Which row a screen reader should be told the cursor is on: the flyout entry
+  // when one is open, otherwise the row in the panel.
+  const activeDescendant =
+    openSubmenu !== null && submenuIndex >= 0
+      ? `context-menu-item-${openSubmenu}-${submenuIndex}`
+      : activeIndex >= 0
+        ? `context-menu-item-${activeIndex}`
+        : undefined
+
   return (
     <MenuPanel
       ref={panelRef}
@@ -160,7 +277,7 @@ export function ContextMenu({ x, y, groups, onClose }: ContextMenuProps) {
       aria-label="Context menu"
       // Focus stays on the panel so one key handler owns traversal; this is how
       // a screen reader still learns which row the cursor is on.
-      aria-activedescendant={activeIndex >= 0 ? `context-menu-item-${activeIndex}` : undefined}
+      aria-activedescendant={activeDescendant}
       onKeyDown={handleKeyDown}
       // A right-click inside the menu is not a request for another menu.
       onContextMenu={(event) => event.preventDefault()}
@@ -174,6 +291,40 @@ export function ContextMenu({ x, y, groups, onClose }: ContextMenuProps) {
             // find its own position in it. `indexOf` over a dozen entries is
             // cheaper than threading a running counter through two maps.
             const current = actions.indexOf(action)
+
+            if (action.submenu) {
+              return (
+                <MenuSubmenuButton
+                  key={action.key}
+                  id={`context-menu-item-${current}`}
+                  label={action.label}
+                  active={current === activeIndex}
+                  open={openSubmenu === current}
+                  // Opening is a hover; closing is not. The pointer crossing
+                  // the gap between a row and its flyout reads as leaving the
+                  // row, and a flyout that vanished on the way to it could
+                  // never be reached. It closes when another row takes the
+                  // cursor, when something in it is picked, or with the menu —
+                  // which is how a real menu behaves too.
+                  onOpenChange={(open) => open && openSubmenuAt(current)}
+                >
+                  {action.submenu.map((row, rowIndex) => (
+                    <MenuItemButton
+                      key={row.key}
+                      id={`context-menu-item-${current}-${rowIndex}`}
+                      label={row.label}
+                      checkable={row.checkable}
+                      checked={row.checked}
+                      disabled={row.disabled}
+                      active={openSubmenu === current && rowIndex === submenuIndex}
+                      onMouseEnter={() => !row.disabled && setSubmenuIndex(rowIndex)}
+                      onSelect={() => pick(row)}
+                    />
+                  ))}
+                </MenuSubmenuButton>
+              )
+            }
+
             return (
               <MenuItemButton
                 key={action.key}
@@ -184,11 +335,14 @@ export function ContextMenu({ x, y, groups, onClose }: ContextMenuProps) {
                 checked={action.checked}
                 disabled={action.disabled}
                 active={current === activeIndex}
-                onMouseEnter={() => !action.disabled && setActiveIndex(current)}
-                onSelect={() => {
-                  onClose()
-                  action.onSelect()
+                onMouseEnter={() => {
+                  if (action.disabled) return
+                  setActiveIndex(current)
+                  // Moving onto a plain row is leaving whatever flyout was
+                  // open, exactly as it is in a real menu.
+                  closeSubmenu()
                 }}
+                onSelect={() => pick(action)}
               />
             )
           })}

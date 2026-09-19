@@ -127,10 +127,39 @@ export interface DesktopApi {
   onMenuCommand(handler: (id: string) => void): () => void
 }
 
+/** One row of the Open With menu (§M25). */
+export interface Application {
+  /** The bundle, e.g. /Applications/Preview.app — what `openWith` is given. */
+  path: string
+  /** What the bundle calls itself, e.g. "Preview". */
+  name: string
+  /** e.g. com.apple.Preview. Empty when the bundle has no Info.plist. */
+  bundleId: string
+  /** Whether a double-click would already go here. */
+  isDefault: boolean
+}
+
+export interface Applications {
+  /**
+   * The file's uniform type identifier, e.g. public.jpeg. What the list is
+   * cached under: every JPEG in a folder has the same handlers. Empty when the
+   * system cannot identify the file.
+   */
+  uti: string
+  /** Default first, then by name. Empty is a real answer. */
+  apps: Application[]
+}
+
 export interface ShellApi {
   openFile(path: string): Promise<void>
   revealInFinder(path: string): Promise<void>
-  openWith(path: string, appPath: string): Promise<void>
+  /**
+   * The whole selection goes to one application in a single call, so a dozen
+   * photos arrive in one window rather than a dozen (§M25 decision 6).
+   */
+  openWith(paths: string[], appPath: string): Promise<void>
+  /** Which applications can open the path, as Launch Services sees it. */
+  applicationsFor(path: string): Promise<Applications>
 }
 
 export interface DialogOptions {

@@ -18,6 +18,7 @@ import { MENU_THEMES, themeLabel } from '@/constants/themes'
 export type MenuCommandId =
   // File
   | 'file.open'
+  | 'file.openWith'
   | 'file.openInNewTab'
   | 'file.newFolder'
   | 'file.newFile'
@@ -116,6 +117,12 @@ export const APP_MENUS: MenuDefinition[] = [
     label: 'File',
     items: [
       { id: 'file.open', label: 'Open' },
+      // One command with two renderings (§M25 decision 4). Here — and in the
+      // native menu, which Go builds once at startup and cannot rebuild when
+      // the selection changes — it is a door to the picker. The context menu
+      // draws the applications themselves, because it is rebuilt every time it
+      // opens and knows what was right-clicked.
+      { id: 'file.openWith', label: 'Open With…' },
       { id: 'file.openInNewTab', label: 'Open in New Tab' },
       { separator: true },
       { id: 'file.newFolder', label: 'New Folder' },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toFileItem, toFsError } from './decode'
+import { toApplications, toFileItem, toFsError } from './decode'
 import { filesystem } from '../../../../wailsjs/go/models'
 
 /**
@@ -100,5 +100,50 @@ describe('toFileItem', () => {
 
   it('categorises an unknown extension as default', () => {
     expect(toFileItem(wire({ name: 'thing.qqq' })).category).toBe('default')
+  })
+})
+
+describe('toApplications', () => {
+  it('carries the type and the rows through', () => {
+    const decoded = toApplications({
+      uti: 'public.jpeg',
+      apps: [
+        { path: '/Applications/Preview.app', name: 'Preview', bundleId: 'com.apple.Preview', isDefault: true },
+        { path: '/Applications/Acorn.app', name: 'Acorn', bundleId: '', isDefault: false },
+      ],
+    })
+
+    expect(decoded.uti).toBe('public.jpeg')
+    expect(decoded.apps.map((app) => app.name)).toEqual(['Preview', 'Acorn'])
+    expect(decoded.apps[0]?.isDefault).toBe(true)
+    expect(decoded.apps[1]?.isDefault).toBe(false)
+  })
+
+  it('reads an empty answer as an empty list rather than nothing', () => {
+    // A nil Go slice arrives as null, and a menu that rendered `undefined.map`
+    // would take the whole context menu with it.
+    expect(toApplications({ uti: 'public.data', apps: null }).apps).toEqual([])
+    expect(toApplications(null).apps).toEqual([])
+    expect(toApplications(undefined).uti).toBe('')
+  })
+
+  it('drops a row with no path and names one with no name', () => {
+    const decoded = toApplications({
+      apps: [
+        { path: '', name: 'Nowhere' },
+        { path: '/Applications/Odd.app' },
+        'not an object',
+      ],
+    })
+
+    expect(decoded.apps).toHaveLength(1)
+    // Go already falls back to the folder name, so this only catches a row
+    // that arrived malformed — but a row with no label is worse than no row.
+    expect(decoded.apps[0]).toEqual({
+      path: '/Applications/Odd.app',
+      name: '/Applications/Odd.app',
+      bundleId: '',
+      isDefault: false,
+    })
   })
 })

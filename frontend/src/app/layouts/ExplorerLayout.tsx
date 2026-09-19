@@ -12,6 +12,7 @@ import { NewFileDialog } from '@/features/newFile/NewFileDialog'
 import { CompressDialog } from '@/features/archives/CompressDialog'
 import { SettingsModal } from '@/features/settings/SettingsModal'
 import { TagsDialog } from '@/features/tags/TagsDialog'
+import { OpenWithDialog } from '@/features/openWith/OpenWithDialog'
 import { ContextMenuHost } from '@/components/menus/ContextMenuHost'
 import { MenuBar } from '@/components/toolbar/MenuBar'
 import { TabBar } from '@/components/toolbar/TabBar'
@@ -148,6 +149,7 @@ export function ExplorerLayout() {
       <NewFileDialog />
       <CompressDialog />
       <TagsDialog />
+      <OpenWithDialog />
       {/* Last of the modals: Settings can be opened from a context menu, and
           whatever raised it should be drawn beneath it. */}
       <SettingsModal />

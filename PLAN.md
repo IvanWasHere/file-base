@@ -2255,6 +2255,165 @@ Decisions:
 
 ---
 
+### M25 — Open With ✅ complete
+
+Double-clicking a file hands it to Launch Services and whatever that resolves to
+is the end of the story: `shell.OpenFile` is `open --`, and the only way to
+reach a second application is Finder. The backend has been half-ready for this
+since M1 — `Shell.OpenWith(path, appPath)` exists, is bound, is in `ShellApi`
+and is implemented in both bridges — and has never had a caller, because
+nothing in the app knows *which* applications a file could go to. §M25 asks
+Launch Services that question and puts the answer in the right-click menu.
+
+Decisions:
+
+1. **Launch Services answers "which applications", not a table we maintain.**
+   `LSCopyApplicationURLsForURL` for the candidates and
+   `LSCopyDefaultApplicationURLForURL` for the one that would already open it,
+   in `backend/shell/apps_darwin.go` — the second use of cgo after §M23 and
+   confined the same way: one `//go:build darwin` file holding the C, an
+   untagged half in `shell.go` doing the mapping, so everything except the
+   twenty lines that talk to CoreServices is ordinary testable Go. Any other
+   source for this list — a scan of `/Applications`, a parse of
+   `lsregister -dump`, a hard-coded map of extensions — would disagree with the
+   Finder menu beside it, which is the only thing users will compare it to.
+2. **A handler carries four fields and no icon**, and its `name` is the name on
+   disk. `{ path, name, bundleId, isDefault }`. The first implementation read
+   `CFBundleDisplayName` from the bundle's `Info.plist` — the obvious choice,
+   and wrong, which only running the app showed: "Visual Studio Code.app"
+   introduces itself there as **Code**, and three other places would have gone
+   on calling it Visual Studio Code — the folder listing the user right-clicked
+   from, the picker's own All Applications list, and Finder's Open With menu
+   beside it. A file explorer names a bundle the way it names every other item.
+   `Info.plist` is still read, for `CFBundleIdentifier` and as the fallback for
+   a handler that is not a `.app` at all, with `howett.net/plist`, already a
+   dependency for Finder tags. No icon, deliberately: no menu in this app draws
+   one — `MenuItemButton` has a check column and a label and nothing else — and
+   getting one would mean either decoding `.icns` with a new dependency or
+   linking AppKit for `NSWorkspace.iconForFile`, to make this the single menu
+   in the app that looks different.
+3. **The candidate list is cached by type, not by path.** Every JPEG in a
+   folder has the same handlers, so opening the context menu on the two
+   hundredth photo is a cache hit rather than a Launch Services round trip —
+   which matters because the menu is already on screen when the answer arrives.
+   The key is the **extension**, not the UTI, and that is a concession the
+   implementation forced: the UTI only exists once Go has answered, so keying
+   on it would mean asking in order to find out whether to ask. The extension
+   is the proxy the frontend can compute first, and it is the same proxy macOS
+   uses for the overwhelming majority of files. A file with no extension falls
+   back to its own path, because there is nothing to share a cache entry with:
+   those are identified from their contents, and two extensionless files are
+   not the same type by virtue of both being extensionless. Go returns the real
+   UTI alongside the list regardless — it costs one CFString and it is what a
+   row would show if it ever had to explain itself.
+4. **`file.openWith` is one command id with two renderings**, and this is the
+   §M24 decision 7 constraint restated: the native menu bar is built once in Go
+   at startup and cannot grow a row when the selection changes. So the context
+   menu gets a **live submenu** listing the applications, and File ▸ Open With…
+   — in both the in-window menu bar and the native menu — is a door to the same
+   picker the submenu's last row opens. One command, one handler, two shapes,
+   exactly as More Themes… is a door to the list the menu cannot hold.
+5. **The submenu's rows are data, not command ids** — and this is the one
+   invariant §M25 spends. `constants/contextMenus.ts` has said since M11 that
+   "every entry is a `MenuCommandId` that already exists in `APP_MENUS`", and
+   an application discovered at right-click time cannot be. `ContextMenuAction`
+   gains an optional `submenu: ContextMenuAction[]`, `ContextMenuHost` fills it
+   for this one id, and the rule survives for *rows* — `file.openWith` is a
+   real command with a real label and a real handler; it is only its children
+   that are found rather than declared. Settings still lists it as one
+   switchable row, because that is what the user is choosing to see or not see.
+6. **Open With opens the whole selection with one application.**
+   `Shell.OpenWith` changes shape to `OpenWith(paths []string, appPath string)`
+   — a single `open -a App -- f1 f2 f3`, so a dozen photos arrive in one
+   Preview window rather than a dozen. There are no existing callers, so the
+   signature change costs nothing but regenerated bindings. The candidate list
+   comes from the **lead** item, the one the keyboard cursor is on, matching
+   how `file.rename` already picks its target; a selection of mixed types is
+   the user's decision and the application will say what it makes of it.
+7. **Other… is an in-app picker, not a native open panel.** It lists `.app`
+   bundles from `/Applications`, `/System/Applications` and `~/Applications`
+   through `bridge.fs.readDirectory`, which already exists, already handles
+   permission errors and already works under the mock — so the picker is
+   testable in Vitest without a Mac in the loop. `dialogs.openDirectory` is
+   still `notImplemented` in the Wails bridge, and a feature that needed it
+   first would have had to build it.
+8. **The default application is shown, not changed.** It sits at the top of the
+   submenu with "(default)" after its name, above a rule. "Always Open With"
+   means `LSSetDefaultRoleHandlerForContentType`, which rewrites a system-wide
+   preference for every file of that type on the machine from inside a
+   right-click menu — a bigger decision than this milestone, and a follow-up if
+   it is wanted at all.
+9. **Files only.** The row is `isVisible: false` in the folder and background
+   menus and disabled when the lead item is a directory or broken. Finder does
+   offer it on a folder; it resolves to the handful of tools that claim one,
+   and the row that reads "Open With ▸ Finder" is not worth the explanation.
+10. **An empty list is a sentence, not an empty flyout.** No handler registered
+    for a type — which is what `.bak` and every extensionless file will do —
+    draws one disabled row saying "No applications available" above Other…,
+    for the same reason `ContextMenuHost` refuses to open a menu with nothing
+    in it. Failures from `open` keep the path they already have: `fs-error:`
+    from `backend/shell`, `describeFsError`, `toast.error`.
+
+11. **A hover cannot close the flyout, only open it.** Found in the running app:
+    the pointer crossing the gap between a row and the panel beside it reads as
+    leaving the row, so a flyout wired to close on `mouseleave` — which is what
+    `MenuSubmenuButton` has done since §M17 — vanishes on the way to being
+    clicked. In the context menu it closes when another row takes the cursor,
+    when something in it is picked, or with the menu. `MenuSubmenuButton` gained
+    optional `open`/`onOpenChange`; passing neither keeps the menu bar's
+    original behaviour, which never had this problem because its flyout is
+    flush against a full-width row.
+
+Work, in the order it was done:
+
+- **Go** — `backend/shell/apps_darwin.go` (cgo: candidates, default, UTI),
+  `backend/shell/shell.go` (`ApplicationsFor(path) (Applications, error)`,
+  `Info.plist` name resolution, `OpenWith` taking `[]string`),
+  `backend/shell/shell_test.go` — the package had no test file, and the name
+  resolution and the plist reading are both pure functions.
+- **Bridge** — `ShellApi` gains `applicationsFor`; `openWith` takes `string[]`.
+  Wails impl, mock impl (fake handlers per file category, and a few `.app`
+  bundles seeded under `/Applications` so the picker's second list is a list),
+  regenerated `wailsjs/go/shell/Shell`.
+- **Menus** — `file.openWith` in `MenuCommandId` and in File (label
+  "Open With…"), in `CONTEXT_MENUS.file`, and in `backend/appmenu` so the
+  native menu has it too; `TestCommandIDsExistInFrontend` covers the pairing.
+- **Context menu** — `ContextMenuAction.submenu`, rendered through the existing
+  `MenuSubmenuButton`, with keyboard traversal: the parent row stays in the
+  flat cursor list, ArrowRight/Enter moves the cursor into the flyout,
+  ArrowLeft/Escape brings it back.
+- **The picker** — `features/openWith/OpenWithDialog.tsx` plus
+  `uiStore.openOpenWith(paths)`, following `TagsDialog` and `HashModal`.
+- **Handler** — `useMenuCommands`: `file.openWith` opens the picker, and
+  exposes `openWithTargets()` so `ContextMenuHost` knows what was right-clicked.
+  `services/shell/open.ts` holds the one call both the submenu rows and the
+  picker make, so the failure reads the same either way; the candidate list is
+  a query in `services/shell/queries.ts` and the installed list one in
+  `services/shell/installed.ts`.
+
+- **Verified in the running app**, not only under Vitest. Two things came back
+  changed. The first is decision 2: `CFBundleDisplayName` was the obvious
+  source for a row's label and it is wrong — `/Applications/Visual Studio
+  Code.app` answers "Code" there, and the listing the user right-clicked from,
+  the picker's second list and Finder's own menu all say Visual Studio Code.
+  Named by the bundle on disk instead, the three agree, and Google Chrome stops
+  being "Chrome" as a bonus. The second is decision 11, which is the difference
+  between a submenu that works and one that cannot be clicked at all.
+  Against this Mac's real Launch Services, a `.txt` resolves to twelve handlers
+  with TextEdit correctly marked default and every name matching Finder's; in
+  the running UI the flyout opens beside the menu on a file, is absent on a
+  folder, says "No applications available" above Other… for an `.mp3`, and the
+  picker lists Suggested over All Applications — finding Terminal inside
+  Utilities, which is the one-level descent working. Twenty-three tests cover
+  it: thirteen in `shell_test.go` over the plist mapping, the ordering, the
+  de-duplication, the naming and `open`'s argument list — one of them asking
+  the machine itself, so an empty answer means the cgo call is broken rather
+  than that nothing is installed — and ten in `openWith.test.tsx` driving the
+  submenu, the keyboard, the picker, the multi-selection and the error toast
+  through the real chrome. Three more in `decode.test.ts` cover the wire shape.
+
+---
+
 ## 3. Risks
 
 | Risk | Mitigation |
@@ -2283,6 +2442,8 @@ Decisions:
 | **Tags written by anything on the machine** — the attribute is not ours, and holds whatever some other tagger put there | Repaired on both sides of the bridge: an unparseable plist reads as no tags, blank and duplicate names are dropped, and an index off the palette falls back to no colour (§M22 decision 5) |
 | **cgo in the build** — §M23 links ImageIO, so the backend is no longer pure Go | Confined to one file with a single function, behind a `_darwin` build tag; the package it serves is macOS-only already, as `stat_darwin.go` has been since M1 (§M23 decision 1) |
 | **Metadata from thirty years of cameras** — a tag absent, a string where a number was expected, a colour index off the palette | Repaired on both sides: `fromProperties` treats every lookup as a miss away from nothing, `toImageInfo` re-checks each field, and a value that survives neither costs one row rather than the panel (§M23 decision 6) |
+| **Launch Services deprecation** — `LSCopyApplicationURLsForURL` is the C call that answers "which applications", and Apple marked it deprecated in macOS 12 without removing it | Confined to one cgo file behind one Go function, so the replacement is `NSWorkspace.URLsForApplications(toOpen:)` in that file and nothing above it changes; an empty list is already a case the menu handles (§M25 decision 1) |
+| **A right-click that waits on a framework call** — the context menu is on screen before the handler list exists | The submenu resolves asynchronously and the list is cached by UTI rather than by path, so the second file of a type costs nothing; an unresolved list draws a disabled row rather than an empty flyout (§M25 decisions 3 and 10) |
 | **Notarization** for distribution | Deferred to M12; not blocking for local development |
 
 ---

@@ -30,6 +30,15 @@ import { isAncestor } from '@/utils/path'
 
 export interface MenuCommandState {
   run: (id: MenuCommandId) => void
+  /**
+   * The files `file.openWith` would act on (§M25).
+   *
+   * Exposed because `ContextMenuHost` builds that row's submenu from the
+   * applications Launch Services suggests for them, and it has no other way to
+   * know what was right-clicked — every other row is a command id and nothing
+   * more.
+   */
+  openWithTargets: () => string[]
   isEnabled: (id: MenuCommandId) => boolean
   isChecked: (id: MenuCommandId) => boolean
   /**
@@ -97,6 +106,25 @@ export function useMenuCommands(): MenuCommandState {
         isFsError(error) ? describeFsError(error) : undefined,
       )
     })
+  }
+
+  /**
+   * What Open With acts on: the selected files, folders dropped (§M25
+   * decision 9).
+   *
+   * The lead comes first, because it decides which applications are offered —
+   * `file.rename` picks its target the same way, and for the same reason: it
+   * is the item the keyboard cursor is on, which is the one the user was last
+   * pointing at.
+   *
+   * An item the pane's cache cannot classify counts as a file, as hashing's
+   * does: the alternative is a dead row wherever the selection came from
+   * somewhere the cache does not cover, such as a search result.
+   */
+  const openWithTargets = (): string[] => {
+    const files = targets.filter((path) => cachedItem(path)?.isDirectory !== true)
+    if (!lead || !files.includes(lead)) return files
+    return [lead, ...files.filter((path) => path !== lead)]
   }
 
   /**
@@ -195,6 +223,12 @@ export function useMenuCommands(): MenuCommandState {
           .catch(() => toast.error('Could not open the item'))
         return
       }
+      // A door to the picker rather than a list of applications: this is also
+      // the menu bar's route, and the menu bar is built once in Go (§M25
+      // decision 4). The context menu's submenu opens an application directly.
+      case 'file.openWith':
+        ui.openOpenWith(openWithTargets())
+        return
       case 'file.openInNewTab': {
         const target = targets.find((path) => cachedItem(path)?.isDirectory)
         if (target) openTab(target)
@@ -391,6 +425,11 @@ export function useMenuCommands(): MenuCommandState {
       case 'file.open':
       case 'file.tags':
         return selected.size > 0
+      // Files only (§M25 decision 9). A folder resolves to the handful of
+      // tools that claim one, and the row that reads "Open With ▸ Finder" is
+      // not worth the explanation.
+      case 'file.openWith':
+        return openWithTargets().length > 0
       // Enabled when the selection could hold a file. An item the pane's cache
       // cannot classify counts as one: the alternative is a dead button
       // wherever the selection came from somewhere the cache does not cover,
@@ -460,10 +499,14 @@ export function useMenuCommands(): MenuCommandState {
 
   const isVisible = (id: MenuCommandId): boolean => {
     const target = favoriteTarget()
+    // Absent rather than present-and-dead where there is no file to open: the
+    // folder menu has Open in New Tab in the same group, and a permanently
+    // grey row beside it reads as a bug.
+    if (id === 'file.openWith') return openWithTargets().length > 0
     if (id === 'file.addToFavorites') return target === undefined || !isPinned(target)
     if (id === 'file.removeFromFavorites') return target !== undefined && isPinned(target)
     return true
   }
 
-  return { run, isEnabled, isChecked, isVisible }
+  return { run, openWithTargets, isEnabled, isChecked, isVisible }
 }

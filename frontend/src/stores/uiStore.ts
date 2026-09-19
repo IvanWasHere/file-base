@@ -141,6 +141,17 @@ export interface TagsJob {
   paths: string[]
 }
 
+/**
+ * The open Open With picker, and what it will open (§M25).
+ *
+ * Its own field for the reason `tagsJob` has one: nothing awaits the result.
+ * The picker hands a chosen application to the shell and closes.
+ */
+export interface OpenWithJob {
+  /** The selection as it was when the picker opened. */
+  paths: string[]
+}
+
 interface UiState {
   previewOpen: boolean
   sidebarOpen: boolean
@@ -150,6 +161,7 @@ interface UiState {
   newFile: NewFileRequest | null
   compress: CompressRequest | null
   tagsJob: TagsJob | null
+  openWithJob: OpenWithJob | null
   /** Whether the Settings modal is open (§M22). */
   settingsOpen: boolean
   /**
@@ -210,6 +222,9 @@ interface UiState {
   openTags: (paths: string[]) => void
   closeTags: () => void
 
+  openOpenWith: (paths: string[]) => void
+  closeOpenWith: () => void
+
   openHashes: (paths: string[]) => void
   closeHashes: () => void
 
@@ -245,6 +260,7 @@ export const useUiStore = create<UiState>()((set) => ({
   newFile: null,
   compress: null,
   tagsJob: null,
+  openWithJob: null,
   settingsOpen: false,
   settingsSection: 'themes',
   theme: DEFAULT_THEME,
@@ -304,6 +320,11 @@ export const useUiStore = create<UiState>()((set) => ({
   // Nothing to tag would be a picker whose every toggle wrote to no files.
   openTags: (paths) => set(paths.length > 0 ? { tagsJob: { paths }, renaming: null } : {}),
   closeTags: () => set({ tagsJob: null }),
+
+  // Nothing to open would be a list of applications with nothing to hand them.
+  openOpenWith: (paths) =>
+    set(paths.length > 0 ? { openWithJob: { paths }, renaming: null } : {}),
+  closeOpenWith: () => set({ openWithJob: null }),
   setHashAlgorithm: (algorithm) => set({ hashAlgorithm: algorithm }),
   setLastTemplate: (id) => set({ lastTemplate: id }),
 

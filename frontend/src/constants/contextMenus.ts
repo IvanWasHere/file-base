@@ -9,6 +9,13 @@
  * Every entry is a `MenuCommandId` that already exists in `APP_MENUS` — labels,
  * enablement and the handler all come from there. A context menu is a different
  * *route* to a command, never a different command.
+ *
+ * `file.openWith` is the one row whose *children* are not commands: the
+ * applications that can open a file are discovered when the menu opens and
+ * cannot be declared here. The rule survives for rows — it is a real command
+ * with a real label and a real handler, and Settings switches it off as one
+ * row — and `ContextMenuHost` is the only place that fills the submenu
+ * (PLAN.md §M25 decision 5).
  */
 
 import type { MenuCommandId } from '@/constants/menus'
@@ -18,7 +25,7 @@ export type ContextKind = 'file' | 'folder' | 'background'
 
 export const CONTEXT_MENUS: Record<ContextKind, MenuCommandId[][]> = {
   file: [
-    ['file.open'],
+    ['file.open', 'file.openWith'],
     ['edit.cut', 'edit.copy', 'file.copyPath'],
     ['file.rename', 'file.duplicate'],
     ['file.compress', 'file.uncompress'],

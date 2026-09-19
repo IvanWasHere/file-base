@@ -53,15 +53,36 @@ interface MenuItemButtonProps {
  * anywhere in the row *or* the flyout — which is why the two share one wrapper
  * with the mouse handlers on it, rather than the flyout being a sibling the
  * pointer has to leave the row to reach.
+ *
+ * Uncontrolled by default, which is all the menu bar ever needed. The context
+ * menu passes `open` and `onOpenChange` instead, because there one key handler
+ * on the panel owns traversal and has to be able to open and close the flyout
+ * from the arrow keys (§M25).
  */
 export function MenuSubmenuButton({
+  id,
   label,
+  active,
+  open: controlledOpen,
+  onOpenChange,
   children,
 }: {
+  /** Needed by `aria-activedescendant` when a container holds focus. */
+  id?: string | undefined
   label: string
+  /** Highlights the row under a keyboard cursor, independent of hover. */
+  active?: boolean | undefined
+  open?: boolean | undefined
+  onOpenChange?: ((open: boolean) => void) | undefined
   children: React.ReactNode
 }) {
-  const [open, setOpen] = useState(false)
+  const [uncontrolled, setUncontrolled] = useState(false)
+  const open = controlledOpen ?? uncontrolled
+
+  const setOpen = (value: boolean) => {
+    if (onOpenChange) onOpenChange(value)
+    else setUncontrolled(value)
+  }
 
   return (
     <div
@@ -71,12 +92,13 @@ export function MenuSubmenuButton({
     >
       <button
         type="button"
+        id={id}
         role="menuitem"
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => setOpen(!open)}
         className={`text-secondary hover:bg-hover hover:text-primary flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] transition-colors outline-none ${
-          open ? 'bg-hover text-primary' : ''
+          open || active ? 'bg-hover text-primary' : ''
         }`}
       >
         <span className="flex w-3.5 shrink-0 justify-center" />

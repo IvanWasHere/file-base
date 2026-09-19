@@ -26,7 +26,7 @@ import type { ArchiveDone, ArchiveProgress } from '@/types/archive'
 import type { ImageInfo } from '@/types/image'
 import type { FsErrorCode } from '@/types/errors'
 import { FsError } from '@/types/errors'
-import type { ExternalDrop } from '../types'
+import type { Applications, ExternalDrop } from '../types'
 import { normaliseTags } from '@/constants/tags'
 import { categorize } from '@/utils/fileCategory'
 import { extname } from '@/utils/path'
@@ -390,5 +390,36 @@ export function toOperationResult(wire: filesystem.OpResult): OperationResult {
       path: failure.path,
       message: failure.message,
     })),
+  }
+}
+
+/**
+ * Flattens Go's `shell.Applications`, for the reason `toOperationResult` gives:
+ * Wails hands back class instances, and a React Query cache holding them
+ * compares differently from the plain objects the mock bridge returns.
+ *
+ * Checked field by field rather than cast, like `toImageInfo`: a bundle with no
+ * readable Info.plist reaches here with an empty name, and a row with no label
+ * is worse than one fewer row (§M25 decision 10).
+ */
+export function toApplications(wire: unknown): Applications {
+  const raw = (typeof wire === 'object' && wire !== null ? wire : {}) as Record<string, unknown>
+  const rows = Array.isArray(raw.apps) ? raw.apps : []
+
+  return {
+    uti: typeof raw.uti === 'string' ? raw.uti : '',
+    apps: rows
+      .map((row): Record<string, unknown> =>
+        typeof row === 'object' && row !== null ? (row as Record<string, unknown>) : {},
+      )
+      .filter((row) => typeof row.path === 'string' && row.path !== '')
+      .map((row) => ({
+        path: row.path as string,
+        // Go already falls back to the bundle's folder name, so this only
+        // catches a row that arrived malformed.
+        name: typeof row.name === 'string' && row.name !== '' ? row.name : (row.path as string),
+        bundleId: typeof row.bundleId === 'string' ? row.bundleId : '',
+        isDefault: row.isDefault === true,
+      })),
   }
 }

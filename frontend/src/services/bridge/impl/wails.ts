@@ -24,6 +24,7 @@ import {
   menuCommandEvent,
   searchBatchEvent,
   searchDoneEvent,
+  toApplications,
   toArchiveDone,
   toArchiveProgress,
   toFileItem,
@@ -69,7 +70,12 @@ import {
 } from '../../../../wailsjs/go/archive/Archive'
 import { Generate } from '../../../../wailsjs/go/thumbs/Thumbs'
 import { Read as ReadImageInfo } from '../../../../wailsjs/go/imagemeta/ImageMeta'
-import { OpenFile, OpenWith, RevealInFinder } from '../../../../wailsjs/go/shell/Shell'
+import {
+  ApplicationsFor,
+  OpenFile,
+  OpenWith,
+  RevealInFinder,
+} from '../../../../wailsjs/go/shell/Shell'
 import { Exec, Query, Tx } from '../../../../wailsjs/go/db/DB'
 import { Unwatch, Watch } from '../../../../wailsjs/go/watcher/Watcher'
 import { EventsOn } from '../../../../wailsjs/runtime/runtime'
@@ -170,7 +176,8 @@ export const bridge: Bridge = {
   shell: {
     openFile: (path) => guard(() => OpenFile(path)),
     revealInFinder: (path) => guard(() => RevealInFinder(path)),
-    openWith: (path, appPath) => guard(() => OpenWith(path, appPath)),
+    openWith: (paths, appPath) => guard(() => OpenWith(paths, appPath)),
+    applicationsFor: (path) => guard(async () => toApplications(await ApplicationsFor(path))),
   },
   dialogs: {
     openDirectory: () => notImplemented('dialogs.openDirectory', 'M6'),

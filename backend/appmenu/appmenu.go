@@ -80,6 +80,11 @@ var sections = []section{
 		Label: "File",
 		Items: []item{
 			{ID: "file.open", Label: "Open"},
+			// A door to the picker rather than a list of applications: this menu
+			// is built once at startup and cannot grow a row when the selection
+			// changes. The context menu, which is rebuilt every time it opens,
+			// draws the applications themselves (PLAN.md §M25 decision 4).
+			{ID: "file.openWith", Label: "Open With…"},
 			{ID: "file.openInNewTab", Label: "Open in New Tab"},
 			separator(),
 			{ID: "file.newFolder", Label: "New Folder"},

@@ -22,6 +22,7 @@ import { algorithmSpec } from '@/constants/hashAlgorithms'
 import type { HashResult } from '@/types/hashing'
 import type {
   ConflictPolicy,
+  FileCategory,
   FileChangeKind,
   FileItem,
   FileSystemEvent,
@@ -150,6 +151,22 @@ const SEED: [string, number, number][] = [
 ]
 
 /**
+ * A few application bundles under /Applications (§M25).
+ *
+ * Directories, because that is what a bundle is, and the Open With picker
+ * finds them by looking for the `.app` extension. Terminal is inside Utilities
+ * so the one-level descent is exercised rather than assumed — on a real Mac
+ * that is where half of Apple's own applications live.
+ */
+const SEED_APPLICATIONS = [
+  'Preview.app',
+  'Acorn.app',
+  'Visual Studio Code.app',
+  'TextEdit.app',
+  'Utilities/Terminal.app',
+]
+
+/**
  * Seeded tags, by path relative to home (§M22).
  *
  * Two files rather than none, because "the Tags column draws nothing" and "the
@@ -250,6 +267,7 @@ function buildTree(): Map<string, Node> {
   ensureDirectory(HOME, FIXED_NOW)
   ensureDirectory(TRASH, FIXED_NOW)
   ensureDirectory('/Applications', FIXED_NOW)
+  for (const app of SEED_APPLICATIONS) ensureDirectory(join('/Applications', app), FIXED_NOW)
   ensureDirectory('/Volumes', FIXED_NOW)
 
   for (const [relative, size, daysAgo] of SEED) {
@@ -347,6 +365,42 @@ function toFileItem(node: Node): FileItem {
     // editing the mock filesystem in place.
     tags: node.tags ? node.tags.map((tag) => ({ ...tag })) : [],
   }
+}
+
+/**
+ * The applications the mock says can open a file (§M25).
+ *
+ * Keyed by the category `utils/fileCategory` already computes, so a JPEG and a
+ * PNG agree — which is what makes the submenu's per-type cache testable. The
+ * first entry of each list is the default. A category absent here has no
+ * handler at all, which is the "no applications available" case.
+ */
+const MOCK_APPLICATIONS: Partial<
+  Record<FileCategory, { path: string; name: string; bundleId: string }[]>
+> = {
+  image: [
+    { path: '/Applications/Preview.app', name: 'Preview', bundleId: 'com.apple.Preview' },
+    { path: '/Applications/Acorn.app', name: 'Acorn', bundleId: 'com.flyingmeat.Acorn7' },
+    { path: '/Applications/Safari.app', name: 'Safari', bundleId: 'com.apple.Safari' },
+  ],
+  code: [
+    {
+      path: '/Applications/Visual Studio Code.app',
+      // The name on disk, not the "Code" its real Info.plist prefers — that
+      // divergence is what §M25 decision 2 is about, and a mock that papered
+      // over it would hide the case.
+      name: 'Visual Studio Code',
+      bundleId: 'com.microsoft.VSCode',
+    },
+    { path: '/Applications/TextEdit.app', name: 'TextEdit', bundleId: 'com.apple.TextEdit' },
+  ],
+  document: [
+    { path: '/Applications/Preview.app', name: 'Preview', bundleId: 'com.apple.Preview' },
+    { path: '/Applications/TextEdit.app', name: 'TextEdit', bundleId: 'com.apple.TextEdit' },
+  ],
+  data: [
+    { path: '/Applications/TextEdit.app', name: 'TextEdit', bundleId: 'com.apple.TextEdit' },
+  ],
 }
 
 function requireNode(path: string): Node {
@@ -890,9 +944,21 @@ export const bridge: Bridge = {
       console.info('[mock] reveal', path)
       return Promise.resolve()
     },
-    openWith: (path, appPath) => {
-      console.info('[mock] openWith', path, appPath)
+    openWith: (paths, appPath) => {
+      console.info('[mock] openWith', paths, appPath)
       return Promise.resolve()
+    },
+    applicationsFor: async (path) => {
+      const node = requireNode(path)
+      const category = categorize(extname(node.path), node.isDirectory)
+      const apps = MOCK_APPLICATIONS[category] ?? []
+      return {
+        // A synthetic UTI, but a real one in the sense that matters here: two
+        // files of the same category share it, so the caching the submenu does
+        // by type is exercised rather than bypassed.
+        uti: `public.${category}`,
+        apps: apps.map((app, index) => ({ ...app, isDefault: index === 0 })),
+      }
     },
   },
   dialogs: {
