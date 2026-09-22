@@ -2702,6 +2702,88 @@ Decisions:
   the collapse round trip, the label following a toggle made from the View menu
   instead, and the drop path.
 
+### M30 — Zoom and pan the photo on the stage ✅ complete
+
+The Photos stage magnifies: a zoom pill on the picture, a wheel over it, and
+the whole image dragged around once it is bigger than the frame that holds it.
+
+Decisions:
+
+1. **In the stage, not in a lightbox.** M13 decision 1 said Photos is a view
+   mode and a full-window viewer is a different feature; that still holds.
+   Zoom happens inside the pane, so the filmstrip, the preview panel, the
+   status bar and the splits are all still there while you are looking closely
+   at a corner of a photo — which is the point of a file manager showing
+   pictures rather than a picture viewer that browses files.
+2. **1× is fit, and there is nothing below it.** `object-contain` already sizes
+   the photo to the frame, so a zoom-out past fit would shrink a picture inside
+   the one view whose whole job is showing it, and leave a viewer with a stamp
+   floating in the middle of it. The percentage in the pill is therefore
+   relative to *fit*, not to the file's pixels — a 4,032px photo in an 820px
+   frame reads 100% while showing every fifth pixel. The honest alternative,
+   a true 1:1 readout, would open the view at 20% and make the number the
+   subject.
+3. **A new photo is a new picture, so the zoom resets.** Stepping while zoomed
+   into the top-left corner would land on the next photo's top-left corner,
+   which is not where anyone was looking — it is the same rectangle over a
+   different image. `useImageZoom` takes the photo's path as a reset key and
+   drops both the scale and the offset with it.
+4. **One transform over both layers.** M13 decision 4 paints the cached 512
+   first and swaps the full decode over it; zooming them separately would tear
+   the two apart at exactly the moment the swap lands. They share one wrapper,
+   one `translate ... scale`, and the frame above it keeps its `overflow-hidden`
+   — the same clip the stage already had.
+5. **The keyboard lives with the rest of the view's keyboard.** `+`, `-` and
+   `0` are handled in `PhotosView` ahead of `useListKeyboard`, which would
+   otherwise swallow them into type-ahead. Two consequences, both deliberate:
+   while zoomed the arrows *pan* rather than step, because a keyboard has no
+   other way to move a picture that is bigger than its frame; and Escape resets
+   the zoom instead of clearing the selection, but only while there is a zoom
+   to reset — otherwise it falls through to the list untouched. Stepping is
+   never lost: the chevrons are still there, and one Escape puts the whole photo
+   back and the arrows with it. None of this goes in the M11 registry, which
+   takes commands rather than movement inside a view (§M11 rule 1) — and a
+   registry entry would need pane-keyed zoom state in a store to have something
+   to act on.
+6. **The pan bounds come from the image, not from the frame.** Clamping to the
+   frame is one line shorter and lets a portrait photo be dragged into the empty
+   letterbox beside it. The bounds are the *fitted* size times the scale, which
+   is why the images report their natural size on load — the 512 does so only
+   until the original decodes and replaces its answer with the real one.
+7. **A wheel zooms about the pointer, and a drag moves the picture.** Anchoring
+   the zoom on the cursor is what makes a wheel land on the thing being pointed
+   at instead of sliding it out of the frame; the factor is exponential, so a
+   notch up and a notch down cancel exactly. A trackpad pinch arrives as a
+   `ctrlKey` wheel and takes the same path at four times the rate. The wheel
+   listener is registered by hand and non-passive, for the reason
+   `useOverflowScroll` already documents.
+8. **The zoom pill disables its ends; the step buttons still vanish at theirs.**
+   Inconsistent on purpose. A stepper that loses a button changes width and
+   moves the other two under the cursor, and unlike stepping there is always a
+   way back from either end of a zoom. The percentage between them is also the
+   reset, which is otherwise several presses of minus.
+9. **No state leaves the view.** Zoom is not persisted per pane, per folder or
+   per session — it is where you happen to be looking right now, like a scroll
+   position mid-flick, and M13 decision 12 already declined to persist less
+   than this.
+
+- **Verified in the running app** (mock bridge, whose photos are 1×1 pixels, so
+  a 1600×1200 grid with labelled corners was substituted into the stage's two
+  `img` elements to have something with a shape to move): a wheel at the top
+  right of the frame took it to 135% and moved it down only — at that scale the
+  4:3 image is still narrower than the frame, so there was no sideways slack to
+  give, which is decision 6 working. Two presses of `+` reached 211%, a drag
+  left stopped dead at −100.4px, exactly the overhang `(1021 − 820) / 2`, with
+  no gap at the edge, and the cursor read `grab`. `0` reset it to fit from a
+  focused zoom button, four `=` reached 244%, ArrowRight panned 164px (a fifth
+  of the 820px frame) with the caption still on the same file, and Escape put
+  the photo back whole — after which ArrowRight stepped to the next photo,
+  which opened at 100% with Zoom out disabled. Eight tests in
+  `photos.test.tsx` cover the buttons and the readout, the keyboard, arrow
+  panning and the fall back to stepping, pointer-anchored wheel zoom, drag
+  panning with its clamp, a drag at fit doing nothing, and the reset on a photo
+  change.
+
 ---
 
 ## 3. Risks

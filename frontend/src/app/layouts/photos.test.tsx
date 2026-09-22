@@ -4,7 +4,7 @@
  */
 
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ExplorerLayout } from './ExplorerLayout'
@@ -41,6 +41,14 @@ const filmstrip = () => screen.getByRole('listbox', { name: 'Photos' })
 const stage = () => screen.getByRole('figure')
 const onStage = (name: string) =>
   waitFor(() => expect(within(stage()).getByRole('img', { name })).toBeInTheDocument())
+/** The zoom transform, which both image layers sit under (§M30). */
+const transform = () => (stage().firstElementChild as HTMLElement).style.transform
+/** Its three numbers, because floating point makes string matching a lottery. */
+function transformed() {
+  const match = /translate\((-?[\d.]+)px, (-?[\d.]+)px\) scale\(([\d.]+)\)/.exec(transform())
+  expect(match).not.toBeNull()
+  return { x: Number(match![1]), y: Number(match![2]), scale: Number(match![3]) }
+}
 
 function activePane() {
   const state = useWorkspaceStore.getState()
@@ -102,9 +110,7 @@ describe('the Photos view', () => {
 
     // Decision 2: the status bar, preview panel and file operations all read the
     // selection, so Photos writing to it is what makes them work here for free.
-    await waitFor(() =>
-      expect(selectedPaths()).toEqual([`${CAMERA_ROLL}/IMG_20250101_001.jpg`]),
-    )
+    await waitFor(() => expect(selectedPaths()).toEqual([`${CAMERA_ROLL}/IMG_20250101_001.jpg`]))
   })
 
   it('steps with the arrow keys', async () => {
@@ -198,7 +204,9 @@ describe('the Photos view', () => {
     await waitFor(() => expect(activePane()?.path).toBe(folder))
     await switchToPhotos(user)
 
-    await waitFor(() => expect(within(filmstrip()).getAllByRole('option').length).toBeGreaterThan(0))
+    await waitFor(() =>
+      expect(within(filmstrip()).getAllByRole('option').length).toBeGreaterThan(0),
+    )
     // 80px thumbs across a 1000px stub viewport, plus overscan — nowhere near 2000.
     expect(within(filmstrip()).getAllByRole('option').length).toBeLessThan(60)
   })
@@ -231,6 +239,135 @@ describe('the Photos view', () => {
     const [first] = sizes
     expect(first).toBeDefined()
     expect(first!.width / first!.height).toBeCloseTo(16 / 9, 2)
+  })
+
+  it('zooms the stage in and out, and back to fit', async () => {
+    const { user } = renderApp()
+    await goToCameraRoll(user)
+    await onStage('IMG_20250101_001.jpg')
+
+    // Fit is the floor, so there is nothing to zoom out of yet.
+    expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('100%')
+    expect(screen.getByRole('button', { name: 'Zoom out' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'Zoom in' }))
+    await user.click(screen.getByRole('button', { name: 'Zoom in' }))
+    expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('156%')
+    expect(transform()).toContain('scale(1.5625)')
+
+    await user.click(screen.getByRole('button', { name: 'Zoom out' }))
+    expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('125%')
+
+    // The readout is the way back to the whole picture.
+    await user.click(screen.getByRole('button', { name: 'Reset zoom' }))
+    expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('100%')
+    expect(transform()).toContain('scale(1)')
+  })
+
+  it('zooms with the keyboard and puts the photo back with Escape', async () => {
+    const { user } = renderApp()
+    await goToCameraRoll(user)
+    await onStage('IMG_20250101_001.jpg')
+
+    await user.keyboard('+')
+    expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('125%')
+
+    await user.keyboard('-')
+    expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('100%')
+
+    await user.keyboard('+0')
+    expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('100%')
+
+    await user.keyboard('+{Escape}')
+    expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('100%')
+    // Escape only reset the zoom; the photo is still selected (decision 5).
+    expect(selectedPaths()).toEqual([`${CAMERA_ROLL}/IMG_20250101_001.jpg`])
+  })
+
+  it('pans with the arrows while zoomed, and steps again once it is not', async () => {
+    const { user } = renderApp()
+    await goToCameraRoll(user)
+    await onStage('IMG_20250101_001.jpg')
+
+    await user.keyboard('+')
+    await user.keyboard('{ArrowRight}')
+
+    // A fifth of the 1000px frame is 200px, moved left to show what is off to
+    // the right, and clamped to the 125% overhang of 125px either side.
+    expect(transformed()).toMatchObject({ x: -125, y: 0 })
+    // Still the same photo: while zoomed the arrows move the picture, not the
+    // selection (§M30 decision 5).
+    await onStage('IMG_20250101_001.jpg')
+
+    await user.keyboard('{Escape}')
+    await user.keyboard('{ArrowRight}')
+    await onStage('IMG_20250105_002.jpg')
+  })
+
+  it('zooms about the pointer on a wheel', async () => {
+    const { user } = renderApp()
+    await goToCameraRoll(user)
+    await onStage('IMG_20250101_001.jpg')
+
+    // The stub frame is 1000×800 at the origin, so this is 250px right of centre.
+    fireEvent.wheel(stage(), { deltaY: -100, clientX: 750, clientY: 400 })
+
+    // exp(100 × 0.0025) = 1.284×, and the point under the cursor stays put:
+    // x = 250 − 1.284 × 250, well inside the overhang at this scale.
+    const scale = Math.exp(0.25)
+    const moved = transformed()
+    expect(moved.scale).toBeCloseTo(scale, 6)
+    expect(moved.x).toBeCloseTo(250 * (1 - scale), 6)
+    expect(moved.y).toBeCloseTo(0, 6)
+  })
+
+  it('drags the zoomed photo around, stopping at its edges', async () => {
+    const { user } = renderApp()
+    await goToCameraRoll(user)
+    await onStage('IMG_20250101_001.jpg')
+
+    await user.keyboard('+')
+    const layers = stage().firstElementChild as HTMLElement
+
+    fireEvent.pointerDown(layers, { button: 0, clientX: 500, clientY: 400 })
+    fireEvent.pointerMove(window, { clientX: 560, clientY: 430 })
+    expect(transformed()).toMatchObject({ x: 60, y: 30 })
+
+    // Past the 125px overhang the picture stops rather than leaving a gap.
+    fireEvent.pointerMove(window, { clientX: 5000, clientY: 400 })
+    expect(transformed()).toMatchObject({ x: 125, y: 0 })
+
+    // The drag ends with the pointer, wherever it is by then.
+    fireEvent.pointerUp(window)
+    fireEvent.pointerMove(window, { clientX: 0, clientY: 400 })
+    expect(transformed()).toMatchObject({ x: 125, y: 0 })
+  })
+
+  it('leaves a photo at fit alone when it is dragged', async () => {
+    const { user } = renderApp()
+    await goToCameraRoll(user)
+    await onStage('IMG_20250101_001.jpg')
+
+    // Nothing overflows at 100%, so a drag has nowhere to take it.
+    const layers = stage().firstElementChild as HTMLElement
+    fireEvent.pointerDown(layers, { button: 0, clientX: 500, clientY: 400 })
+    fireEvent.pointerMove(window, { clientX: 700, clientY: 400 })
+    expect(transformed()).toMatchObject({ x: 0, y: 0, scale: 1 })
+    fireEvent.pointerUp(window)
+  })
+
+  it('drops the zoom when the photo changes', async () => {
+    const { user } = renderApp()
+    await goToCameraRoll(user)
+    await onStage('IMG_20250101_001.jpg')
+
+    await user.keyboard('+')
+    expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('125%')
+
+    // A crop of one photo means nothing on the next one (§M30 decision 3).
+    await user.click(screen.getByRole('button', { name: 'Next photo' }))
+    await onStage('IMG_20250105_002.jpg')
+    expect(screen.getByRole('button', { name: 'Reset zoom' })).toHaveTextContent('100%')
   })
 
   it('keeps plain arrows away from the shortcut registry', async () => {

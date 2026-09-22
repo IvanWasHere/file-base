@@ -4,6 +4,8 @@ import { Filmstrip } from '@/features/photos/Filmstrip'
 import { PhotoStage } from '@/features/photos/PhotoStage'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { useDragSource, useDropZone } from '@/hooks/useFileDrag'
+import type { ImageZoom } from '@/hooks/useImageZoom'
+import { useImageZoom } from '@/hooks/useImageZoom'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { usePhotoList, usePhotoNavigation } from '@/hooks/usePhotoNavigation'
 import { useReclaimFocus } from '@/hooks/useReclaimFocus'
@@ -22,6 +24,34 @@ import type { FileItem } from '@/types/file'
  * resizable would be a preference to persist per pane, which is more state than
  * this earns.
  */
+
+/**
+ * Plain keys, no modifiers: the registry owns everything with a Cmd on it.
+ *
+ * Each returns whether it took the key, so a key it declines falls through to
+ * the list's handler untouched — which is how Escape still clears the selection
+ * when there is no zoom to undo.
+ */
+const ZOOM_KEYS: Record<string, ((zoom: ImageZoom) => boolean) | undefined> = {
+  '+': (zoom) => (zoom.zoomIn(), true),
+  '=': (zoom) => (zoom.zoomIn(), true),
+  '-': (zoom) => (zoom.zoomOut(), true),
+  _: (zoom) => (zoom.zoomOut(), true),
+  '0': (zoom) => (zoom.reset(), true),
+  Escape: (zoom) => {
+    if (!zoom.zoomedIn) return false
+    zoom.reset()
+    return true
+  },
+}
+
+/** Read as "which way the picture moves", so Right shows what is off to the right. */
+const PAN_KEYS: Record<string, [number, number] | undefined> = {
+  ArrowLeft: [1, 0],
+  ArrowRight: [-1, 0],
+  ArrowUp: [0, 1],
+  ArrowDown: [0, -1],
+}
 
 interface PhotosViewProps {
   paneId: string
@@ -42,11 +72,16 @@ export function PhotosView({ paneId, path, items, onActivate, onFocus }: PhotosV
 
   const { lead, select, extendTo, selectAll, clear } = useSelection(paneId, photos)
 
+  // Owned here rather than in the stage because the keys are handled here, with
+  // the rest of the view's keyboard (§M30 decision 5). Keyed on the photo, so
+  // stepping always arrives at the whole picture.
+  const zoom = useImageZoom(active?.path ?? '')
+
   // Horizontal: Left/Right step, Up/Down decline. Registering here rather than
   // adding a second pane-scoped key handler is decision 8 — it keeps every
   // binding resolvable in one place, which is the drift M11's registry exists to
   // prevent. Home/End fall out of the same hook.
-  const handleKeyDown = useListKeyboard({
+  const stepKeys = useListKeyboard({
     items: photos,
     lead,
     orientation: 'horizontal',
@@ -55,6 +90,34 @@ export function PhotosView({ paneId, path, items, onActivate, onFocus }: PhotosV
     onSelectAll: selectAll,
     onClear: clear,
   })
+
+  /**
+   * Zoom keys, tried before the list's (§M30 decision 5).
+   *
+   * They go first for two reasons. `+`, `-` and `0` would otherwise be swallowed
+   * by type-ahead, which is not much of a loss — few photos are named "0…" —
+   * and, while zoomed, the arrows pan instead of stepping: there is nowhere else
+   * for a keyboard to move a picture that is bigger than its frame, and stepping
+   * is still a chevron away, or an Escape, which puts the whole photo back and
+   * gives the arrows their usual meaning again.
+   */
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (ZOOM_KEYS[event.key]?.(zoom)) {
+        event.preventDefault()
+        return
+      }
+
+      const pan = zoom.canPan ? PAN_KEYS[event.key] : undefined
+      if (pan) {
+        zoom.panByKey(pan[0], pan[1])
+        event.preventDefault()
+        return
+      }
+    }
+
+    stepKeys(event)
+  }
 
   const handleContextMenu = useContextMenu(paneId, photos)
   const dragSource = useDragSource(paneId, path)
@@ -99,6 +162,8 @@ export function PhotosView({ paneId, path, items, onActivate, onFocus }: PhotosV
           hasNext={hasNext}
           onStep={step}
           onActivate={onActivate}
+          zoom={zoom}
+          attachFrame={zoom.attachFrame}
         />
       )}
 
