@@ -12,6 +12,7 @@ import (
 	"file-base/backend/imagemeta"
 	"file-base/backend/search"
 	"file-base/backend/shell"
+	"file-base/backend/textfile"
 	"file-base/backend/thumbs"
 	"file-base/backend/watcher"
 
@@ -138,6 +139,9 @@ func main() {
 			// Stateless, like shell and thumbs: a header read per call, with
 			// nothing to start or stop (§M23).
 			imagemeta.New(),
+			// Stateless for the same reason: one window of one file per call,
+			// with the handle opened and closed inside it (§M31).
+			textfile.New(),
 		},
 	})
 

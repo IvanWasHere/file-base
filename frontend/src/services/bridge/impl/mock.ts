@@ -682,6 +682,65 @@ function syntheticDigest(seed: string, length: number): string {
   return hex.slice(0, length)
 }
 
+/* ---------- the chunked reader (§M31) ---------- */
+
+const ENCODER = new TextEncoder()
+const DECODER = new TextDecoder()
+
+/** Mirrors `snapBudget` in backend/textfile: how far a snap will look. */
+const SNAP_BUDGET = 64 * 1024
+const MAX_CHUNK = 4 * 1024 * 1024
+const FALLBACK_CHUNK = 64 * 1024
+
+/** The fixed width of a generated line, newline included. */
+const FILLER_WIDTH = 64
+
+/**
+ * One line of filler, stating the offset it begins at.
+ *
+ * Fixed width and ASCII, so a byte index is arithmetic rather than a search,
+ * and what is on screen says where in the file it came from — which is the one
+ * thing worth checking by eye when the navigation is the feature.
+ */
+function fillerLine(index: number): string {
+  const head = `${String(index * FILLER_WIDTH).padStart(12, '0')}  line ${String(index + 1).padStart(9, ' ')}`
+  return `${head.padEnd(FILLER_WIDTH - 1, ' ')}\n`
+}
+
+/**
+ * The bytes of a mock file between two offsets.
+ *
+ * A file with content is that content. A *seeded* file has a size and no
+ * content — the tree is a listing, not a disk image — and this generates only
+ * the window that was asked for, which is how the mock can page through the
+ * 890MB video in the seed without 890MB existing anywhere. That is the same
+ * property the real reader has, for the same reason, so the UI cannot tell the
+ * two apart (§M31 decision 11).
+ */
+function bytesOf(node: Node, from: number, to: number): Uint8Array {
+  if (node.content !== undefined) return ENCODER.encode(node.content).slice(from, to)
+  if (to <= from) return new Uint8Array(0)
+
+  const first = Math.floor(from / FILLER_WIDTH)
+  let text = ''
+  for (let line = first; line * FILLER_WIDTH < to; line += 1) text += fillerLine(line)
+  return ENCODER.encode(text).slice(from - first * FILLER_WIDTH, to - first * FILLER_WIDTH)
+}
+
+/** What the reader sees as the file's size, by the same rule as `bytesOf`. */
+function readableSize(node: Node): number {
+  return node.content !== undefined ? ENCODER.encode(node.content).length : node.size
+}
+
+/** The start of the line containing `offset`, or -1 when none is in reach. */
+function snapBack(node: Node, offset: number): number {
+  const from = Math.max(0, offset - SNAP_BUDGET)
+  const window = bytesOf(node, from, offset)
+  const newline = window.lastIndexOf(10)
+  if (newline < 0) return from === 0 ? 0 : -1
+  return from + newline + 1
+}
+
 /* ---------- archives (M18) ---------- */
 
 const archiveHandlers = new Set<ArchiveHandlers>()
@@ -989,6 +1048,54 @@ export const bridge: Bridge = {
         throw new FsError('unknown', `${basename(node.path)} is not an image`, node.path)
       }
       return { ...info }
+    },
+  },
+  textFile: {
+    // Deliberately as pedantic as Go about clamping, snapping and lengths: the
+    // reader does its arithmetic from what comes back, so a mock that was
+    // loose about any of it would make the tests agree with a reader that
+    // drifts against the real bridge (§M31).
+    readChunk: async (path, offset, size, snapToLine) => {
+      const node = requireNode(path)
+      if (node.isDirectory) {
+        throw new FsError('unknown', 'That is a folder, not a file', node.path)
+      }
+
+      const fileSize = readableSize(node)
+      const width = Math.min(size > 0 ? size : FALLBACK_CHUNK, MAX_CHUNK)
+      let start = Math.min(Math.max(offset, 0), fileSize)
+      let snapped = false
+
+      if (snapToLine && start > 0) {
+        const lineStart = snapBack(node, start)
+        if (lineStart >= 0) {
+          start = lineStart
+          snapped = true
+        }
+      }
+
+      let window = bytesOf(node, start, Math.min(start + width, fileSize))
+
+      // Only when there is more file after this window: the last line of a file
+      // is whole whether or not it ends in a newline.
+      if (snapToLine && start + window.length < fileSize) {
+        const tail = Math.max(0, window.length - SNAP_BUDGET)
+        const newline = window.subarray(tail).lastIndexOf(10)
+        if (newline >= 0) {
+          window = window.slice(0, tail + newline + 1)
+          snapped = true
+        }
+      }
+
+      return {
+        offset: start,
+        // Bytes on disk, which is what the reader steps by — not the length of
+        // the string, where a replacement character stands in for a byte.
+        length: window.length,
+        data: DECODER.decode(window),
+        fileSize,
+        snapped,
+      }
     },
   },
   archives: {

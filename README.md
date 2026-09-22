@@ -130,6 +130,22 @@ buffer so a multi-gigabyte file does not eat memory, with byte-level progress an
 real cancellation. Paste a published checksum and it tells you which algorithm it
 is and whether it matches.
 
+### 📖 A reader for files larger than memory
+
+**Open a 100 GB log on a machine that could not hold a hundredth of it.** The
+reader never opens the file — it opens one window onto it: one seek, one read,
+one chunk on screen. A 100 GB file and a 10 KB file cost exactly the same.
+
+Move by the window with Previous and Next, drag the slider to anywhere in the
+file, or type a byte offset and land on it. Choose how much to hold at once —
+10 KB, 64 KB, 256 KB, 1 MB or 4 MB — and whether windows should be trimmed to
+whole lines, which is a bounded look for the nearest line break rather than a
+promise it will find one.
+
+Positions are byte offsets, never line numbers: the line number 50 GB into a
+file cannot be known without reading the 50 GB in front of it, which is the one
+thing the reader will not do.
+
 ### 📝 New file, from a template
 
 Beyond an empty file: HTML, Markdown, JSON, a React component, Python, a shell
@@ -174,6 +190,10 @@ Stated rather than discovered:
 - 🔒 **AES-256 zips do not open in macOS's own tools.** Archive Utility and the
   bundled `unzip` have never supported WinZip AES; 7-Zip, Keka, WinRAR and The
   Unarchiver all do.
+- 📖 **The text reader reads.** Editing in place is only safe when the
+  replacement is exactly as long as what it replaces; anything else rewrites
+  every byte after it, which on a 100 GB file is a rewrite pretending to be an
+  edit.
 - 🎩 **Native window chrome is not themed yet.** Scrollbars and the translucent
   title-bar strip stay dark under a light window, and launch flashes dark before
   the stored theme is read.

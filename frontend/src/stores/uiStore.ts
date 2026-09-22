@@ -11,6 +11,7 @@ import type { ContextKind } from '@/constants/contextMenus'
 import type { MenuCommandId } from '@/constants/menus'
 import { DEFAULT_LAYOUT, setColumnVisible, type ColumnId, type ColumnLayout } from '@/constants/columns'
 import { DEFAULT_ALGORITHM, type HashAlgorithm } from '@/constants/hashAlgorithms'
+import { DEFAULT_CHUNK_SIZE } from '@/constants/chunkSizes'
 import { DEFAULT_THEME, type ThemePreference } from '@/constants/themes'
 import type { SettingsSection } from '@/constants/settingsSections'
 import type { ConflictPolicy } from '@/types/file'
@@ -152,6 +153,22 @@ export interface OpenWithJob {
   paths: string[]
 }
 
+/**
+ * The open text reader, and the file it is showing (§M31).
+ *
+ * Its own field rather than a `DialogRequest`, for the reason `hashJob` has
+ * one: `dialog` is a one-shot question with a promise waiting on the answer,
+ * and this is a long-lived view with internal state that resolves nothing.
+ *
+ * One path, not a selection. Everything else here that acts on files takes the
+ * lot — tags, hashes, compression — because those are operations applied to
+ * each. Reading is not an operation, it is somewhere you are, and the thing a
+ * reader of a 100GB log wants least is a second file arriving beside it.
+ */
+export interface ReaderRequest {
+  path: string
+}
+
 interface UiState {
   previewOpen: boolean
   sidebarOpen: boolean
@@ -162,6 +179,7 @@ interface UiState {
   compress: CompressRequest | null
   tagsJob: TagsJob | null
   openWithJob: OpenWithJob | null
+  textReader: ReaderRequest | null
   /** Whether the Settings modal is open (§M22). */
   settingsOpen: boolean
   /**
@@ -182,6 +200,14 @@ interface UiState {
   theme: ThemePreference
   /** Persisted: whoever verifies SHA-256 downloads verifies SHA-256 downloads. */
   hashAlgorithm: HashAlgorithm
+  /**
+   * Persisted, by the same reasoning: how much of a file the reader holds at
+   * once is a property of the machine it is running on, not of the file being
+   * read (§M31 decision 4).
+   */
+  readerChunkSize: number
+  /** Persisted: whether the reader trims its windows to whole lines (§M31). */
+  readerSnapToLine: boolean
   /** Persisted: the template id last used, so the next file starts there. */
   lastTemplate: string
   /**
@@ -225,6 +251,9 @@ interface UiState {
   openOpenWith: (paths: string[]) => void
   closeOpenWith: () => void
 
+  openTextReader: (path: string) => void
+  closeTextReader: () => void
+
   openHashes: (paths: string[]) => void
   closeHashes: () => void
 
@@ -235,6 +264,8 @@ interface UiState {
   closeCompress: () => void
   setHashAlgorithm: (algorithm: HashAlgorithm) => void
   setLastTemplate: (id: string) => void
+  setReaderChunkSize: (bytes: number) => void
+  setReaderSnapToLine: (snap: boolean) => void
 
   beginRename: (paneId: string, path: string) => void
   endRename: () => void
@@ -261,12 +292,15 @@ export const useUiStore = create<UiState>()((set) => ({
   compress: null,
   tagsJob: null,
   openWithJob: null,
+  textReader: null,
   settingsOpen: false,
   settingsSection: 'themes',
   theme: DEFAULT_THEME,
   columnLayout: DEFAULT_LAYOUT,
   hiddenContextCommands: [],
   hashAlgorithm: DEFAULT_ALGORITHM,
+  readerChunkSize: DEFAULT_CHUNK_SIZE,
+  readerSnapToLine: true,
   lastTemplate: '',
   renaming: null,
   contextMenu: null,
@@ -325,7 +359,15 @@ export const useUiStore = create<UiState>()((set) => ({
   openOpenWith: (paths) =>
     set(paths.length > 0 ? { openWithJob: { paths }, renaming: null } : {}),
   closeOpenWith: () => set({ openWithJob: null }),
+
+  // A rename editor and a reader cannot both own the keyboard, and the reader
+  // is the thing the user just asked for — the same rule every modal here
+  // follows. Nothing to read would be a window showing no file.
+  openTextReader: (path) => set(path ? { textReader: { path }, renaming: null } : {}),
+  closeTextReader: () => set({ textReader: null }),
   setHashAlgorithm: (algorithm) => set({ hashAlgorithm: algorithm }),
+  setReaderChunkSize: (readerChunkSize) => set({ readerChunkSize }),
+  setReaderSnapToLine: (readerSnapToLine) => set({ readerSnapToLine }),
   setLastTemplate: (id) => set({ lastTemplate: id }),
 
   beginRename: (paneId, path) => set({ renaming: { paneId, path } }),

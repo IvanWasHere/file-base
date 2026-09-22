@@ -2784,6 +2784,120 @@ Decisions:
   panning with its clamp, a drag at fit doing nothing, and the reset on a photo
   change.
 
+### M31 — A reader for files larger than memory ✅ complete
+
+A built-in plain-text reader that opens a file by the window rather than
+whole: one chunk on screen, a byte offset that says where it came from, and
+Previous/Next/Go-to-offset/slider to choose a different one. A 100GB log costs
+the same as a 10KB one, because the reader never holds more than a chunk.
+
+`backend/textfile` is the whole native half: `ReadChunk(path, offset, size,
+snapToLine)`, an `os.Open`, one `ReadAt`, and a `Close`. No cache, no handle
+kept between calls, nothing accumulated.
+
+Decisions:
+
+1. **A modal, not a sixth view mode.** M13 decision 1 said Photos earns its
+   place in the pane because it is a way of *browsing a folder*; this is a way
+   of looking inside one file. As a view mode it would need a pane showing a
+   file rather than a directory — a different thing from every other pane in
+   the app — plus a persisted position per pane, an entry in the View menu, and
+   an answer for what the split layouts do with it. It takes its own keyboard
+   and gives it back on Escape, which is what a modal is for.
+2. **Byte offsets, never line numbers.** The line number at offset
+   52,428,800,000 cannot be known without having read everything in front of
+   it, which is the one thing this feature exists not to do. So the status line
+   counts bytes, the jump field takes bytes, and the slider is a position in
+   bytes. A line number would be the only number on screen that was a guess.
+3. **One file, not a selection.** Tags, hashes and compression take the whole
+   selection because they are operations applied to each. Reading is not an
+   operation, it is somewhere you are — and what the reader of a 100GB log
+   wants least is a second file arriving beside it. The target is picked the
+   way `file.rename` picks one: the lead, which is the item the keyboard cursor
+   is on.
+4. **The chunk size is a property of the machine, and is persisted.** Five
+   sizes, 10 KB to 4 MB. 10 KB is the one that makes the claim literally true
+   on a 512MB machine and a miserable way to read a log; 64 KB fills a window
+   and is the default. Whoever needs 10 KB needs it on every file, which is the
+   same reasoning §M14 persisted the hash algorithm on. The ceiling is Go's:
+   past a few megabytes it is the JSON string crossing the bridge, not the
+   disk, that makes the reader feel slow.
+5. **Snapping to whole lines is bounded, and may decline.** A fixed-size window
+   starts and ends mid-line, which reads badly, so both edges are moved to the
+   nearest newline — but only within 64 KB. A "line" longer than that is a
+   minified bundle or a base64 blob, and reading megabytes to find an edge that
+   may not exist would undo the feature to tidy up the margins. When no newline
+   is in reach the window comes back exactly as asked and says it was not
+   snapped, which is the difference between "these are whole lines" and "this
+   is one very long line".
+6. **The query cache must not become a second copy of the file.** `gcTime: 0`,
+   which is the opposite of what a cache is usually for: a window nothing is
+   looking at is dropped at once, and going back to it is one seek and one read
+   — the cheapest thing this application does. At 4 MB a chunk, an ordinary
+   cache would undo the whole design in about twenty-five pages. `staleTime: 0`
+   for the same reason the Refresh button exists: the reason to open a file
+   this way is often that something is still writing to it.
+7. **The slider picks a window, not a byte.** Its range stops one chunk short
+   of the end and it steps by the chunk size, so dragging it fully right lands
+   on the last full window rather than on a window of nothing, and a drag asks
+   for the same offsets Next would — each one a real read, so asking for fewer
+   of them matters.
+8. **A window is read from the edge the step came from.** Forwards lands at the
+   top, backwards at the bottom, so paging either way is continuous rather than
+   jumping to the top of a window whose last line is where you were. That is
+   why the landing edge travels with the request instead of living in a ref.
+9. **Read-only, and that is a design decision rather than a missing feature.**
+   Replacing a run of bytes with exactly as many bytes is a safe `WriteAt`;
+   replacing it with a different number shifts every byte after it, which for a
+   file of this size is a full rewrite wearing an edit's clothes. A reader that
+   silently rewrote 100GB to insert one character would be a worse product than
+   one that does not write. Same-length in-place editing is a coherent second
+   phase; it is not this one.
+10. **PageDown and PageUp step the file only once the window is read through.**
+    Until then they scroll, which is what they do everywhere else — at 1 MB a
+    chunk there can be thousands of lines on screen, and a key that jumped the
+    file from the first of them would make the larger chunk sizes unusable. At
+    the edge there is nothing left to scroll, so the same key carries on into
+    the next window.
+11. **The mock generates only the window it is asked for.** Seeded files have a
+    size and no bytes behind them, so the mock bridge synthesises 64-byte lines
+    that each state the offset they begin at — which means the 890MB video in
+    the seed can be paged through in a test without 890MB existing anywhere,
+    exactly as the real reader pages through a file without holding it. It also
+    makes the tests able to assert *what was read*, not only what appeared.
+
+- **Verified in the running app** (`wails dev`, real Go bindings, against a
+  genuinely 107,374,182,400-byte sparse file with marker lines written at 0,
+  50 GB and the last 32 bytes, plus a 200MB log of fixed-width lines that state
+  their own offset):
+  - `huge.log` opened instantly and reported `100.00 GB`; typing
+    `53687091200` into Offset showed `HALFWAY MARKER at 53687091200` with the
+    status line reading `53,687,091,200–53,687,091,229 of 107,374,182,400
+    bytes` and the slider handle exactly halfway across. Jumping to
+    `107374182336` showed `THE VERY LAST LINE` and disabled Next.
+  - Timed through the bridge, the three reads took 13ms, 3ms and 1ms, and a
+    hundred random seeks into the 100GB file took 1.23s together — where in the
+    file you look does not change what it costs. A Go harness doing the same
+    three reads reported 0.5 MB of total allocation.
+  - On `server.log`, Next moved `0–10,239` to `10,240–20,479` and the first
+    line of the new window read `000000010240  request 161`, which is the 161st
+    64-byte line: the windows tile the file rather than overlapping or skipping.
+    Previous came back and landed at the *bottom* of the earlier window
+    (decision 8), with `000000010176` as its last line.
+  - Whole lines on, a jump to 100,000 landed on 99,968 — the start of the line
+    containing that byte. Switched off, the same jump landed on exactly 100,000.
+  - The 10 KB chunk size chosen in one session was still selected when the
+    reader was opened on a different file afterwards.
+  - Twelve tests in `textReader.test.tsx` cover the context-menu row and its
+    absence on a folder, the native menu command, the first window, stepping
+    and its limits, the typed jump and a refused one, the chunk-size switch,
+    snapped against raw windows, a deleted file, and — the one that pins the
+    claim — that opening an 890MB file costs exactly one read of one chunk.
+    Twelve in `textfile_test.go` cover the byte window, seeking to the end of a
+    4GB sparse file, clamping, the size bounds, snapping at both edges, the
+    enormous-line refusal, that snapped windows reassemble into the file
+    exactly, invalid UTF-8, a folder and a missing file.
+
 ---
 
 ## 3. Risks

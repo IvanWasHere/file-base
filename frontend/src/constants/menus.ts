@@ -19,6 +19,7 @@ export type MenuCommandId =
   // File
   | 'file.open'
   | 'file.openWith'
+  | 'file.openInTextReader'
   | 'file.openInNewTab'
   | 'file.newFolder'
   | 'file.newFile'
@@ -123,6 +124,9 @@ export const APP_MENUS: MenuDefinition[] = [
       // draws the applications themselves, because it is rebuilt every time it
       // opens and knows what was right-clicked.
       { id: 'file.openWith', label: 'Open With…' },
+      // The one reader that opens a file no application here will: nothing on
+      // the machine will show you the middle of a 100GB log (§M31).
+      { id: 'file.openInTextReader', label: 'Open in Text Reader' },
       { id: 'file.openInNewTab', label: 'Open in New Tab' },
       { separator: true },
       { id: 'file.newFolder', label: 'New Folder' },

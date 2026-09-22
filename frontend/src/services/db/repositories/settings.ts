@@ -17,6 +17,7 @@ import {
   migrateThemePreference,
   type ThemePreference,
 } from '@/constants/themes'
+import { DEFAULT_CHUNK_SIZE, isChunkSize } from '@/constants/chunkSizes'
 import { DEFAULT_LAYOUT, normaliseLayout, type ColumnLayout } from '@/constants/columns'
 import { CONTEXT_COMMANDS } from '@/constants/contextMenus'
 import { isMenuCommandId, type MenuCommandId } from '@/constants/menus'
@@ -37,6 +38,10 @@ export interface AppSettings {
    * the build, and a custom one's belongs to its file.
    */
   lastTemplate: string
+  /** How much of a file the text reader holds at once, in bytes (§M31). */
+  readerChunkSize: number
+  /** Whether the reader trims its windows to whole lines (§M31). */
+  readerSnapToLine: boolean
   /** The detail view's column order, widths and which are shown (§M19, §M22). */
   columnLayout: ColumnLayout
   /** The context-menu rows this user switched off in Settings (§M22). */
@@ -52,6 +57,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   previewOpen: false,
   hashAlgorithm: DEFAULT_ALGORITHM,
   lastTemplate: '',
+  readerChunkSize: DEFAULT_CHUNK_SIZE,
+  readerSnapToLine: true,
   columnLayout: DEFAULT_LAYOUT,
   hiddenContextCommands: [],
 }
@@ -95,6 +102,14 @@ export async function loadSettings(): Promise<AppSettings> {
   // against the list it actually has and falls back to none, so only the type
   // needs guarding here.
   if (typeof stored.lastTemplate !== 'string') delete stored.lastTemplate
+  // Validated against the sizes actually offered, the way the hash algorithm
+  // above is: a number from a later build — or a hand-edited database — would
+  // be a picker with nothing selected, and Go clamps anything absurd anyway, so
+  // the stored value and what the reader is doing would disagree (§M31).
+  if (typeof stored.readerChunkSize !== 'number' || !isChunkSize(stored.readerChunkSize)) {
+    delete stored.readerChunkSize
+  }
+  if (typeof stored.readerSnapToLine !== 'boolean') delete stored.readerSnapToLine
   // Repaired rather than validated: a column layout has parts that can each be
   // wrong on their own — an unknown id, a missing one, weights that sum to
   // anything — and dropping the whole row for one bad field would throw away a

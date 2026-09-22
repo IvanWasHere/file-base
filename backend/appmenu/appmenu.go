@@ -85,6 +85,10 @@ var sections = []section{
 			// changes. The context menu, which is rebuilt every time it opens,
 			// draws the applications themselves (PLAN.md §M25 decision 4).
 			{ID: "file.openWith", Label: "Open With…"},
+			// The built-in reader, which opens a file by the window rather than
+			// whole — the only way to look inside something larger than memory
+			// (PLAN.md §M31).
+			{ID: "file.openInTextReader", Label: "Open in Text Reader"},
 			{ID: "file.openInNewTab", Label: "Open in New Tab"},
 			separator(),
 			{ID: "file.newFolder", Label: "New Folder"},

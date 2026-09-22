@@ -29,6 +29,7 @@ import type {
 } from '@/types/file'
 import type { HashDone, HashProgress, HashRequest, HashResult } from '@/types/hashing'
 import type { ImageInfo } from '@/types/image'
+import type { FileChunk } from '@/types/textFile'
 import type {
   ArchiveDone,
   ArchiveProgress,
@@ -213,6 +214,34 @@ export interface ImagesApi {
   read(path: string): Promise<ImageInfo>
 }
 
+/**
+ * The chunked reader (§M31).
+ *
+ * Separate from `FilesystemApi.readTextFile`, which answers "the first N bytes"
+ * and is what the preview panel wants. This answers "the N bytes at offset X,
+ * and how big the file is" — the only question that can be asked about a 100GB
+ * file without reading one.
+ *
+ * Read-only. Writing into the middle of a file is safe only when the
+ * replacement is exactly as long as what it replaces, and anything else is a
+ * rewrite of everything after it (§M31 decision 9).
+ */
+export interface TextFileApi {
+  /**
+   * One window onto a file.
+   *
+   * `offset` and `size` are clamped rather than rejected — a reader whose chunk
+   * size just changed, or which is sitting at the end of a file that has since
+   * been truncated, is asking a reasonable question with stale numbers. The
+   * chunk says where it actually landed.
+   *
+   * `snapToLine` moves both edges of the window to line boundaries, within a
+   * bounded scan. It cannot fail: a window with no newline in reach comes back
+   * exactly as asked, saying it was not snapped.
+   */
+  readChunk(path: string, offset: number, size: number, snapToLine: boolean): Promise<FileChunk>
+}
+
 export interface ThumbsApi {
   /**
    * Renders a thumbnail and returns it as a `data:` URL, ready for an `img`
@@ -286,6 +315,7 @@ export interface Bridge {
   db: DatabaseApi
   thumbs: ThumbsApi
   images: ImagesApi
+  textFile: TextFileApi
   hashing: HashApi
   archives: ArchiveApi
 }

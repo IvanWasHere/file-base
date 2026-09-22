@@ -65,6 +65,8 @@ export async function hydrate(homePath: string): Promise<HydrationResult> {
     columnLayout: settings.columnLayout,
     hiddenContextCommands: settings.hiddenContextCommands,
     hashAlgorithm: settings.hashAlgorithm,
+    readerChunkSize: settings.readerChunkSize,
+    readerSnapToLine: settings.readerSnapToLine,
     lastTemplate: settings.lastTemplate,
   })
 
@@ -169,6 +171,12 @@ export function startPersistence(now: () => number = Date.now): () => void {
     }
     if (state.hashAlgorithm !== previous.hashAlgorithm) changed.hashAlgorithm = state.hashAlgorithm
     if (state.lastTemplate !== previous.lastTemplate) changed.lastTemplate = state.lastTemplate
+    if (state.readerChunkSize !== previous.readerChunkSize) {
+      changed.readerChunkSize = state.readerChunkSize
+    }
+    if (state.readerSnapToLine !== previous.readerSnapToLine) {
+      changed.readerSnapToLine = state.readerSnapToLine
+    }
 
     if (Object.keys(changed).length > 0) detach(saveSettings(changed), 'settings save')
   })

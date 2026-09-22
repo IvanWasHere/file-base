@@ -25,7 +25,7 @@ export type ContextKind = 'file' | 'folder' | 'background'
 
 export const CONTEXT_MENUS: Record<ContextKind, MenuCommandId[][]> = {
   file: [
-    ['file.open', 'file.openWith'],
+    ['file.open', 'file.openWith', 'file.openInTextReader'],
     ['edit.cut', 'edit.copy', 'file.copyPath'],
     ['file.rename', 'file.duplicate'],
     ['file.compress', 'file.uncompress'],

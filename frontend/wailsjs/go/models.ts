@@ -484,3 +484,28 @@ export namespace shell {
 
 }
 
+export namespace textfile {
+	
+	export class Chunk {
+	    offset: number;
+	    length: number;
+	    data: string;
+	    fileSize: number;
+	    snapped: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Chunk(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.offset = source["offset"];
+	        this.length = source["length"];
+	        this.data = source["data"];
+	        this.fileSize = source["fileSize"];
+	        this.snapped = source["snapped"];
+	    }
+	}
+
+}
+

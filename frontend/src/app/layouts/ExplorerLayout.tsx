@@ -14,6 +14,7 @@ import { CompressDialog } from '@/features/archives/CompressDialog'
 import { SettingsModal } from '@/features/settings/SettingsModal'
 import { TagsDialog } from '@/features/tags/TagsDialog'
 import { OpenWithDialog } from '@/features/openWith/OpenWithDialog'
+import { TextReaderModal } from '@/features/textReader/TextReaderModal'
 import { ContextMenuHost } from '@/components/menus/ContextMenuHost'
 import { MenuBar } from '@/components/toolbar/MenuBar'
 import { TabBar } from '@/components/toolbar/TabBar'
@@ -154,6 +155,9 @@ export function ExplorerLayout() {
       <CompressDialog />
       <TagsDialog />
       <OpenWithDialog />
+      {/* Above the pickers: the reader is a place to be rather than a question
+          to answer, and a confirmation raised behind it stays readable (§M31). */}
+      <TextReaderModal />
       {/* Last of the modals: Settings can be opened from a context menu, and
           whatever raised it should be drawn beneath it. */}
       <SettingsModal />

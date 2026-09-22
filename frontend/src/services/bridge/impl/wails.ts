@@ -29,6 +29,7 @@ import {
   toArchiveProgress,
   toFileItem,
   toFileSystemEvent,
+  toFileChunk,
   toImageInfo,
   toHashDone,
   toHashProgress,
@@ -70,6 +71,7 @@ import {
 } from '../../../../wailsjs/go/archive/Archive'
 import { Generate } from '../../../../wailsjs/go/thumbs/Thumbs'
 import { Read as ReadImageInfo } from '../../../../wailsjs/go/imagemeta/ImageMeta'
+import { ReadChunk } from '../../../../wailsjs/go/textfile/TextFile'
 import {
   ApplicationsFor,
   OpenFile,
@@ -202,6 +204,13 @@ export const bridge: Bridge = {
     // thirty years of cameras and editors, and a field of the wrong shape
     // should cost a row rather than the panel (§M23).
     read: (path) => guard(async () => toImageInfo(await ReadImageInfo(path))),
+  },
+  textFile: {
+    // Every number the reader shows comes back from here rather than being
+    // kept on the TypeScript side: where the window actually starts, how long
+    // it is, and how big the file is right now (§M31).
+    readChunk: (path, offset, size, snapToLine) =>
+      guard(async () => toFileChunk(await ReadChunk(path, offset, size, snapToLine))),
   },
   archives: {
     extract: (request) => guard(() => Extract(request)),

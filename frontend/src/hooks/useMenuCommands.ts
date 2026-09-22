@@ -128,6 +128,15 @@ export function useMenuCommands(): MenuCommandState {
   }
 
   /**
+   * What the reader opens: one file (§M31 decision 3).
+   *
+   * The first of `openWithTargets`, which has already dropped the folders and
+   * put the lead in front — so a multi-selection opens the item the keyboard
+   * cursor is on, exactly as `file.rename` does.
+   */
+  const readerTarget = (): string | undefined => openWithTargets()[0]
+
+  /**
    * Favourites act on a folder: the selected one, or — with nothing selected,
    * which is the background context menu's case — the folder being shown.
    */
@@ -229,6 +238,13 @@ export function useMenuCommands(): MenuCommandState {
       case 'file.openWith':
         ui.openOpenWith(openWithTargets())
         return
+      // The reader is in-window, so unlike Open With this hands the file to
+      // nothing outside the application (§M31).
+      case 'file.openInTextReader': {
+        const target = readerTarget()
+        if (target) ui.openTextReader(target)
+        return
+      }
       case 'file.openInNewTab': {
         const target = targets.find((path) => cachedItem(path)?.isDirectory)
         if (target) openTab(target)
@@ -430,6 +446,9 @@ export function useMenuCommands(): MenuCommandState {
       // not worth the explanation.
       case 'file.openWith':
         return openWithTargets().length > 0
+      // Files only, for the reason Open With is: a folder has nothing to read.
+      case 'file.openInTextReader':
+        return readerTarget() !== undefined
       // Enabled when the selection could hold a file. An item the pane's cache
       // cannot classify counts as one: the alternative is a dead button
       // wherever the selection came from somewhere the cache does not cover,
@@ -503,6 +522,7 @@ export function useMenuCommands(): MenuCommandState {
     // folder menu has Open in New Tab in the same group, and a permanently
     // grey row beside it reads as a bug.
     if (id === 'file.openWith') return openWithTargets().length > 0
+    if (id === 'file.openInTextReader') return readerTarget() !== undefined
     if (id === 'file.addToFavorites') return target === undefined || !isPinned(target)
     if (id === 'file.removeFromFavorites') return target !== undefined && isPinned(target)
     return true

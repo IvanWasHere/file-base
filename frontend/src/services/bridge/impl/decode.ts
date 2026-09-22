@@ -24,13 +24,14 @@ import type {
 import type { HashDone, HashProgress, HashResult } from '@/types/hashing'
 import type { ArchiveDone, ArchiveProgress } from '@/types/archive'
 import type { ImageInfo } from '@/types/image'
+import type { FileChunk } from '@/types/textFile'
 import type { FsErrorCode } from '@/types/errors'
 import { FsError } from '@/types/errors'
 import type { Applications, ExternalDrop } from '../types'
 import { normaliseTags } from '@/constants/tags'
 import { categorize } from '@/utils/fileCategory'
 import { extname } from '@/utils/path'
-import type { filesystem } from '../../../../wailsjs/go/models'
+import type { filesystem, textfile } from '../../../../wailsjs/go/models'
 
 const ERROR_PREFIX = 'fs-error:'
 
@@ -390,6 +391,25 @@ export function toOperationResult(wire: filesystem.OpResult): OperationResult {
       path: failure.path,
       message: failure.message,
     })),
+  }
+}
+
+/**
+ * Flattens Go's `textfile.Chunk`, for the reason `toOperationResult` gives:
+ * Wails hands back a class instance, and a React Query cache holding one
+ * compares differently from the plain object the mock bridge returns.
+ *
+ * Structurally identical otherwise — there is nothing to derive here, because
+ * every number in a chunk is a fact about bytes on disk that only Go can know
+ * (§M31).
+ */
+export function toFileChunk(wire: textfile.Chunk): FileChunk {
+  return {
+    offset: wire.offset,
+    length: wire.length,
+    data: wire.data,
+    fileSize: wire.fileSize,
+    snapped: wire.snapped,
   }
 }
 
