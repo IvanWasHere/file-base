@@ -5,7 +5,11 @@ the table references them by path, and the website shows copies of them from
 `docs/site/assets/img/showcase/`.
 
 All four are **16:9 at 1920 × 1080**, in the default **Nocturne** theme, and
-generated rather than hand-taken, so they can be redone whenever the UI changes:
+generated rather than hand-taken, so they can be redone whenever the UI changes.
+
+The easy way is the **Screenshots** workflow (Actions → Screenshots → Run
+workflow → `readme`), which regenerates them on a macOS runner, refreshes the
+website's copies, and opens a pull request. Locally:
 
 ```bash
 (cd frontend && npm run dev:mock -- --port 5199 --strictPort)   # in one terminal

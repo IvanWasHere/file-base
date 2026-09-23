@@ -1,4 +1,8 @@
-# Builds the Jekyll site in docs/site and publishes it to GitHub Pages.
+# The website in docs/site: checked on every pull request that touches it,
+# published to GitHub Pages from main.
+#
+#   pull request → build + check          (nothing is published)
+#   push to main → build + check → deploy
 #
 # One-time setup: repository Settings → Pages → Build and deployment →
 # Source: "GitHub Actions". Without that the deploy job has nowhere to publish.
@@ -11,18 +15,21 @@ on:
     paths:
       - docs/site/**
       - .github/workflows/pages.yml
+  pull_request:
+    paths:
+      - docs/site/**
+      - .github/workflows/pages.yml
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-# One deploy at a time; a newer push supersedes a queued one, but a deploy
-# already running is allowed to finish rather than leaving Pages half-updated.
+# One run per branch; a newer push to a pull request supersedes the last one.
+# On main a deploy already running is allowed to finish rather than leaving
+# Pages half-updated.
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: pages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -39,21 +46,43 @@ jobs:
           bundler-cache: true
           working-directory: docs/site
 
+      # Every guide page reachable from the sidebar, and nothing in the sidebar
+      # pointing at a page that is not there.
+      - name: Check navigation
+        run: ruby scripts/check-nav.rb
+
+      # The base path Pages will serve from (/file-base). configure-pages only
+      # works where Pages is enabled, so pull requests from forks use the
+      # repository name instead.
       - id: pages
+        if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
 
       - name: Build
-        run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
+        run: bundle exec jekyll build --strict_front_matter --baseurl "$BASE_PATH"
         env:
           JEKYLL_ENV: production
+          BASE_PATH: ${{ steps.pages.outputs.base_path || format('/{0}', github.event.repository.name) }}
 
-      - uses: actions/upload-pages-artifact@v3
+      # Internal links, images and anchors. External links are not followed:
+      # a flaky third-party site should not block a docs change.
+      - name: Check links
+        run: bundle exec htmlproofer _site --disable-external --swap-urls "^$BASE_PATH/:/"
+        env:
+          BASE_PATH: ${{ steps.pages.outputs.base_path || format('/{0}', github.event.repository.name) }}
+
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: docs/site/_site
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

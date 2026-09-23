@@ -1,36 +1,39 @@
-/* FileBase docs — the app's own palette: near-black surfaces, one amber accent. */
+/* FileBase docs — the app's default Nocturne palette: deep navy, one cyan accent.
+   Values mirror NOCTURNE in frontend/src/constants/palette.ts. */
 
 :root {
-  --bg: #0c0c11;
-  --surface: #15151c;
-  --surface-2: #1c1c25;
-  --edge: #2a2a36;
-  --text: #e9e9ef;
-  --text-2: #a3a3b3;
-  --text-3: #74748a;
-  --accent: #f2b441;
-  --accent-ink: #1a1405;
-  --accent-soft: rgba(242, 180, 65, 0.12);
-  --code-bg: #1a1a22;
-  --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  --bg: #0a0e1a;
+  --surface: #0f1424;
+  --surface-2: #151b2e;
+  --edge: #263056;
+  --text: #dde4f5;
+  --text-2: #8b95b8;
+  --text-3: #5b6488;
+  --accent: #56d4dd;
+  --accent-ink: #04121a;
+  --accent-soft: rgba(86, 212, 221, 0.12);
+  --code-bg: #151b2e;
+  --shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
   --radius: 12px;
   color-scheme: dark;
 }
 
+/* Nocturne has no light twin in the app, so this is its daylight reading: the
+   same cool hues, with the accent deepened until it passes contrast on white. */
 @media (prefers-color-scheme: light) {
   :root {
-    --bg: #f6f6f8;
+    --bg: #f4f6fb;
     --surface: #ffffff;
-    --surface-2: #efeff3;
-    --edge: #dedee6;
-    --text: #17171f;
-    --text-2: #4c4c5c;
-    --text-3: #7a7a8c;
-    --accent: #b97a06;
+    --surface-2: #e9edf7;
+    --edge: #d5dbeb;
+    --text: #141a2e;
+    --text-2: #444e6e;
+    --text-3: #6b7493;
+    --accent: #0e7c86;
     --accent-ink: #ffffff;
-    --accent-soft: rgba(185, 122, 6, 0.1);
-    --code-bg: #efeff3;
-    --shadow: 0 20px 50px rgba(20, 20, 40, 0.14);
+    --accent-soft: rgba(14, 124, 134, 0.1);
+    --code-bg: #e9edf7;
+    --shadow: 0 20px 50px rgba(20, 30, 60, 0.14);
     color-scheme: light;
   }
 }
