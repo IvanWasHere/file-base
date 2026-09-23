@@ -1,14 +1,14 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "file-base",
-  "outputfilename": "file-base",
+  "name": "FileBase",
+  "outputfilename": "FileBase",
   "frontend:install": "npm install",
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
   "author": {
     "name": "Ivan Marinkovic",
-    "email": "marinkovic2006@gmail.com"
+    "email": "tellmemorebitte@gmail.com"
   },
   "info": {
     "productName": "File Base"

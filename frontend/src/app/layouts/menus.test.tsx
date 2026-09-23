@@ -294,22 +294,21 @@ describe('the shortcut registry', () => {
     await waitFor(() => expect(useUiStore.getState().previewOpen).toBe(!before))
   })
 
-  // Found by pressing Space in the running app: selecting an item opens the
-  // preview, and that rule was written as "something is selected and the panel
-  // is shut" — so closing it reopened it on the next render. The toggle looked
-  // dead whenever a file was highlighted, which is most of the time.
-  it('closes the preview even while something is selected', async () => {
+  // The panel opens only when asked for: selecting a file leaves it shut, and
+  // Space is what opens and closes it with the file still highlighted.
+  it('leaves the preview to Space rather than to the selection', async () => {
     const { user } = renderApp()
     await goToDocuments(user)
 
     await user.click(await rowFor('Resume\\.pdf'))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(useUiStore.getState().previewOpen).toBe(false)
+
+    await user.keyboard(' ')
     await waitFor(() => expect(useUiStore.getState().previewOpen).toBe(true))
 
     await user.keyboard(' ')
     await waitFor(() => expect(useUiStore.getState().previewOpen).toBe(false))
-    // Still shut a beat later — the reopen was a render-driven snap-back.
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(useUiStore.getState().previewOpen).toBe(false)
   })
 
   // Space is also the first character of no filename anyone searches for, which
@@ -320,7 +319,7 @@ describe('the shortcut registry', () => {
     listing().focus()
 
     await user.keyboard('meeting notes')
-    expect(useUiStore.getState().previewOpen).toBe(true) // opened by the selection
+    expect(useUiStore.getState().previewOpen).toBe(false) // the space went to the buffer
     expect(selectedPaths()).toEqual([`${DOCUMENTS}/Meeting Notes.docx`])
   })
 

@@ -104,7 +104,7 @@ jobs:
       - name: Package
         run: |
           ditto -c -k --sequesterRsrc --keepParent \
-            build/bin/file-base.app \
+            build/bin/FileBase.app \
             "build/bin/FileBase-${{ steps.version.outputs.version }}-universal.zip"
 
       # The download most people want: mount it, drag the app onto the
@@ -119,7 +119,7 @@ jobs:
         run: |
           STAGE="$RUNNER_TEMP/dmg"
           rm -rf "$STAGE" && mkdir -p "$STAGE"
-          cp -R build/bin/file-base.app "$STAGE/"
+          cp -R build/bin/FileBase.app "$STAGE/"
           # The half of "drag to install" that people actually drag onto.
           ln -s /Applications "$STAGE/Applications"
           hdiutil create -volname "File Base" -srcfolder "$STAGE" \
@@ -131,11 +131,11 @@ jobs:
           # expected answers, and printing them each run is what stops the
           # unsigned state from being a surprise later. Neither fails the build.
           echo "--- signature (expect: adhoc) ---"
-          codesign -dv --verbose=4 build/bin/file-base.app 2>&1 || true
+          codesign -dv --verbose=4 build/bin/FileBase.app 2>&1 || true
           echo "--- Gatekeeper assessment (expect: rejected) ---"
-          spctl -a -vv -t exec build/bin/file-base.app 2>&1 || true
+          spctl -a -vv -t exec build/bin/FileBase.app 2>&1 || true
           echo "--- architectures ---"
-          lipo -archs build/bin/file-base.app/Contents/MacOS/file-base
+          lipo -archs build/bin/FileBase.app/Contents/MacOS/FileBase
           echo "--- what will be attached ---"
           ls -lh build/bin/*.zip build/bin/*.dmg
 
@@ -162,7 +162,7 @@ jobs:
             **Requires macOS 10.13 or later.** Universal — Apple silicon and Intel.
 
             **Download `FileBase-${{ steps.version.outputs.version }}.dmg`**, open
-            it, and drag **file-base.app** onto the Applications shortcut. The
+            it, and drag **FileBase.app** onto the Applications shortcut. The
             `.zip` is the same app if you prefer it.
 
             The app is not signed yet, so macOS blocks the first launch. It is

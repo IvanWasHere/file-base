@@ -41,7 +41,7 @@
 ## Install
 
 Download the **`.dmg`** from [Releases](https://github.com/IvanWasHere/file-base/releases),
-open it, and drag **file-base.app** onto the Applications shortcut inside. (A
+open it, and drag **FileBase.app** onto the Applications shortcut inside. (A
 `.zip` of the same app is attached too, if you prefer that.) Universal — Apple
 silicon and Intel — and needs macOS 10.13 or later.
 

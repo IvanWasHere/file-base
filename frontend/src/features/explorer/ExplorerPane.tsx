@@ -39,8 +39,6 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
   const navigate = useWorkspaceStore((state) => state.navigate)
   const setSort = useWorkspaceStore((state) => state.setSort)
   const showHiddenFiles = useUiStore((state) => state.showHiddenFiles)
-  const setPreviewOpen = useUiStore((state) => state.setPreviewOpen)
-  const previewOpen = useUiStore((state) => state.previewOpen)
   const clearSelection = useSelectionStore((state) => state.clear)
   const { selected } = usePaneSelection(pane.id)
 
@@ -153,37 +151,6 @@ export function ExplorerPane({ pane, index, isActive, showLetter, onFocus }: Exp
   // What the views scroll to the top for. Identifies the pinned set, so it
   // reveals a new arrival once and leaves later scrolling alone.
   const reveal = pinning && !searching && arrival ? arrival.paths.join('\n') : undefined
-
-  /**
-   * Selecting a *file* reveals the preview if it was closed. Driven by the
-   * selection itself rather than a click handler, so keyboard and marquee
-   * selection behave the same as a click.
-   *
-   * **A folder does not reveal it.** The panel has nothing to add about a
-   * folder that the listing does not already show, so opening it on a folder
-   * click only takes width away from the thing being browsed — and browsing is
-   * mostly clicking through folders. Adding a file to the selection still
-   * reveals it, which is why the guard below tracks whether a *file* was
-   * selected rather than whether anything was.
-   *
-   * Only on the *transition*, though. Reacting to "a file is selected and the
-   * panel is shut" meant the panel reopened the instant it was closed, which
-   * made M11's Space and the View menu's Show Preview look broken whenever a
-   * file was highlighted — which is most of the time. An explicit close has to
-   * outlast the selection that provoked it.
-   *
-   * Read off `shown` rather than `items` so a search result counts too.
-   */
-  const fileSelected = useMemo(
-    () => shown.some((item) => !item.isDirectory && selected.has(item.path)),
-    [shown, selected],
-  )
-
-  const hadFile = useRef(false)
-  useEffect(() => {
-    if (fileSelected && !hadFile.current && !previewOpen) setPreviewOpen(true)
-    hadFile.current = fileSelected
-  }, [fileSelected, previewOpen, setPreviewOpen])
 
   const handleActivate = (item: FileItem) => {
     if (item.broken) return

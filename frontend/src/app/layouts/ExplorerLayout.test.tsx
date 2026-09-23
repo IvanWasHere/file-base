@@ -424,21 +424,19 @@ describe('view modes', () => {
 })
 
 describe('preview and status bar', () => {
-  it('opens the preview when a file is selected, and shows its metadata', async () => {
+  it('leaves the preview shut when a file is selected, until it is asked for', async () => {
     const { user } = renderApp()
 
     await user.dblClick(await rowFor('Documents'))
     await user.click(await rowFor('Resume\\.pdf'))
+    await waitFor(() => expect(screen.getByText('1 selected')).toBeInTheDocument())
+    expect(screen.queryByRole('complementary', { name: 'Preview' })).toBeNull()
 
+    await user.click(screen.getByRole('button', { name: 'Toggle preview' }))
     const preview = await screen.findByRole('complementary', { name: 'Preview' })
     expect(within(preview).getByText('Resume.pdf')).toBeInTheDocument()
   })
 
-  /**
-   * Browsing is mostly clicking through folders, and the panel has nothing to
-   * add about one that the listing does not already show — so taking width away
-   * from the listing every time is the wrong trade.
-   */
   it('leaves the preview shut when a folder is selected', async () => {
     const { user } = renderApp()
 
@@ -446,23 +444,6 @@ describe('preview and status bar', () => {
     await waitFor(() => expect(screen.getByText('1 selected')).toBeInTheDocument())
 
     expect(screen.queryByRole('complementary', { name: 'Preview' })).toBeNull()
-  })
-
-  // Adding a file to a selection that began with a folder still reveals it,
-  // which is why the guard tracks whether a *file* is selected rather than
-  // whether anything is.
-  it('opens the preview when a file joins a folder selection', async () => {
-    const { user } = renderApp()
-
-    await user.dblClick(await rowFor('Documents'))
-    await user.click(await rowFor('Work'))
-    expect(screen.queryByRole('complementary', { name: 'Preview' })).toBeNull()
-
-    await user.keyboard('{Meta>}')
-    await user.click(await rowFor('Resume\\.pdf'))
-    await user.keyboard('{/Meta}')
-
-    expect(await screen.findByRole('complementary', { name: 'Preview' })).toBeInTheDocument()
   })
 
   it('reports the selected count', async () => {
@@ -475,8 +456,8 @@ describe('preview and status bar', () => {
   it('clears the selection when the pane navigates', async () => {
     const { user } = renderApp()
 
-    // Opened by hand: a folder no longer reveals it, and this test is about the
-    // selection being dropped rather than about what opens the panel.
+    // Opened by hand: only the button opens the panel, and this test is about
+    // the selection being dropped rather than about what opens it.
     await rowFor('Documents')
     await user.click(screen.getByRole('button', { name: 'Toggle preview' }))
     await screen.findByRole('complementary', { name: 'Preview' })

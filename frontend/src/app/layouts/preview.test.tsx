@@ -33,6 +33,17 @@ function renderApp() {
 const rowFor = (name: string) => screen.findByRole('row', { name: new RegExp(`^${name}\\b`) })
 const preview = () => screen.findByRole('complementary', { name: 'Preview' })
 
+// The panel opens from its button, never from a selection, so the tests about
+// what it shows open it first — once the listing, and the saved settings that
+// would otherwise close it again, have loaded.
+async function renderWithPreview(firstRow = 'Documents') {
+  const rendered = renderApp()
+  await rowFor(firstRow)
+  await rendered.user.click(screen.getByRole('button', { name: 'Toggle preview' }))
+  await preview()
+  return rendered
+}
+
 function fileLike(overrides: Partial<FileItem>): FileItem {
   return {
     id: '/x',
@@ -96,7 +107,7 @@ describe('text preview', () => {
   it('shows the contents of a selected text file', async () => {
     vi.spyOn(bridge.fs, 'readTextFile').mockResolvedValue('export const answer = 42')
 
-    const { user } = renderApp()
+    const { user } = await renderWithPreview()
     await user.dblClick(await rowFor('Projects'))
     await user.dblClick(await rowFor('vault-explorer'))
     await user.click(await rowFor('README\\.md'))
@@ -118,7 +129,7 @@ describe('text preview', () => {
       }),
     ])
 
-    const { user } = renderApp()
+    const { user } = await renderWithPreview('huge\\.log')
     await user.click(await rowFor('huge\\.log'))
 
     expect(await screen.findByText(/Showing the first/)).toBeInTheDocument()
@@ -130,7 +141,7 @@ describe('text preview', () => {
       new FsError('permission-denied', 'nope', `${HOME}/x`),
     )
 
-    const { user } = renderApp()
+    const { user } = await renderWithPreview()
     await user.dblClick(await rowFor('Projects'))
     await user.dblClick(await rowFor('vault-explorer'))
     await user.click(await rowFor('README\\.md'))
@@ -141,7 +152,7 @@ describe('text preview', () => {
 
 describe('image preview', () => {
   it('renders the image inline', async () => {
-    const { user } = renderApp()
+    const { user } = await renderWithPreview()
     await user.dblClick(await rowFor('Pictures'))
     await user.dblClick(await rowFor('Wallpapers'))
     await user.click(await rowFor('neon-city\\.jpg'))
@@ -156,7 +167,7 @@ describe('image preview', () => {
       new FsError('too-large', 'too big', `${HOME}/x`),
     )
 
-    const { user } = renderApp()
+    const { user } = await renderWithPreview()
     await user.dblClick(await rowFor('Pictures'))
     await user.dblClick(await rowFor('Wallpapers'))
     await user.click(await rowFor('neon-city\\.jpg'))
@@ -175,7 +186,7 @@ describe('metadata', () => {
       }),
     )
 
-    const { user } = renderApp()
+    const { user } = await renderWithPreview()
     await user.dblClick(await rowFor('Projects'))
     await user.dblClick(await rowFor('vault-explorer'))
     await user.click(await rowFor('README\\.md'))
@@ -188,7 +199,7 @@ describe('metadata', () => {
   })
 
   it('falls back to the file icon for a type with no preview', async () => {
-    const { user } = renderApp()
+    const { user } = await renderWithPreview()
     await user.dblClick(await rowFor('Movies'))
     await user.click(await rowFor('tutorial-react-hooks\\.mp4'))
 
@@ -212,7 +223,7 @@ describe('image metadata', () => {
   }
 
   it('shows the camera data a photograph carries', async () => {
-    const { user } = renderApp()
+    const { user } = await renderWithPreview()
     await user.dblClick(await rowFor('Pictures'))
     await user.dblClick(await rowFor('Camera Roll'))
     await user.click(await rowFor('IMG_20250101_001\\.jpg'))
@@ -234,7 +245,7 @@ describe('image metadata', () => {
   })
 
   it('shows where a geotagged photo was taken, in hemispheres', async () => {
-    const { user } = renderApp()
+    const { user } = await renderWithPreview()
     await user.dblClick(await rowFor('Pictures'))
     await user.dblClick(await rowFor('Camera Roll'))
     await user.click(await rowFor('IMG_20250101_001\\.jpg'))
@@ -248,7 +259,7 @@ describe('image metadata', () => {
   // A screenshot has dimensions and nothing else, and the panel has to say so
   // by falling silent rather than by printing a column of dashes (§M23).
   it('shows only what a screenshot actually knows', async () => {
-    const { user } = renderApp()
+    const { user } = await renderWithPreview()
     await user.dblClick(await rowFor('Pictures'))
     await user.dblClick(await rowFor('Screenshots'))
     await user.click(await rowFor('bug-report-01\\.png'))
@@ -261,7 +272,7 @@ describe('image metadata', () => {
   })
 
   it('says nothing at all about a file that is not an image', async () => {
-    const { user } = renderApp()
+    const { user } = await renderWithPreview()
     await user.dblClick(await rowFor('Movies'))
     await user.click(await rowFor('tutorial-react-hooks\\.mp4'))
 
@@ -277,7 +288,7 @@ describe('image metadata', () => {
       new FsError('unknown', 'not an image', `${HOME}/x`),
     )
 
-    const { user } = renderApp()
+    const { user } = await renderWithPreview()
     await user.dblClick(await rowFor('Pictures'))
     await user.dblClick(await rowFor('Wallpapers'))
     await user.click(await rowFor('neon-city\\.jpg'))
@@ -314,7 +325,7 @@ describe('a file that is not really an image', () => {
   it('falls back to the icon instead of showing an empty frame', async () => {
     vi.spyOn(bridge.fs, 'readFileBase64').mockResolvedValue('bm90IGFuIGltYWdl')
 
-    const { user } = renderApp()
+    const { user } = await renderWithPreview()
     await user.dblClick(await rowFor('Pictures'))
     await user.dblClick(await rowFor('Wallpapers'))
     await user.click(await rowFor('neon-city\\.jpg'))
