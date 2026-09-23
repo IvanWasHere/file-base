@@ -56,9 +56,10 @@ func main() {
 			Assets: assets,
 		},
 
-		// Matches --bg-deep in frontend/src/styles/theme.css, so the window does
-		// not flash a different colour before the webview paints.
-		BackgroundColour: &options.RGBA{R: 0x0e, G: 0x0e, B: 0x12, A: 1},
+		// Matches --bg-deep of the default theme (Nocturne, DEFAULT_DARK_THEME_ID
+		// in frontend/src/constants/palette.ts), so the window does not flash a
+		// different colour before the webview paints.
+		BackgroundColour: &options.RGBA{R: 0x0a, G: 0x0e, B: 0x1a, A: 1},
 
 		// Accepting files dragged in from Finder (M9). Dragging *out* to Finder
 		// is not supported by the webview — see PLAN.md §3.

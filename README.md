@@ -9,6 +9,10 @@
   Go + React in one signed binary — no cgo, no bundled helpers, no Electron.
 </p>
 
+<p align="center">
+  <a href="https://ivanwashere.github.io/file-base/"><b>Website &amp; user guide</b></a>
+</p>
+
 ---
 
 ## Screenshots
@@ -16,21 +20,21 @@
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/screen1.png" alt="Details view with the sidebar and preview panel">
+      <img src="docs/screenshots/screen1.png" alt="Three tabs and a Split Right layout: Documents, a Photos view of Wallpapers and a project folder, with the preview panel showing the selected photo">
       <p align="center"><b>🗂️ Browse</b><br>Tabs, places, photo view and a live preview panel.</p>
     </td>
     <td width="50%">
-      <img src="docs/screenshots/screen2.png" alt="Four panes in a 2 × 2 grid, each in a different folder">
+      <img src="docs/screenshots/screen2.png" alt="The Compress dialog creating a password-protected zip split into 100 MB parts">
             <p align="center"><b>🗜️ Archive</b><br>Open twenty-odd formats, create eight.</p>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/screen3.png" alt="Paste a published checksum and it tells you which algorithm it is and whether it matches">
-     <p align="center"><b>🔐 Checksums</b><br>Paste a published checksum and it tells you which algorithm it is and whether it matches.</p>
+      <img src="docs/screenshots/screen3.png" alt="Calculate Hashes with a pasted SHA-256 checksum matching one of four files">
+     <p align="center"><b>🔐 Checksums</b><br>Paste a published checksum and the file it matches lights up.</p>
     </td>
     <td width="50%">
-      <img src="docs/screenshots/screen4.png" alt="Define and use templates for new files.<">
+      <img src="docs/screenshots/screen4.png" alt="The New File dialog creating Button.tsx from the React Component template">
       <p align="center"><b>💾 New File Templates</b><br>Define and use templates for new files.</p>
     </td>
   </tr>

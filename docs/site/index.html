@@ -1,0 +1,75 @@
+---
+layout: default
+---
+<section class="hero">
+  <img class="icon" src="{{ '/assets/img/icon.png' | relative_url }}" alt="FileBase icon">
+  <h1>FileBase</h1>
+  <p class="tagline">A fast, native-feeling file explorer for macOS. Tabs, split panes, archives you can walk into, checksums, and a reader for files bigger than your memory.</p>
+  <div class="actions">
+    <a class="button" href="https://github.com/{{ site.repository }}/releases/latest">Download for macOS</a>
+    <a class="button ghost" href="{{ '/guide/getting-started/' | relative_url }}">Read the guide</a>
+  </div>
+  <p class="note">Free and open source · Apple silicon and Intel · macOS 10.13 or later</p>
+</section>
+
+<div class="hero-shot">
+  <img class="shot" src="{{ '/assets/img/showcase/screen1.png' | relative_url }}" alt="FileBase with three panes: a folder list, a photo view and a Markdown folder, with the preview panel open">
+</div>
+
+<section class="features">
+  <h2>Everything a file manager should do, and a few things Finder doesn't</h2>
+
+  <div class="feature">
+    <div class="feature-text">
+      <h3>Tabs and nine split layouts</h3>
+      <p>Open tabs like a browser, then split any tab into two, three or four panes. Each pane has its own folder, history and selection, so you can drag files straight from one to another.</p>
+      <a href="{{ '/guide/tabs-and-panes/' | relative_url }}">Tabs and split panes →</a>
+    </div>
+    <img class="shot" src="{{ '/assets/img/guide/split-grid.png' | relative_url }}" alt="Four panes in a 2 × 2 grid, each in a different folder">
+  </div>
+
+  <div class="feature">
+    <div class="feature-text">
+      <h3>Five ways to look at a folder</h3>
+      <p>Details, three sizes of icons, and a Photos view with a big stage image and a filmstrip. FileBase remembers the view for each folder, so Pictures can stay on photos while Documents stays on details.</p>
+      <a href="{{ '/guide/views/' | relative_url }}">Views →</a>
+    </div>
+    <img class="shot" src="{{ '/assets/img/guide/photos.png' | relative_url }}" alt="Photos view with a large image and a filmstrip">
+  </div>
+
+  <div class="feature">
+    <div class="feature-text">
+      <h3>Archives that open like folders</h3>
+      <p>Double-click a zip, 7z, rar or tarball and browse it like any other folder. Compress to zip or tar, with optional splitting and an AES-256 password.</p>
+      <a href="{{ '/guide/archives/' | relative_url }}">Archives →</a>
+    </div>
+    <img class="shot" src="{{ '/assets/img/showcase/screen2.png' | relative_url }}" alt="The Compress dialog with format, split and password options">
+  </div>
+
+  <div class="feature">
+    <div class="feature-text">
+      <h3>Checksums you can actually check</h3>
+      <p>Hash any file with SHA-256, SHA-512, MD5 and more. Paste the checksum from a download page and the matching file lights up. If you picked the wrong algorithm, FileBase tells you which one the checksum looks like.</p>
+      <a href="{{ '/guide/checksums/' | relative_url }}">Checksums →</a>
+    </div>
+    <img class="shot" src="{{ '/assets/img/showcase/screen3.png' | relative_url }}" alt="Calculate Hashes window verifying a pasted checksum">
+  </div>
+
+  <div class="feature">
+    <div class="feature-text">
+      <h3>Read a 100 GB log file</h3>
+      <p>The text reader shows one window of a file at a time, so a huge file costs the same as a small one. Jump anywhere with the slider or by typing a byte offset.</p>
+      <a href="{{ '/guide/text-reader/' | relative_url }}">Text reader →</a>
+    </div>
+    <img class="shot" src="{{ '/assets/img/guide/text-reader.png' | relative_url }}" alt="The text reader paging through a large file">
+  </div>
+</section>
+
+<section class="grid-cards">
+  <a class="card" href="{{ '/guide/install/' | relative_url }}"><strong>Install</strong><span>Download, open, and get past the first-launch warning.</span></a>
+  <a class="card" href="{{ '/guide/getting-started/' | relative_url }}"><strong>The window</strong><span>A tour of every part of the app.</span></a>
+  <a class="card" href="{{ '/guide/files/' | relative_url }}"><strong>File operations</strong><span>Copy, move, rename, trash — and undo.</span></a>
+  <a class="card" href="{{ '/guide/search/' | relative_url }}"><strong>Search</strong><span>This folder instantly, or every folder below it.</span></a>
+  <a class="card" href="{{ '/guide/templates/' | relative_url }}"><strong>Templates</strong><span>New files that start with something in them.</span></a>
+  <a class="card" href="{{ '/guide/shortcuts/' | relative_url }}"><strong>Shortcuts</strong><span>Every keyboard shortcut on one page.</span></a>
+</section>

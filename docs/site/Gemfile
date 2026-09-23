@@ -1,0 +1,6 @@
+source "https://rubygems.org"
+
+gem "jekyll", "~> 4.4"
+
+# `jekyll serve` on Ruby 3+ needs a web server gem, which Ruby stopped bundling.
+gem "webrick", "~> 1.9"

@@ -356,7 +356,7 @@ export const BUILTIN_THEMES: Theme[] = [
  * main.go is chosen before the frontend exists, and it is `--bg-deep` of this
  * palette. Changing one without the other makes every launch flash.
  */
-export const DEFAULT_DARK_THEME_ID = 'vault-dark'
+export const DEFAULT_DARK_THEME_ID = 'nocturne'
 export const DEFAULT_LIGHT_THEME_ID = 'vault-light'
 
 const BUILTIN_BY_ID = new Map(BUILTIN_THEMES.map((theme) => [theme.id, theme]))

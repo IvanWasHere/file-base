@@ -1,0 +1,62 @@
+# Builds the Jekyll site in docs/site and publishes it to GitHub Pages.
+#
+# One-time setup: repository Settings → Pages → Build and deployment →
+# Source: "GitHub Actions". Without that the deploy job has nowhere to publish.
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/site/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; a newer push supersedes a queued one, but a deploy
+# already running is allowed to finish rather than leaving Pages half-updated.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs/site
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: docs/site
+
+      - id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Build
+        run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
+        env:
+          JEKYLL_ENV: production
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site/_site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

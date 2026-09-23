@@ -429,9 +429,9 @@ describe('themes', () => {
       await user.click(within(panel).getByRole('button', { name: /Export Current Theme/ }))
 
       await waitFor(async () =>
-        expect(await bridge.fs.exists(`${THEMES}/Vault Dark.json`)).toBe(true),
+        expect(await bridge.fs.exists(`${THEMES}/Nocturne.json`)).toBe(true),
       )
-      expect(await themeRow(panel, /^Vault Dark Copy/)).toBeInTheDocument()
+      expect(await themeRow(panel, /^Nocturne Copy/)).toBeInTheDocument()
     })
   })
 })

@@ -93,14 +93,14 @@ describe('exporting a theme to edit', () => {
   })
 
   // Named after the theme it came from, so the folder is browsable — but the
-  // *theme* name says Copy, so the list does not show two "Vault Dark"s.
+  // *theme* name says Copy, so the list does not show two "Nocturne"s.
   it('names the copy after its source without colliding with it', async () => {
     const first = await exportTheme(FOLDER, DARK)
     const second = await exportTheme(FOLDER, DARK)
 
-    expect(first).toBe(`${FOLDER}/Vault Dark.json`)
-    expect(second).toBe(`${FOLDER}/Vault Dark 2.json`)
-    expect((await loadExternalThemes(FOLDER))[0]?.name).toBe('Vault Dark Copy')
+    expect(first).toBe(`${FOLDER}/Nocturne.json`)
+    expect(second).toBe(`${FOLDER}/Nocturne 2.json`)
+    expect((await loadExternalThemes(FOLDER))[0]?.name).toBe('Nocturne Copy')
   })
 
   it('creates the folder first if someone deleted it', async () => {
@@ -111,11 +111,11 @@ describe('exporting a theme to edit', () => {
   })
 
   it('will not overwrite a theme already sitting in the folder', async () => {
-    await write('Vault Dark.json', serialiseTheme({ ...DARK, name: 'Mine' }))
+    await write('Nocturne.json', serialiseTheme({ ...DARK, name: 'Mine' }))
 
     await exportTheme(FOLDER, DARK)
 
     const themes = await loadExternalThemes(FOLDER)
-    expect(themes.find((theme) => theme.path === `${FOLDER}/Vault Dark.json`)?.name).toBe('Mine')
+    expect(themes.find((theme) => theme.path === `${FOLDER}/Nocturne.json`)?.name).toBe('Mine')
   })
 })

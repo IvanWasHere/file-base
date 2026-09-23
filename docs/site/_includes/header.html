@@ -1,0 +1,12 @@
+<header class="topbar">
+  <a class="brand" href="{{ '/' | relative_url }}">
+    <img src="{{ '/assets/img/icon.png' | relative_url }}" alt="" width="28" height="28">
+    <span>FileBase</span>
+  </a>
+  <nav class="topnav">
+    <a href="{{ '/guide/getting-started/' | relative_url }}"{% if page.url contains '/guide/' %} class="active"{% endif %}>Guide</a>
+    <a href="{{ '/guide/shortcuts/' | relative_url }}">Shortcuts</a>
+    <a href="https://github.com/{{ site.repository }}">GitHub</a>
+    <a class="button small" href="https://github.com/{{ site.repository }}/releases/latest">Download</a>
+  </nav>
+</header>

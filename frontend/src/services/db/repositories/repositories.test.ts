@@ -54,7 +54,7 @@ describe('settings', () => {
   // `dark` were the only palettes rather than the ids of two of five themes.
   it('brings a pre-§M24 theme preference forward on the way out', async () => {
     await saveSetting('theme', 'dark')
-    expect((await loadSettings()).theme).toBe('vault-dark')
+    expect((await loadSettings()).theme).toBe('nocturne')
 
     await saveSetting('theme', 'light')
     expect((await loadSettings()).theme).toBe('vault-light')

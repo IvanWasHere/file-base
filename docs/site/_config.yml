@@ -1,0 +1,25 @@
+title: FileBase
+description: A fast, native-feeling file explorer for macOS — tabs, split panes, archives, checksums and a reader for files larger than memory.
+url: https://ivanwashere.github.io
+# Empty so a local build works from the server root (jekyll serve, Live Server
+# on _site). The Pages workflow passes the real one, /file-base, via --baseurl.
+baseurl: ""
+repository: IvanWasHere/file-base
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+
+permalink: pretty
+
+defaults:
+  - scope: { path: guide }
+    values: { layout: guide }
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - README.md
+  - vendor
+  - scripts

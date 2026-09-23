@@ -1,0 +1,26 @@
+- section: Start here
+  pages:
+    - { title: Install, url: /guide/install/ }
+    - { title: The window, url: /guide/getting-started/ }
+- section: Browsing
+  pages:
+    - { title: Moving around, url: /guide/navigating/ }
+    - { title: Views, url: /guide/views/ }
+    - { title: Tabs and split panes, url: /guide/tabs-and-panes/ }
+    - { title: Preview and photos, url: /guide/preview/ }
+    - { title: Search, url: /guide/search/ }
+- section: Working with files
+  pages:
+    - { title: File operations, url: /guide/files/ }
+    - { title: New files from templates, url: /guide/templates/ }
+    - { title: Tags and Open With, url: /guide/tags-and-open-with/ }
+- section: Tools
+  pages:
+    - { title: Archives, url: /guide/archives/ }
+    - { title: Checksums, url: /guide/checksums/ }
+    - { title: Text reader for huge files, url: /guide/text-reader/ }
+- section: Make it yours
+  pages:
+    - { title: Themes and settings, url: /guide/settings/ }
+    - { title: Keyboard shortcuts, url: /guide/shortcuts/ }
+    - { title: Known limits, url: /guide/limits/ }

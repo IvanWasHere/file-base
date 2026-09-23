@@ -1,0 +1,38 @@
+---
+layout: default
+---
+{%- assign flat = "" | split: "" -%}
+{%- for section in site.data.nav -%}{%- for p in section.pages -%}{%- assign flat = flat | push: p -%}{%- endfor -%}{%- endfor -%}
+{%- for p in flat -%}{%- if p.url == page.url -%}{%- assign i = forloop.index0 -%}{%- endif -%}{%- endfor -%}
+<div class="guide">
+  <aside class="sidenav">
+    <details open>
+      <summary>Guide</summary>
+      {% for section in site.data.nav %}
+      <p class="sidenav-section">{{ section.section }}</p>
+      <ul>
+        {% for p in section.pages %}
+        <li><a href="{{ p.url | relative_url }}"{% if p.url == page.url %} aria-current="page"{% endif %}>{{ p.title }}</a></li>
+        {% endfor %}
+      </ul>
+      {% endfor %}
+    </details>
+  </aside>
+  <script>
+    // Collapsed by default on narrow screens, where the list would push the page below the fold.
+    if (matchMedia('(max-width: 860px)').matches) document.querySelector('.sidenav details').removeAttribute('open')
+  </script>
+  <main class="prose">
+    <h1>{{ page.title }}</h1>
+    {% if page.lead %}<p class="lead">{{ page.lead }}</p>{% endif %}
+    {{ content }}
+    <nav class="pager">
+      {% if i and i > 0 %}{% assign pi = i | minus: 1 %}{% assign prev = flat[pi] %}
+      <a class="prev" href="{{ prev.url | relative_url }}"><small>Previous</small>{{ prev.title }}</a>
+      {% else %}<span></span>{% endif %}
+      {% assign n = i | plus: 1 %}{% if i != nil and flat[n] %}{% assign next = flat[n] %}
+      <a class="next" href="{{ next.url | relative_url }}"><small>Next</small>{{ next.title }}</a>
+      {% endif %}
+    </nav>
+  </main>
+</div>
